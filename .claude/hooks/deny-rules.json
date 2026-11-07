@@ -14,6 +14,12 @@
     "scope": "subagent"
   },
   {
+    "name": "CONSENT-CODE-NEVER-TYPED",
+    "pattern": "(?:(?:dev_lab\\.ops\\.consent\\b|\\bconsent\\s+(?:grant|serve|enrol)\\b|\\bbreakglass\\s+(?:open|enrol|serve)\\b|\\b[Tt][Oo][Tt][Pp]\\b)[^\\n;&|]*[\\s=][\"']?\\d{6}[\"']?(?=[\\s;&|)]|$)|\\b\\d{6}\\b[^\\n;&|]*\\|[^\\n;&]*(?:dev_lab\\.ops\\.consent\\b|\\bconsent\\s+(?:grant|serve|enrol)\\b|\\bbreakglass\\s+(?:open|enrol|serve)\\b|\\b[Tt][Oo][Tt][Pp]\\b)|(?:dev_lab\\.ops\\.consent\\b|\\bconsent\\s+(?:grant|serve|enrol)\\b|\\bbreakglass\\s+(?:open|enrol|serve)\\b|\\b[Tt][Oo][Tt][Pp]\\b)[^\\n]*<<<\\s*[\"']?\\d{6}[\"']?|(?:dev_lab\\.ops\\.consent\\b|\\bconsent\\s+(?:grant|serve|enrol)\\b|\\bbreakglass\\s+(?:open|enrol|serve)\\b|\\b[Tt][Oo][Tt][Pp]\\b)[^\\n]*<<-?\\s*[\"\\']?\\w+[\"\\']?[^\\n]*\\n\\s*[\"']?\\d{6}[\"']?\\s*(?:\\n|$)|(?:>|\\btee\\b|\\bcp\\b|\\bmv\\b|\\bmkdir\\b|\\btouch\\b|Set-Content|Out-File|Add-Content|New-Item|Copy-Item|Move-Item)[^\\n;&|]*\\.motronics[\\\\/]+state[\\\\/]+consent)",
+    "matches": "line",
+    "reason": "CONSENT-CODE-NEVER-TYPED: a consent code is the USER's word: an agent typing, piping or planting one forges the consent.\nWrite the request JSON, hand the user `{python} -m dev_lab.ops.consent grant <request.json>` to run in their own terminal, then read the credential it wrote.\ndetails: docs-src/dev/refusals.md#consent-code-never-typed (lab-commons)"
+  },
+  {
     "name": "BARE-TEST-INVOCATION",
     "pattern": "(?:\\S*python[\\w.]*\\s+-m\\s+pytest\\b|pytest\\b)",
     "matches": "command",
@@ -23,20 +29,20 @@
     "name": "FORGE-WRITE-VIA-CLI",
     "pattern": "(?:\\bgh\\s+(?:issue|pr)\\s+(?:create|comment|close|reopen|edit|review|merge|delete|lock|unlock|transfer|pin|unpin|ready|develop)\\b|\\btea\\s+(?:(?:issues?|i|pulls?|pr)\\s+(?:create|c|new|edit|e|close|reopen|open|merge|m|approve|reject|review|comment|delete)\\b|comment\\b|c\\s))",
     "matches": "command",
-    "reason": "FORGE-WRITE-VIA-CLI: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-cli (lab-commons)"
+    "reason": "FORGE-WRITE-VIA-CLI: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create|close; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-cli (lab-commons)"
   },
   {
     "name": "FORGE-WRITE-VIA-GH-API",
     "pattern": "\\bgh\\s+api\\b(?=[^\\n]*\\b(?:issues|pulls)\\b)(?=[^\\n]*(?:\\s(?:-X|--method)[\\s=]*(?:POST|PATCH|PUT|DELETE|Post|Patch|Put|Delete|post|patch|put|delete)\\b|\\s(?:-[fF]|--field|--raw-field|--input)\\b))",
     "matches": "command",
-    "reason": "FORGE-WRITE-VIA-GH-API: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-gh-api (lab-commons)",
+    "reason": "FORGE-WRITE-VIA-GH-API: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create|close; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-gh-api (lab-commons)",
     "allow": "\\bgh\\s+api\\b[^\\n]*\\s(?:-X|--method)[\\s=]*(?:GET|get)\\b"
   },
   {
     "name": "FORGE-WRITE-VIA-HTTP",
     "pattern": "(?=[^\\n]*(?:/api/v1/repos/|api\\.github\\.com/repos/)[^\\s/\\'\"]+/[^\\s/\\'\"]+/(?:issues|pulls)\\b)(?:\\bcurl\\b(?=[^\\n]*(?:\\s(?:-X|--request)[\\s=]*[\\'\"]?(?:POST|PATCH|PUT|DELETE|Post|Patch|Put|Delete|post|patch|put|delete)\\b|\\s(?:-d|--data(?:-raw|-binary|-urlencode)?|--json|-F|--form)\\b))|\\b(?:Invoke-RestMethod|Invoke-WebRequest|irm|iwr)\\b(?=[^\\n]*\\s-Method\\s+[\\'\"]?(?:POST|PATCH|PUT|DELETE|Post|Patch|Put|Delete|post|patch|put|delete)\\b))",
     "matches": "argument",
-    "reason": "FORGE-WRITE-VIA-HTTP: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-http (lab-commons)"
+    "reason": "FORGE-WRITE-VIA-HTTP: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create|close; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-http (lab-commons)"
   },
   {
     "name": "GIT-COMMIT-AMEND",
@@ -128,9 +134,21 @@
     "reason": "REPORTS-LIVE-IN-MEMORY: a written report (audit, analysis, design, plan, findings) is not regenerable, and output/ holds only what a program can regenerate.\nWrite it as a dated memory entry: .claude/memory/<yyyy>/<mm>/<dd>/<slug>.md with the MEMORY-SHAPE frontmatter (name, description, created; never accessed).\ndetails: docs-src/dev/refusals.md#reports-live-in-memory (lab-commons)"
   },
   {
+    "name": "WRITES-STAY-IN-THE-TREE",
+    "pattern": "(?:>>?\\s*[\"']?(?:(?:(?:/tmp|/var/tmp|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?|%(?:TEMP|TMP)%|\\$env:(?:TEMP|TMP)|(?:[^\\s\"';&|()<>]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP])(?![\\\\/]+(?:claude|lab-commons-notices)(?:[\\\\/\"\\'\\s;&|)]|$))|(?:[A-Za-z]:[\\\\/]+|/[A-Za-z]/)(?:[tT][mM][pP]|[tT][eE][mM][pP]|[vV][aA][rR]|[sS][rR][cC])|(?:~|\\$HOME|\\$\\{HOME\\}|\\$env:USERPROFILE|%USERPROFILE%|[A-Za-z]:[\\\\/]+[uU][sS][eE][rR][sS][\\\\/]+[^\\s\"';&|()<>\\\\/]+|/[A-Za-z]/[uU][sS][eE][rR][sS]/[^\\s\"';&|()<>\\\\/]+|/home/[^\\s\"';&|()<>\\\\/]+)[\\\\/]+(?:[tT][mM][pP]|[tT][eE][mM][pP]|[vV][aA][rR]|[sS][rR][cC]))(?:[\\\\/][^\\s\"';&|()<>]*)?|(?:~|\\$HOME|\\$\\{HOME\\}|\\$env:USERPROFILE|%USERPROFILE%|[A-Za-z]:[\\\\/]+[uU][sS][eE][rR][sS][\\\\/]+[^\\s\"';&|()<>\\\\/]+|/[A-Za-z]/[uU][sS][eE][rR][sS]/[^\\s\"';&|()<>\\\\/]+|/home/[^\\s\"';&|()<>\\\\/]+)[\\\\/]+[^\\s\"\\';&|()<>.\\\\/][^\\s\"';&|()<>\\\\/]*)(?=[\"'\\s;&|)]|$)[\"\\']?|\\btee\\b(?:\\s+-\\S+)*\\s+[\"']?(?:(?:(?:/tmp|/var/tmp|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?|%(?:TEMP|TMP)%|\\$env:(?:TEMP|TMP)|(?:[^\\s\"';&|()<>]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP])(?![\\\\/]+(?:claude|lab-commons-notices)(?:[\\\\/\"\\'\\s;&|)]|$))|(?:[A-Za-z]:[\\\\/]+|/[A-Za-z]/)(?:[tT][mM][pP]|[tT][eE][mM][pP]|[vV][aA][rR]|[sS][rR][cC])|(?:~|\\$HOME|\\$\\{HOME\\}|\\$env:USERPROFILE|%USERPROFILE%|[A-Za-z]:[\\\\/]+[uU][sS][eE][rR][sS][\\\\/]+[^\\s\"';&|()<>\\\\/]+|/[A-Za-z]/[uU][sS][eE][rR][sS]/[^\\s\"';&|()<>\\\\/]+|/home/[^\\s\"';&|()<>\\\\/]+)[\\\\/]+(?:[tT][mM][pP]|[tT][eE][mM][pP]|[vV][aA][rR]|[sS][rR][cC]))(?:[\\\\/][^\\s\"';&|()<>]*)?|(?:~|\\$HOME|\\$\\{HOME\\}|\\$env:USERPROFILE|%USERPROFILE%|[A-Za-z]:[\\\\/]+[uU][sS][eE][rR][sS][\\\\/]+[^\\s\"';&|()<>\\\\/]+|/[A-Za-z]/[uU][sS][eE][rR][sS]/[^\\s\"';&|()<>\\\\/]+|/home/[^\\s\"';&|()<>\\\\/]+)[\\\\/]+[^\\s\"\\';&|()<>.\\\\/][^\\s\"';&|()<>\\\\/]*)(?=[\"'\\s;&|)]|$)[\"\\']?|\\b(?:mkdir|touch|[nN][eE][wW]-[iI][tT][eE][mM]|[oO][uU][tT]-[fF][iI][lL][eE]|[sS][eE][tT]-[cC][oO][nN][tT][eE][nN][tT]|[aA][dD][dD]-[cC][oO][nN][tT][eE][nN][tT])\\b[^;&|\\n]*?\\s(?:-\\w+\\s+)?[\"']?(?:(?:(?:/tmp|/var/tmp|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?|%(?:TEMP|TMP)%|\\$env:(?:TEMP|TMP)|(?:[^\\s\"';&|()<>]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP])(?![\\\\/]+(?:claude|lab-commons-notices)(?:[\\\\/\"\\'\\s;&|)]|$))|(?:[A-Za-z]:[\\\\/]+|/[A-Za-z]/)(?:[tT][mM][pP]|[tT][eE][mM][pP]|[vV][aA][rR]|[sS][rR][cC])|(?:~|\\$HOME|\\$\\{HOME\\}|\\$env:USERPROFILE|%USERPROFILE%|[A-Za-z]:[\\\\/]+[uU][sS][eE][rR][sS][\\\\/]+[^\\s\"';&|()<>\\\\/]+|/[A-Za-z]/[uU][sS][eE][rR][sS]/[^\\s\"';&|()<>\\\\/]+|/home/[^\\s\"';&|()<>\\\\/]+)[\\\\/]+(?:[tT][mM][pP]|[tT][eE][mM][pP]|[vV][aA][rR]|[sS][rR][cC]))(?:[\\\\/][^\\s\"';&|()<>]*)?|(?:~|\\$HOME|\\$\\{HOME\\}|\\$env:USERPROFILE|%USERPROFILE%|[A-Za-z]:[\\\\/]+[uU][sS][eE][rR][sS][\\\\/]+[^\\s\"';&|()<>\\\\/]+|/[A-Za-z]/[uU][sS][eE][rR][sS]/[^\\s\"';&|()<>\\\\/]+|/home/[^\\s\"';&|()<>\\\\/]+)[\\\\/]+[^\\s\"\\';&|()<>.\\\\/][^\\s\"';&|()<>\\\\/]*)(?=[\"'\\s;&|)]|$)[\"\\']?|\\b(?:cp|mv|copy|move|rsync|[cC][oO][pP][yY]-[iI][tT][eE][mM]|[mM][oO][vV][eE]-[iI][tT][eE][mM])\\b[^;&|\\n]*\\s[\"']?(?:(?:(?:/tmp|/var/tmp|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?|%(?:TEMP|TMP)%|\\$env:(?:TEMP|TMP)|(?:[^\\s\"';&|()<>]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP])(?![\\\\/]+(?:claude|lab-commons-notices)(?:[\\\\/\"\\'\\s;&|)]|$))|(?:[A-Za-z]:[\\\\/]+|/[A-Za-z]/)(?:[tT][mM][pP]|[tT][eE][mM][pP]|[vV][aA][rR]|[sS][rR][cC])|(?:~|\\$HOME|\\$\\{HOME\\}|\\$env:USERPROFILE|%USERPROFILE%|[A-Za-z]:[\\\\/]+[uU][sS][eE][rR][sS][\\\\/]+[^\\s\"';&|()<>\\\\/]+|/[A-Za-z]/[uU][sS][eE][rR][sS]/[^\\s\"';&|()<>\\\\/]+|/home/[^\\s\"';&|()<>\\\\/]+)[\\\\/]+(?:[tT][mM][pP]|[tT][eE][mM][pP]|[vV][aA][rR]|[sS][rR][cC]))(?:[\\\\/][^\\s\"';&|()<>]*)?|(?:~|\\$HOME|\\$\\{HOME\\}|\\$env:USERPROFILE|%USERPROFILE%|[A-Za-z]:[\\\\/]+[uU][sS][eE][rR][sS][\\\\/]+[^\\s\"';&|()<>\\\\/]+|/[A-Za-z]/[uU][sS][eE][rR][sS]/[^\\s\"';&|()<>\\\\/]+|/home/[^\\s\"';&|()<>\\\\/]+)[\\\\/]+[^\\s\"\\';&|()<>.\\\\/][^\\s\"';&|()<>\\\\/]*)(?=[\"'\\s;&|)]|$)[\"\\']?\\s*(?=[;&|)]|$))",
+    "matches": "argument",
+    "reason": "WRITES-STAY-IN-THE-TREE: outside every checkout nothing scans, ignores or cleans a file, so it outlives the session.\nA program's artefact goes to output/logs/<yy>/<mm>/<dd>/<kind>/ and an experiment to scratch/ of the checkout you work in.\ndetails: docs-src/dev/refusals.md#writes-stay-in-the-tree (lab-commons)"
+  },
+  {
     "name": "STATUS-VIA-DOORS",
     "pattern": "\\bdev_lab\\.dev\\.forge\\s+status\\s+post\\b(?=[^\\n]*\\btests/(?:review(?:-hold)?|security)\\b)",
     "matches": "argument",
-    "reason": "STATUS-VIA-DOORS: a raw post on tests/review-hold, tests/review or tests/security releases a head with no review or reason behind it.\nUse the door that records why: re-run the forge's review of the head; forge review dispose <pr> <finding-id> --why \"<reason>\"; forge security release <pr> --why \"<reason>\".\ndetails: docs-src/dev/refusals.md#status-via-doors (lab-commons)"
+    "reason": "STATUS-VIA-DOORS: a raw post on tests/review-hold, tests/review or tests/security releases a head with no review or reason behind it.\nUse the door that records why: re-run the forge's review of the head; forge review again <pr>; forge security release <pr> --why \"<reason>\".\ndetails: docs-src/dev/refusals.md#status-via-doors (lab-commons)"
+  },
+  {
+    "name": "HPC-THROUGH-THE-DOOR",
+    "pattern": "(?:(?:ssh|scp|sftp|rsync)\\b[^\\n;&|]*?[\\s@][\\w-]*[Ll][Oo][Gg][Ii][Nn][\\w-]*(?:\\.[\\w.-]+)?(?=[\\s:/\"\\x27]|$)|ssh\\b[^\\n]*?\\b(?:sbatch|srun|salloc|scancel)\\b|(?:sbatch|srun|salloc|scancel)\\b)",
+    "matches": "command",
+    "reason": "HPC-THROUGH-THE-DOOR: an agent on an HPC login host or Slurm opens connections nobody budgets; a poll loop took the cluster's ssh down (2026-11-06).\nStatus: the forge host card, {python} -m dev_lab.dev.forge queue, forge run show <sha>; deploy: {python} -m dev_lab.dev.hpchost deploy, run by the user on the account; tests: push and let the forge run them.\ndetails: docs-src/dev/refusals.md#hpc-through-the-door (lab-commons)"
   }
 ]

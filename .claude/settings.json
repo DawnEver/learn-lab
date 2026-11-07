@@ -94,5 +94,8 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "sharp-review@cc-market": false
   }
 }

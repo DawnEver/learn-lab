@@ -31,8 +31,8 @@
     ]
   },
   "concurrency": {
-    "group": "ci-${{ github.ref }}-${{ (github.event_name == 'push' || inputs.smoke) && 'smoke' || github.event_name }}",
-    "cancel-in-progress": true
+    "group": "ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}",
+    "cancel-in-progress": "${{ github.event_name == 'pull_request' }}"
   },
   "permissions": {
     "contents": "read"
@@ -84,14 +84,15 @@
         "matrix": "${{ steps.matrix.outputs.matrix }}",
         "event": "${{ env.PARTS_EVENT }}",
         "pending": "${{ steps.pending.outputs.pending }}"
-      }
+      },
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) }}"
     },
     "part": {
       "env": {
         "GITHUB_TOKEN": "${{ github.token }}"
       },
       "needs": "parts",
-      "if": "${{ needs.parts.outputs.matrix != '' }}",
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && (needs.parts.outputs.matrix != '') }}",
       "name": "tests/${{ matrix.part }}",
       "runs-on": "${{ matrix.runs-on }}",
       "steps": [
@@ -135,7 +136,7 @@
         "parts",
         "part"
       ],
-      "if": "${{ always() && needs.parts.result == 'success' && needs.parts.outputs.matrix != '' }}",
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && (always() && needs.parts.result == 'success' && needs.parts.outputs.matrix != '') }}",
       "runs-on": "ubuntu-latest",
       "steps": [
         {
@@ -170,7 +171,7 @@
       "env": {
         "GITHUB_TOKEN": "${{ github.token }}"
       },
-      "if": "${{ github.event_name == 'pull_request' }}",
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && (github.event_name == 'pull_request') }}",
       "runs-on": "ubuntu-latest",
       "steps": [
         {
@@ -202,8 +203,47 @@
         "pull-requests": "read"
       }
     },
+    "head-gates": {
+      "env": {
+        "GITHUB_TOKEN": "${{ github.token }}"
+      },
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && (github.event_name == 'pull_request') }}",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ env.HEAD_SHA }}",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Install uv",
+          "uses": "astral-sh/setup-uv@v5",
+          "with": {
+            "enable-cache": true
+          }
+        },
+        {
+          "name": "Sync the environment",
+          "run": "uv sync --frozen --all-extras"
+        },
+        {
+          "name": "head gates",
+          "run": "uv run --no-sync python -m dev_lab.dev.forge headgate run --pr ${{ github.event.pull_request.number }}"
+        }
+      ],
+      "permissions": {
+        "contents": "read",
+        "statuses": "write",
+        "pull-requests": "read"
+      }
+    },
     "review": {
-      "if": "${{ github.event_name == 'pull_request' }}",
+      "needs": [
+        "merge-ready"
+      ],
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && (always() && github.event_name == 'pull_request' && needs.merge-ready.outputs.due == 'true') }}",
       "runs-on": "ubuntu-latest",
       "steps": [
         {
@@ -231,18 +271,15 @@
         },
         {
           "name": "Install the review method",
-          "run": "cd \"$RUNNER_TEMP\"\nexport GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=\"http.${FORGE_URL:-$GITHUB_SERVER_URL}/.extraHeader\" GIT_CONFIG_VALUE_0=\"Authorization: basic $(printf 'x-access-token:%s' \"${FAMILY_READ_TOKEN:-$GITHUB_TOKEN}\" | base64 -w0)\"\npython3 -I -m venv \"$RUNNER_TEMP/ai-lab\" && \"$RUNNER_TEMP/ai-lab/bin/python\" -I -m pip install -q uv\nAI_LAB_REV=$(python3 -I -c 'import sys, tomllib\nlock = tomllib.loads(sys.stdin.read())\n(source,) = [p[\"source\"] for p in lock.get(\"package\", []) if p[\"name\"] == \"ai-lab\"] or sys.exit(\"the door lock pins no ai-lab\")\n\"git\" in source or sys.exit(f\"ai-lab is locked from {source}, not a git revision\")\nprint(source[\"git\"].rpartition(\"#\")[2])' < \"$RUNNER_TEMP/dev-lab/uv.lock\") || exit 1\n\"$RUNNER_TEMP/ai-lab/bin/uv\" pip install --no-config --python \"$RUNNER_TEMP/ai-lab/bin/python\" \"ai_lab @ git+${FAMILY_SOURCE}ai-lab.git@$AI_LAB_REV\"\n",
+          "run": "cd \"$RUNNER_TEMP\"\nexport GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=\"http.${FORGE_URL:-$GITHUB_SERVER_URL}/.extraHeader\" GIT_CONFIG_VALUE_0=\"Authorization: basic $(printf 'x-access-token:%s' \"${FAMILY_READ_TOKEN:-$GITHUB_TOKEN}\" | base64 -w0)\"\npython3 -I -m venv \"$RUNNER_TEMP/ai-lab\" && \"$RUNNER_TEMP/ai-lab/bin/python\" -I -m pip install -q uv\nAI_LAB_REV=$(python3 -I -c 'import sys, tomllib\nlock = tomllib.loads(sys.stdin.read())\n(source,) = [p[\"source\"] for p in lock.get(\"package\", []) if p[\"name\"] == \"ai-lab\"] or sys.exit(\"the door lock pins no ai-lab\")\n\"git\" in source or sys.exit(f\"ai-lab is locked from {source}, not a git revision\")\nprint(source[\"git\"].rpartition(\"#\")[2])' < \"$RUNNER_TEMP/dev-lab/uv.lock\") || exit 1\ngit clone -q --no-tags --filter=blob:none --no-checkout \"${FAMILY_SOURCE}ai-lab.git\" \"$RUNNER_TEMP/ai-lab-src\"\ngit -C \"$RUNNER_TEMP/ai-lab-src\" fetch -q --no-tags origin \"$AI_LAB_REV\"\ngit -C \"$RUNNER_TEMP/ai-lab-src\" checkout -q --detach \"$AI_LAB_REV\"\n\"$RUNNER_TEMP/ai-lab/bin/uv\" export --no-config --project \"$RUNNER_TEMP/ai-lab-src\" --frozen --no-hashes --no-header --no-annotate --no-emit-project > \"$RUNNER_TEMP/ai-lab.txt\"\n\"$RUNNER_TEMP/ai-lab/bin/uv\" pip install --no-config --no-deps --python \"$RUNNER_TEMP/ai-lab/bin/python\" -r \"$RUNNER_TEMP/ai-lab.txt\"\n\"$RUNNER_TEMP/ai-lab/bin/uv\" pip install --no-config --no-deps --python \"$RUNNER_TEMP/ai-lab/bin/python\" \"$RUNNER_TEMP/ai-lab-src\"\n",
           "env": {
             "FAMILY_READ_TOKEN": "${{ (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && secrets.FAMILY_READ_TOKEN || '' }}",
             "GITHUB_TOKEN": "${{ github.token }}"
           }
         },
         {
-          "name": "Store the review key",
-          "run": "if [ -n \"$ANTHROPIC_API_KEY\" ]; then git config --global credential.helper \"cache --timeout=1800 --socket=$RUNNER_TEMP/git-credential-cache/socket\" && printf '%s\\n' \"$ANTHROPIC_API_KEY\" | \"$RUNNER_TEMP/ai-lab/bin/python\" -I -m ai_lab.auth login anthropic --task pr-review; fi",
-          "env": {
-            "ANTHROPIC_API_KEY": "${{ (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && secrets.ANTHROPIC_API_KEY || '' }}"
-          }
+          "name": "Keep the review keys in memory",
+          "run": "git config --global credential.helper \"cache --timeout=1800 --socket=$RUNNER_TEMP/git-credential-cache/socket\""
         },
         {
           "name": "Hand the forge tokens to the door",
@@ -254,9 +291,9 @@
         },
         {
           "name": "tests/review",
-          "run": "trap 'git credential-cache --socket=$RUNNER_TEMP/git-credential-cache/socket exit; rm -rf \"$RUNNER_TEMP/forge-secrets\"' EXIT\n\"$REVIEW_PYTHON\" -I -m dev_lab.dev.forge review run --pr ${{ github.event.pull_request.number }} --secret-env ANTHROPIC_API_KEY --git-token-file \"$RUNNER_TEMP/forge-secrets/read\" --api-token-file \"$RUNNER_TEMP/forge-secrets/api\" --runtime \"ai_lab.python=$RUNNER_TEMP/ai-lab/bin/python\"\n",
+          "run": "trap 'git credential-cache --socket=$RUNNER_TEMP/git-credential-cache/socket exit; rm -rf \"$RUNNER_TEMP/forge-secrets\"' EXIT\n\"$REVIEW_PYTHON\" -I -m dev_lab.dev.forge review run --pr ${{ github.event.pull_request.number }} --keys-env AI_LAB_KEYS_PR_REVIEW --git-token-file \"$RUNNER_TEMP/forge-secrets/read\" --api-token-file \"$RUNNER_TEMP/forge-secrets/api\" --runtime \"ai_lab.python=$RUNNER_TEMP/ai-lab/bin/python\"\n",
           "env": {
-            "ANTHROPIC_API_KEY": "${{ (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && secrets.ANTHROPIC_API_KEY || '' }}"
+            "AI_LAB_KEYS_PR_REVIEW": "${{ (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && secrets.AI_LAB_KEYS_PR_REVIEW || '' }}"
           }
         }
       ],
@@ -273,12 +310,15 @@
       },
       "needs": [
         "security",
-        "review",
+        "head-gates",
         "part",
         "absent-parts"
       ],
-      "if": "${{ always() && github.event_name == 'pull_request' }}",
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && (always() && github.event_name == 'pull_request') }}",
       "runs-on": "ubuntu-latest",
+      "outputs": {
+        "due": "${{ steps.ready.outputs.due }}"
+      },
       "steps": [
         {
           "uses": "actions/checkout@v4",
@@ -301,7 +341,7 @@
         {
           "id": "ready",
           "name": "tests/merge-ready",
-          "run": "said=\"$(uv run --no-sync python -m dev_lab.dev.forge merge ready --pr ${{ github.event.pull_request.number }})\"; echo \"$said\"; case \"$said\" in *\"; merged\") echo \"merged=true\" >> \"$GITHUB_OUTPUT\" ;; esac"
+          "run": "said=\"$(uv run --no-sync python -m dev_lab.dev.forge merge ready --pr ${{ github.event.pull_request.number }})\"; echo \"$said\"; case \"$said\" in *\"; merged\") echo \"merged=true\" >> \"$GITHUB_OUTPUT\" ;; esac; case \"$said\" in *\"; review due\"*) echo \"due=true\" >> \"$GITHUB_OUTPUT\" ;; esac"
         },
         {
           "name": "Run CI on the merged integration",
@@ -327,7 +367,7 @@
         "parts",
         "absent-parts"
       ],
-      "if": "${{ needs.parts.outputs.pending == 'true' }}",
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && (needs.parts.outputs.pending == 'true') }}",
       "runs-on": "ubuntu-latest",
       "steps": [
         {

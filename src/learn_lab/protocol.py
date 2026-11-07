@@ -1,10 +1,12 @@
-"""A response model is ``fit -> Fitted``; a fitted model is ``predict -> Prediction``.
+"""D42 -- the L6 protocol: a model is ``fit -> Fitted``; a fitted model is ``predict -> Prediction``.
 
-This is the L6 protocol (D42) whose owner is learn-lab: optimi-lab's ``optimi_lab.model.protocol`` moves
-here in A1 and is deleted there, so there is one definition. A :class:`Prediction` is the mean ``(n, k)``
-and, when asked for and given, the variance ``(n, k)`` (LATENT: of the mean function) and the gradient of
-the mean ``(n, k, d)``. A model declares what it ``gives`` beyond the mean; asking for anything else is
-refused naming what it does give.
+A :class:`Prediction` is the mean ``(n, k)`` and, when asked for and given, the variance ``(n, k)``
+(LATENT: of the mean function, not of a new noisy observation) and the gradient of the mean
+``(n, k, d)``. A model declares what it ``gives`` beyond the mean as a set of :class:`Give`; asking
+for anything else is refused naming what it does give -- never answered with a placeholder.
+
+Every model sees points as an ``(n, d)`` matrix and values as an ``(n, k)`` matrix, one row per
+point, finite. A prediction is never an observation: whoever files it labels it as predicted.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ import numpy as np
 
 from learn_lab.errors import refuse, require_finite
 
-__all__ = ['Fitted', 'Give', 'Prediction', 'Surrogate', 'require_gives', 'training_data']
+__all__ = ['Fitted', 'Give', 'Prediction', 'Surrogate', 'query_points', 'require_gives', 'training_data']
 
 
 class Give(StrEnum):
@@ -62,6 +64,8 @@ class Prediction(_PredictionFields):
 
 
 class Fitted(Protocol):
+    """A fitted model: what it gives, and its prediction at ``(m, d)`` points."""
+
     @property
     def gives(self) -> frozenset[Give]: ...
 
@@ -69,6 +73,12 @@ class Fitted(Protocol):
 
 
 class Surrogate(Protocol):
+    """A model declaration: its settings, what its fit gives, and ``fit(x, y) -> Fitted``.
+
+    Models that need more than values -- gradient-enhanced Kriging (gradients), co-Kriging
+    (fidelity levels) -- take it as a further ``fit`` argument and return the same :class:`Fitted`.
+    """
+
     @property
     def gives(self) -> frozenset[Give]: ...
 
@@ -83,7 +93,15 @@ def training_data(x: object, y: object) -> tuple[np.ndarray, np.ndarray]:
         refuse(f'a fit takes points (n, d) and values (n, k), one row per point; got {x.shape} and {y.shape}')
     if x.shape[0] != y.shape[0] or x.shape[0] == 0:
         refuse(f'the values must hold one row per point, got {y.shape[0]} row(s) for {x.shape[0]} point(s)')
-    return require_finite(x, 'the points a model is fitted on'), require_finite(y, 'the values it is fitted on')
+    return require_finite(x, 'the points a surrogate is fitted on'), require_finite(y, 'the values it is fitted on')
+
+
+def query_points(x: object, d: int) -> np.ndarray:
+    """``(m, d)`` finite query points of the training width, or a refusal naming it."""
+    x = np.asarray(x, dtype=float)
+    if x.ndim != 2 or x.shape[1] != d:
+        refuse(f'a prediction takes (m, {d}) points -- the width the model was fitted on -- got {x.shape}')
+    return require_finite(x, 'the points a surrogate predicts at')
 
 
 def require_gives(gives: frozenset[Give], *, variance: bool, gradient: bool, what: str) -> None:

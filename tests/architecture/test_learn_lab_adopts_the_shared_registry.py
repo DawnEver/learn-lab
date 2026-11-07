@@ -43,7 +43,9 @@ _MECHANISMS: Final = {
         TestPath('pyproject.toml'),
         TestPath('tests/architecture/test_this_repo_declares_the_one_pr_flow.py'),
     ),
-    'PR-REVIEW-BLOCKS-ON-HIGH-OR-SECURITY': (TestPath('pyproject.toml'),),
+    'PR-REVIEW-IS-ONE-SHOT-ADVICE': (TestPath('pyproject.toml'),),
+    # The base pre-push row `pr-current` this pyproject's hooks table runs.
+    'PR-HEAD-IS-CURRENT': (TestPath('pyproject.toml'),),
     # The PR-flow rows are the forge's own admission and carry
     # steps (dev_lab.dev.pradmit, dev_lab.dev.forgecarry) over the same declared integrator table.
     'ONE-SESSION-ONE-PR': (TestPath('pyproject.toml'),),
@@ -62,6 +64,8 @@ _MECHANISMS: Final = {
     **dict.fromkeys(
         (
             'AGENT-GUARD',
+            # The guard refuses a write outside the checkout.
+            'WRITES-STAY-IN-THE-TREE',
             'SUBAGENT-NO-PUSH',
             'WORKTREES-STAY-INSIDE',
             'REPORTS-LIVE-IN-MEMORY',
@@ -93,7 +97,6 @@ _ABSENT: Final = frozenset({
     'NO-REFLECTION', 'PUBLIC-SURFACE-DECLARED', 'FIX-THE-CAUSE',
     # Docs and memory: no rules pages, injected docs or dated-memory guard in this repo yet.
     'DOCS-SPLIT', 'MEMORY-SHAPE', 'INJECTED-DOC-WIDTH-CEILING',
-    'NO-CJK-IN-TRACKED-SOURCE',
     # Code placement and scratch: one src/ and one tests/ tree, no scratch.
     'CODE-IN-CODE-ROOTS', 'SCRATCH-IS-NEVER-COMMITTED', 'STRAY-FILE-REFUSED', 'SPLIT-BY-CONCEPT',
     'TRACKED-CITES-NO-EPHEMERAL',

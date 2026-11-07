@@ -68,6 +68,7 @@ produce = ["-m", "dev_lab.dev.verify", "--part", "{part}"]
 trunk = "main"
 integration = "integrate/main"
 pr_merges_since = "8be94e3889513c57967f1c4bc8f891512fac5a7a"  # INTEGRATION-TAKES-ONLY-FORGE-MERGES after the founding commits
+merges_only_since = "8be94e3889513c57967f1c4bc8f891512fac5a7a"  # INTEGRATION-IS-MERGES-ONLY from the same founding commit
 
 # GitHub Actions: the family's one PR lifecycle (dev_lab/dev/ci_base.toml) as is; rendered to
 # .github/workflows/ci.yml by `python -m dev_lab.dev.ciworkflows render`, never hand-edited.

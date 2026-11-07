@@ -1,0 +1,106 @@
+# The family lint and format rules, as numerics-lab carries them.
+target-version = "py313"
+line-length = 120
+unsafe-fixes = true
+src = ["src", "tests"]
+exclude = [
+    ".claude/memory",
+    ".venv*",
+    ".git",
+]
+
+[lint]
+preview = false
+select = ["AIR", "ERA", "YTT", "ANN", "ASYNC", "S", "BLE", "FBT", "B", "A", "COM", "C4", "DTZ", "T10", "DJ", "EM", "FIX", "FA", "INT", "ISC", "ICN", "LOG", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SIM", "SLOT", "TID", "TD", "ARG", "PTH", "FLY", "I", "C90", "NPY", "PD", "N", "PERF", "E", "W", "D", "F", "PGH", "PLC", "PLE", "PLR", "PLW", "UP", "FURB", "RUF", "TRY"]
+ignore = [
+    # PLR0917 -- too-many-positional-arguments: off, as in the family siblings.
+    "PLR0917",
+    "ANN002",   # Missing type annotation for *args
+    "ANN003",   # Missing type annotation for **kwargs
+    "ANN202",   # Missing return type annotation for private function
+    "ARG002",   # Unused method argument
+    "B904",     # raise ... from err in except clause
+    "C901",     # Function too complex
+    "COM812",
+    "D105",     # Missing docstring in magic method
+    "D205",     # 1 blank line required between summary line and description
+    "D400",     # First line should end with a period
+    "D415",     # Missing terminal punctuation
+    "D417",     # Missing argument description in docstring
+    "DTZ005",   # datetime.now() without tz argument
+    "E501",     # Line too long
+    "FBT",      # Boolean trap
+    "LOG015",   # Call on root logger
+    "N801",     # Class name should use CapWords
+    "N802",     # Function name should be lowercase
+    "N803",     # Argument name should be lowercase
+    "N805",     # First argument of a method should be named self
+    "N815",     # Variable in class scope should not be mixedCase
+    "N816",     # Variable in global scope should not be mixedCase
+    "N818",     # Exception name should end with Error
+    "S101",     # Use of assert
+    "S311",     # Standard pseudo-random generators
+    "S603",     # subprocess without shell=True
+    "SIM108",   # Use ternary instead of if-else
+    "SLF001",   # Private member accessed
+    "RUF002",   # Docstring contains ambiguous unicode — math notation (×, ν, λ) is legitimate
+    "RUF003",   # Comment contains ambiguous unicode — math notation is legitimate
+    "RUF012",   # Mutable class attributes should be annotated
+    "RUF043",   # Pattern contains metacharacters but is neither escaped nor raw
+    "PLR0912",  # Too many branches
+    "PLR0913",  # Too many arguments
+    "PLR0915",  # Too many statements
+    "PT012",    # pytest.raises() block should contain a single simple statement
+    "PT018",    # Assertion should be broken down into multiple parts
+    "Q000",     # Single quotes found but double quotes preferred (incompatible with the formatter)
+    "Q003",     # Change outer quotes to avoid escaping inner quotes (incompatible with the formatter)
+    "UP017",    # Use datetime.UTC alias
+    "ANN201",   # Missing return type annotation for public function -- TODO: remove this rule and the next ones
+    "ANN206",   # Missing return type annotation for classmethod
+    "ANN001",   # Missing type annotation for function argument
+    "B018",     # Found useless expression
+    "B023",     # Function does not bind loop variable — intentional closures in math code
+    "D203",
+    "D100",     # Missing docstring in public module
+    "D101",     # Missing docstring in public class
+    "D102",     # Missing docstring in public method
+    "D103",     # Missing docstring in public function
+    "D104",     # Missing docstring in public package
+    "D107",     # Missing docstring in __init__
+    "D213",     # Multi-line docstring summary should start at the second line
+    "D401",     # First line should be in imperative mood
+    "ERA001",   # Found commented-out code
+    "N806",     # Variable in function should be lowercase
+    "PLR2004",  # Magic value used in comparison
+    "PLW2901",  # Loop variable overwritten by assignment target
+    "SIM113",   # Use enumerate for index variable
+    "TRY300",   # Consider moving statement to else block
+    "NPY002",   # Replace legacy np.random.rand with np.random.Generator
+    "INP001",   # Implicit namespace package
+    "TD",       # TODO
+    "FIX",      # FIXME
+    "EXE",
+]
+
+[lint.per-file-ignores]
+# EMPTY BY PRINCIPLE (2026-08-02, user directive) -- a waiver belongs in the file it
+# governs, never in this central table:
+#   * whole-file need   -> a `# ruff: noqa: RULE -- measured reason` header in that file
+#   * single site       -> an inline `# noqa: RULE -- reason` at the site
+#   * trivially fixable -> FIXED, never suppressed anywhere (T201 was the 85-print lesson)
+# Why not a central table: (1) the waiver outlives the sin -- this table waived PLC0415
+# for jmag/validation.py and edge3d/mesh.py while ruff reported ZERO hits in src/, so it
+# silently covered any FUTURE lazy import; (2) the reason lives away from the code a
+# reader is reading; (3) a central list drifts, and every hand-written list in this repo
+# drifted. Enforced by tests/architecture/ratchets/test_suppression_ratchet.py, which pins
+# this table's (file, rule) PAIRS at ZERO. That pin is the ONLY claim here anything checks:
+# it does not read noqa reasons, so no line here may assert that it does.
+
+[format]
+preview = true
+quote-style = "single"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"

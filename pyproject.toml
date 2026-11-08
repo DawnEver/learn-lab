@@ -59,6 +59,11 @@ collect = 'tests'
 [tool.dev_lab.parts]
 output = "output/logs"
 
+# One verify worker's measured peak: a CUDA torch process commits ~3.3 GB (test_graph, 2026-11-08), so the
+# 1 GB unmeasured floor got every deep test killed 0xC0000017 (out of memory) by the box.
+[tool.dev_lab.verify]
+worker_mem_gb = 3.5
+
 [tool.lab_commons.tests]
 produce = ["-m", "dev_lab.dev.verify", "--part", "{part}"]
 

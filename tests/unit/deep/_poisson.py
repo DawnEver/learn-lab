@@ -21,6 +21,9 @@ class Poisson:
     def parameters(self):
         return {'k': self.k_nominal}
 
+    def owns(self, points):
+        return np.ones((points.shape[0], self.outputs), bool)
+
     def collocation(self, runtime):
         interior = torch.rand(self.points, 1, generator=runtime.generator(), device=runtime.torch_device)
         return {'interior': interior.to(runtime.torch_dtype), 'boundary': runtime.tensor(np.array([[0.0], [1.0]]))}

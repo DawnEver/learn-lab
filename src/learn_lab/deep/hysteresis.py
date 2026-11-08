@@ -1,17 +1,36 @@
-"""A learned rate-independent hysteresis: a bank of play operators, a monotone output map, the state explicit.
+"""A learned rate-independent hysteresis: a bank of play operators, a monotone map, the state explicit.
 
-``s = a x + sum_k w_k play_k(x)``, ``y = F(s)`` -- a generalized Prandtl-Ishlinskii operator -- with thresholds
-``r_k >= 0``, weights ``w_k >= 0`` and slope ``a > 0`` through softplus, and ``F`` a
-:class:`~learn_lab.deep.networks.MonotoneScalar`. What holds BY CONSTRUCTION:
+The model is domain-free, so it DECLARES its causality -- which of two work-conjugate variables is its input --
+and that declaration decides both the construction and which integral is the cycle's loss. In bond-graph terms
+an *effort* (H, force, voltage) and a *displacement* (B, position, charge -- the time integral of a flow) are
+conjugate: the work into the element is ``oint effort d(displacement)``.
+
+- ``input_is='effort'``: ``y = F(a x + sum_k w_k p_k(x))`` -- a generalized Prandtl-Ishlinskii operator, plays
+  LAGGING their input. The loss is ``oint x dy``; each lagging play gives ``oint x dp = r oint |dp| >= 0``.
+- ``input_is='displacement'``: ``u = G(x)``, ``y = a u + sum_k w_k (u - p_k(u))`` -- ``u - p_k(u)`` is the
+  Prandtl STOP operator, which LEADS: ``+r`` on a long rise, ``-r`` on a long fall. The loss is ``oint y dx``;
+  each stop gives ``oint e du = r oint |dp| >= 0``. This is the exact INVERSE class of the effort form: on a
+  branch, ``v = a x + sum w p_r(x)`` has slope ``a + sum_{moving} w``; inverting it, ``x`` has slope
+  ``1 / (a + sum_{moving} w)`` in ``v``, steepest just after a reversal and flattening as plays engage --
+  which is a stop bank in ``v`` (all stops elastic after a reversal, each saturating at its own threshold),
+  with thresholds ``a r_i + sum_{j<i} w_j (r_i - r_j)`` and non-negative weights. And the OUTER map ``F`` of
+  one is the INNER map ``G = F^-1`` of the other. So the displacement-driven inverse of any effort-driven law
+  in the class is itself in the class, never approximated across it.
+
+Using the effort construction with the displacement as input -- a lagging bank fed B and asked for H -- puts
+the ascending branch BELOW the descending one, so ``oint H dB < 0``: an active material. :func:`dissipation`
+measures the declared integral, so it says no to exactly that.
+
+``r_k >= 0``, ``w_k >= 0`` and ``a > 0`` through softplus, ``F``/``G`` a
+:class:`~learn_lab.deep.networks.MonotoneScalar`. What holds BY CONSTRUCTION, in both orientations:
 
 - rate independence: a play moves only by how far its input went, never by how fast, so inserting samples on a
   monotone stretch of the input changes no output;
-- monotone branches: on a rising (falling) input every play and ``s`` rise (fall), and ``F`` is increasing, so
-  ``dy/dx >= a F' > 0`` -- the tangent a Newton solver needs never vanishes;
-- passivity: each play lags its input by its threshold, so on a closed cycle ``oint x dp = r oint |dp| >= 0``;
-  the operator has return-point memory, so any closed cycle splits into simple loops whose ascending branch
-  lies below the descending one, and an increasing ``F`` keeps that order: ``oint x dy >= 0``
-  (:func:`dissipation`).
+- monotone branches: ``dy/dx >= a F' > 0`` (effort), ``dy/dx = G' (a + sum_{held} w) >= a G' > 0``
+  (displacement) -- the tangent a Newton solver needs never vanishes;
+- passivity: the operator has return-point memory, so any closed cycle splits into simple loops; in each the
+  ascending branch lies below (effort) / above (displacement) the descending one, and a monotone ``F``/``G``
+  keeps that order: the declared loss is ``>= 0`` (:func:`dissipation`).
 
 The state is the play outputs, carried by the caller: :meth:`FittedHysteresis.step` is a pure
 ``(state, x) -> (state, y)``, so a classical time-stepper owns time and hands back the converged state.
@@ -26,6 +45,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from typing import Final, Literal
 
 import numpy as np
 import torch
@@ -37,9 +57,18 @@ from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse, require_finite
 from learn_lab.validity import BoxEnvelope
 
-__all__ = ['FittedHysteresis', 'PlayHysteresis', 'dissipation', 'play']
+__all__ = ['CAUSALITIES', 'Causality', 'FittedHysteresis', 'PlayHysteresis', 'dissipation', 'play']
 
 Step = Callable[[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+Causality = Literal['effort', 'displacement']
+#: The input a hysteresis declares: which of the two work-conjugate variables drives it.
+CAUSALITIES: Final = ('effort', 'displacement')
+
+
+def _causality(input_is: str) -> str:
+    if input_is not in CAUSALITIES:
+        refuse(f'a hysteresis input is one of {CAUSALITIES} (the conjugate variable driving it), got {input_is!r}')
+    return input_is
 
 
 def play(state: torch.Tensor, x: torch.Tensor, thresholds: torch.Tensor) -> torch.Tensor:
@@ -47,19 +76,23 @@ def play(state: torch.Tensor, x: torch.Tensor, thresholds: torch.Tensor) -> torc
 
     A play follows its input at distance ``r`` once the input pulls further than ``r`` away, else holds. The
     threshold test is written out rather than as a clamp, so a NEGATIVE threshold is not silently a clamp
-    with crossed bounds: it makes the play LEAD its input, an active element :func:`dissipation` catches.
+    with crossed bounds: it makes the play LEAD its input, an active element in the effort orientation that
+    :func:`dissipation` catches.
     """
     x = x.unsqueeze(-1)
     gap = x - state
     return torch.where(gap > thresholds, x - thresholds, torch.where(gap < -thresholds, x + thresholds, state))
 
 
-def dissipation(step: Step, state: np.ndarray, cycle: np.ndarray) -> float:
-    """``oint x dy`` over the closed input *cycle* -- the energy one cycle dissipates; >= 0 for a passive model.
+def dissipation(step: Step, state: np.ndarray, cycle: np.ndarray, *, input_is: Causality) -> float:
+    """The energy one closed input *cycle* dissipates; >= 0 for a passive model of the declared causality.
 
+    ``oint effort d(displacement)``: ``oint x dy`` when the input is the effort, ``oint y dx`` when it is the
+    displacement (``oint x dy = -oint y dx`` on a closed cycle, so measuring the wrong one flips the verdict).
     The cycle is run twice from *state* and measured on the second pass, once the first has carried the state
-    onto the cycle. Unit: input unit times output unit (A/m * T = J/m^3 for H and B).
+    onto the cycle. Unit: input unit times output unit (A/m * T = J/m^3 for H and B, either way round).
     """
+    _causality(input_is)
     x = require_finite(np.asarray(cycle, float).ravel(), 'the cycle')
     if x.size < 3 or x[0] != x[-1]:
         refuse(f'a dissipation cycle is closed (first input == last) with >= 3 points, got {x.size} points')
@@ -70,33 +103,46 @@ def dissipation(step: Step, state: np.ndarray, cycle: np.ndarray) -> float:
             state, y = step(state, np.array([xi]))
             ys.append(float(np.asarray(y).ravel()[0]))
     y = np.array(ys)
-    return float(np.sum(0.5 * (x[1:] + x[:-1]) * np.diff(y)))
+    if input_is == 'effort':
+        return float(np.sum(0.5 * (x[1:] + x[:-1]) * np.diff(y)))
+    return float(np.sum(0.5 * (y[1:] + y[:-1]) * np.diff(x)))
 
 
 class PlayBank(nn.Module):
-    """The operator on scaled input/output: plays, then ``F(a x + w . p)``."""
+    """The operator on scaled input/output: ``F(a x + w . p(x))`` (effort), ``a u + w . (u - p(u))`` with
+    ``u = G(x)`` (displacement).
+    """
 
-    def __init__(self, plays: int, hidden: int, *, odd: bool) -> None:
+    def __init__(self, plays: int, hidden: int, *, odd: bool, input_is: Causality) -> None:
         super().__init__()
-        self.arguments = {'plays': plays, 'hidden': hidden, 'odd': odd}
+        self.arguments = {'plays': plays, 'hidden': hidden, 'odd': odd, 'input_is': _causality(input_is)}
+        self.input_is = input_is
         start = torch.linspace(0.02, 1.0, plays)  # thresholds spread over the scaled input amplitude
         self.raw_thresholds = nn.Parameter(torch.log(torch.expm1(start)))
         self.raw_weights = nn.Parameter(torch.full((plays,), float(np.log(np.expm1(1.0 / plays)))))
         self.raw_slope = nn.Parameter(torch.tensor(-2.0))
-        self.output = MonotoneScalar(hidden, odd=odd)
+        self.monotone = MonotoneScalar(hidden, odd=odd)
 
     @property
     def thresholds(self) -> torch.Tensor:
         return nn.functional.softplus(self.raw_thresholds)
 
-    def output_of(self, x: torch.Tensor, plays: torch.Tensor) -> torch.Tensor:
-        """``F(a x + w . p)`` for inputs ``x (...)`` and their play outputs ``plays (..., K)``."""
+    def played(self, x: torch.Tensor) -> torch.Tensor:
+        """What the plays are driven by: the input itself (effort), else ``G(x)`` (displacement)."""
+        return x if self.input_is == 'effort' else self.monotone(x)
+
+    def output_of(self, u: torch.Tensor, plays: torch.Tensor) -> torch.Tensor:
+        """The output for played inputs ``u (...)`` and their play outputs ``plays (..., K)``."""
         sp = nn.functional.softplus
-        return self.output(sp(self.raw_slope) * x + (sp(self.raw_weights) * plays).sum(-1))
+        a, w = sp(self.raw_slope), sp(self.raw_weights)
+        if self.input_is == 'effort':
+            return self.monotone(a * u + (w * plays).sum(-1))
+        return a * u + (w * (u.unsqueeze(-1) - plays)).sum(-1)
 
     def forward(self, state: torch.Tensor, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        state = play(state, x, self.thresholds)
-        return state, self.output_of(x, state)
+        u = self.played(x)
+        state = play(state, u, self.thresholds)
+        return state, self.output_of(u, state)
 
     def histories(self, x: torch.Tensor) -> torch.Tensor:
         """The play outputs ``(m, T, K)`` along input histories ``x (m, T)`` from the demagnetised state.
@@ -131,6 +177,11 @@ class PlayBank(nn.Module):
 
 @dataclass(frozen=True, slots=True)
 class PlayHysteresis:
+    """*input_is* declares the causality -- the conjugate variable that drives the model. No default: the
+    orientation decides which loop is passive, so it is never guessed.
+    """
+
+    input_is: Causality = field(kw_only=True)
     plays: int = 16
     hidden: int = 16
     odd: bool = True
@@ -143,6 +194,7 @@ class PlayHysteresis:
         ys = [require_finite(np.asarray(y, float).ravel(), 'an output history') for y in outputs]
         if not xs or len(xs) != len(ys) or any(x.shape != y.shape or x.size < 2 for x, y in zip(xs, ys, strict=True)):
             refuse(f'hysteresis is fitted on matched histories (each >= 2 samples), got {len(xs)} and {len(ys)}')
+        _causality(self.input_is)
         if self.plays < 1 or self.hidden < 1:
             refuse(f'a play bank has >= 1 play and >= 1 hidden unit, got {self.plays}, {self.hidden}')
         rt = self.runtime
@@ -157,10 +209,13 @@ class PlayHysteresis:
         y_pad = np.stack([np.pad(y, (0, length - y.size), mode='edge') for y in ys]) / y_scale
         mask = rt.tensor(np.arange(length)[None, :] < np.array([x.size for x in xs])[:, None])
         x_t, y_t = rt.tensor(x_pad), rt.tensor(y_pad)
-        bank = PlayBank(self.plays, self.hidden, odd=self.odd).to(rt.torch_device, rt.torch_dtype)
+        bank = PlayBank(self.plays, self.hidden, odd=self.odd, input_is=self.input_is).to(
+            rt.torch_device, rt.torch_dtype
+        )
 
         def loss() -> torch.Tensor:
-            return (((bank.output_of(x_t, bank.histories(x_t)) - y_t) ** 2) * mask).sum() / mask.sum()
+            u = bank.played(x_t)
+            return (((bank.output_of(u, bank.histories(u)) - y_t) ** 2) * mask).sum() / mask.sum()
 
         history = minimise(bank.parameters(), loss, self.schedule)
         span = float(np.max(np.abs(seen)))
@@ -180,9 +235,15 @@ class FittedHysteresis:
     history: list[float]
 
     @property
+    def input_is(self) -> Causality:
+        """The declared causality -- the orientation :func:`dissipation` measures this model in."""
+        return self.bank.input_is
+
+    @property
     def thresholds(self) -> np.ndarray:
-        """``r_k`` in the input unit; >= 0 by construction."""
-        return numpy(self.bank.thresholds) * self.x_scale
+        """``r_k``, >= 0 by construction: in the input unit (effort), in the scaled ``G(x)`` (displacement)."""
+        scale = self.x_scale if self.input_is == 'effort' else 1.0
+        return numpy(self.bank.thresholds) * scale
 
     def initial_state(self, points: int = 1) -> np.ndarray:
         """The demagnetised state of *points* independent material points: ``(points, plays)``, every play at 0."""

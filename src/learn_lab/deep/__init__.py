@@ -9,7 +9,7 @@ Every family keeps the numpy boundary: arrays in, arrays out. Tensors never cros
 - :mod:`~learn_lab.deep.operator` -- function -> function: DeepONet, 1-D/2-D FNO;
 - :mod:`~learn_lab.deep.graph` -- node fields on numpy graph batches by message passing;
 - :mod:`~learn_lab.deep.hysteresis` -- a play-bank hysteresis, a pure ``(state, x) -> (state, y)`` step, passive
-  by construction;
+  by construction in its DECLARED causality (effort- or displacement-driven);
 - :mod:`~learn_lab.deep.bridge` -- a classical numpy solve and its VJP as one torch op, checked by differences;
 - :mod:`~learn_lab.deep.dynamics` -- a neural ODE ``dx/dt = f(x)`` (RK4); sparse identification (ODE and PDE) is
   numpy, in :mod:`learn_lab.equation`.

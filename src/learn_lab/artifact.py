@@ -82,6 +82,7 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
     'multilayer_perceptron': (f'{_RESPONSE}neural:MultilayerPerceptron', f'{_RESPONSE}neural:Network'),
     'chaos_expansion': (f'{_RESPONSE}chaos:ChaosExpansion', f'{_RESPONSE}chaos:FittedChaos'),
     'ensemble': (f'{_RESPONSE}ensemble:Ensemble', f'{_RESPONSE}ensemble:FittedEnsemble'),
+    'bagging': (f'{_RESPONSE}bagging:Bagging', f'{_RESPONSE}bagging:FittedBagging'),
     'sparse_regression': ('learn_lab.equation:SparseRegression', 'learn_lab.equation:IdentifiedLaw'),
     'deep_ensemble': ('learn_lab.deep.surrogate:DeepEnsemble', 'learn_lab.deep.surrogate:FittedEnsemble'),
     'physics_informed_field': ('learn_lab.deep.physics:PhysicsInformedField', 'learn_lab.deep.physics:FittedField'),
@@ -119,6 +120,7 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'multilayer_perceptron': lambda f: _vector(f.envelope, f.weights[-1].shape[1]),
     'chaos_expansion': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
     'ensemble': lambda f: _schema(_family_of(f.members[0]), f.members[0]),
+    'bagging': lambda f: _schema(_family_of(f.members[0]), f.members[0]),
     'sparse_regression': lambda f: {
         'inputs': {'kind': 'state', 'variables': list(f.library.variables)},
         'outputs': {'kind': 'rate', 'targets': list(f.targets)},

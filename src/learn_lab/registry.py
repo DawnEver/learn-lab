@@ -1,7 +1,8 @@
 """The declared L6 surrogates by name, for a caller that names one in data (a TOML table, a CLI flag).
 
 :func:`surrogate` resolves a name and its settings, or refuses naming every declared surrogate. An
-ensemble is composed from declarations, so it is not itself a row.
+ensemble is composed from declarations, so it is not itself a row; a bag is, since it has a default
+member (bagged regression trees) and :func:`~learn_lab.tuning.tune` can grid its ``member``.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 from typing import Final
 
 from learn_lab.errors import refuse
+from learn_lab.models.response.bagging import Bagging
 from learn_lab.models.response.chaos import ChaosExpansion
 from learn_lab.models.response.co_kriging import CoKriging
 from learn_lab.models.response.gaussian_process import GaussianProcess
@@ -34,6 +36,7 @@ SURROGATES: Final = {
     'forest': Forest,
     'multilayer_perceptron': MultilayerPerceptron,
     'chaos_expansion': ChaosExpansion,
+    'bagging': Bagging,
 }
 
 

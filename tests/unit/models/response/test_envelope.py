@@ -11,6 +11,7 @@ import pytest
 
 from learn_lab.errors import Refused
 from learn_lab.models.response import (
+    Bagging,
     ChaosExpansion,
     CoKriging,
     Ensemble,
@@ -49,6 +50,7 @@ FITS = {
     'multilayer_perceptron': lambda d: MultilayerPerceptron((4,), max_iterations=20).fit(X, Y, domain=d),
     'chaos_expansion': lambda d: ChaosExpansion(degree=2).fit(X, Y, domain=d),
     'ensemble': lambda d: Ensemble((Polynomial(degree=1), NearestNeighbours(k=3)), k=3).fit(X, Y, domain=d),
+    'bagging': lambda d: Bagging(Polynomial(degree=1), n_members=3, seed=1).fit(X, Y, domain=d),
 }
 
 

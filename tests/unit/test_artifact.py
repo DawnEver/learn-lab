@@ -17,6 +17,7 @@ from learn_lab import artifact
 from learn_lab.equation import Library, SparseRegression, polynomial_library
 from learn_lab.errors import Refused
 from learn_lab.models.response import (
+    Bagging,
     ChaosExpansion,
     CoKriging,
     Ensemble,
@@ -54,6 +55,7 @@ CASES = {
     'multilayer_perceptron': (MultilayerPerceptron(hidden=(6,), max_iterations=40), lambda m: m.fit(X, Y)),
     'chaos_expansion': (ChaosExpansion(degree=2), lambda m: m.fit(X, Y)),
     'ensemble': (Ensemble((Polynomial(degree=2), NearestNeighbours(k=3)), k=3), lambda m: m.fit(X, Y)),
+    'bagging': (Bagging(GaussianProcess(restarts=0), n_members=3, seed=5), lambda m: m.fit(X, Y)),
 }
 
 

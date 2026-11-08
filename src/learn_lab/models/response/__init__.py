@@ -11,12 +11,13 @@ and the latent variance ``(n, k)`` and mean gradient ``(n, k, d)`` when asked fo
   :class:`CoKriging` (AR1 multi-fidelity);
 * learners -- :class:`NearestNeighbours`, :class:`RegressionTree`, :class:`Forest` (random forest,
   extra trees, bagging), :class:`MultilayerPerceptron`;
-* composition -- :class:`Ensemble`. Judging a model is :mod:`learn_lab.validation`; naming one is
-  :mod:`learn_lab.registry`.
+* composition -- :class:`Ensemble`, :class:`Bagging`. Tuning a model's settings is :mod:`learn_lab.tuning`; judging one is
+  :mod:`learn_lab.validation`; naming one is :mod:`learn_lab.registry`.
 
 scikit-learn is a TEST oracle only.
 """
 
+from learn_lab.models.response.bagging import Bagging, FittedBagging
 from learn_lab.models.response.chaos import ChaosExpansion, FittedChaos, legendre_table
 from learn_lab.models.response.co_kriging import CoKriging, FittedCoKriging
 from learn_lab.models.response.ensemble import WEIGHTINGS, Ensemble, FittedEnsemble
@@ -37,9 +38,11 @@ __all__ = [
     'RADIAL_KERNELS',
     'SPLITTERS',
     'WEIGHTINGS',
+    'Bagging',
     'ChaosExpansion',
     'CoKriging',
     'Ensemble',
+    'FittedBagging',
     'FittedChaos',
     'FittedCoKriging',
     'FittedEnsemble',

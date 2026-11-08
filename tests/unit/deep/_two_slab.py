@@ -23,6 +23,12 @@ def truth(x: np.ndarray, k_left: float, k_right: float) -> np.ndarray:
     return np.where(x[:, 0] < INTERFACE, a * x[:, 0], 1.0 - b * (1.0 - x[:, 0]))
 
 
+def slope(x: np.ndarray, k_left: float, k_right: float) -> np.ndarray:
+    """The planted ``u'`` at ``(n, 1)`` points."""
+    b = 1.0 / (INTERFACE * k_right / k_left + (1.0 - INTERFACE))
+    return np.where(x[:, 0] < INTERFACE, k_right * b / k_left, b)
+
+
 @dataclass(frozen=True)
 class TwoSlab:
     k_right_nominal: float = 1.0
@@ -34,8 +40,18 @@ class TwoSlab:
     def parameters(self):
         return {'k_left': 1.0, 'k_right': self.k_right_nominal}
 
-    def owns(self, points):
-        """Column 0 owns the left slab, column 1 the right one (the interface point to the left)."""
+    @property
+    def observables(self):
+        return {'u': 2, 'du': 2}
+
+    def observe(self, name, field, points):
+        u = field(points)
+        if name == 'u':
+            return u
+        return torch.stack([derivative(u[:, c], points)[:, 0] for c in range(self.outputs)], dim=1)
+
+    def owns(self, name, points):
+        """Column 0 owns the left slab, column 1 the right one (the interface point to the left), for both."""
         left = points[:, 0] <= INTERFACE
         return np.stack([left, ~left], axis=1)
 
@@ -69,5 +85,5 @@ class TwoSlab:
 class EveryColumnEverywhere(TwoSlab):
     """The planted control: a provider claiming every column owns every point -- the defect's behaviour."""
 
-    def owns(self, points):
+    def owns(self, name, points):
         return np.ones((points.shape[0], self.outputs), bool)

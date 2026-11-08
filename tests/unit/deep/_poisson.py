@@ -21,8 +21,15 @@ class Poisson:
     def parameters(self):
         return {'k': self.k_nominal}
 
-    def owns(self, points):
-        return np.ones((points.shape[0], self.outputs), bool)
+    @property
+    def observables(self):
+        return {'u': 1}
+
+    def observe(self, name, field, points):
+        return field(points)
+
+    def owns(self, name, points):
+        return np.ones((points.shape[0], 1), bool)
 
     def collocation(self, runtime):
         interior = torch.rand(self.points, 1, generator=runtime.generator(), device=runtime.torch_device)

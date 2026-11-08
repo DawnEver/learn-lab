@@ -75,7 +75,7 @@ CASES = {
     ),
     'physics_informed_field': (
         PhysicsInformedField(hidden=(8, 8), schedule=FEW, runtime=CPU64),
-        lambda m: m.fit(Poisson(points=16), identify=('k',), observations=(POINTS, np.sin(np.pi * POINTS))),
+        lambda m: m.fit(Poisson(points=16), identify=('k',), observations={'u': (POINTS, np.sin(np.pi * POINTS))}),
         lambda f: [f.evaluate(POINTS), np.array(list(f.parameters.values()))],
         lambda f: f.evaluate(np.array([[1.2]])),
     ),

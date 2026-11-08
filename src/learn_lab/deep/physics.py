@@ -5,9 +5,13 @@ A provider (the domain library's -- e.g. motronics hamilton for the magnetic vec
 - ``domain``: the :class:`~learn_lab.validity.BoxEnvelope` of the coordinates the field is defined on;
 - ``outputs``: how many field components;
 - ``parameters``: its physical parameters by name, at their nominal values (ONE source of those values);
-- ``owns(points)``: ``(n, dim)`` coordinates -> ``(n, outputs)`` booleans, which output columns ARE the field at each
-  point. A single-field provider owns every column everywhere; a provider with one column per region owns only the
-  region's column, so an observation pins the column it belongs to and never the neighbour's (ONE source of the
+- ``observables``: what can be measured, by name -> its component count ``k``; the field itself is one, declared
+  explicitly like any other (e.g. ``{'u': 2, 'du': 2}``, or ``{'A': 2, 'B': 4}``);
+- ``observe(name, field, points)``: the observable at ``(n, dim)`` coordinates, ``(n, k)``, differentiable -- a
+  derived quantity (a gradient, a curl) is computed from ``field`` with :func:`derivative`;
+- ``owns(name, points)``: ``(n, k)`` booleans, which components of that observable ARE it at each point. A
+  single-field provider owns every component everywhere; a provider with one column per region owns only the
+  region's components, so an observation pins what it belongs to and never the neighbour's (ONE source of the
   region map: the provider that defines the regions);
 - ``collocation(runtime)``: the points per region (``'interior'``, ``'boundary'``, ...) as tensors;
 - ``residuals(field, points, parameters)``: one :class:`Term` per condition. ``field`` maps ``(n, dim)``
@@ -17,9 +21,11 @@ A :class:`Term` carries its ``scale`` IN THE RESIDUAL'S UNIT, so ``residual / sc
 loss sums like with like -- a weight that is a bare number would hide the unit (TOLERANCE-CARRIES-A-UNIT).
 
 A forward PINN and an inverse problem are the SAME fit: the inverse names which parameters to ``identify``
-and supplies ``observations`` ``(x, u)``, ``u`` of shape ``(n, outputs)``; those parameters become trainable alongside
-the network. Only the entries ``provider.owns(x)`` marks are fitted; the others are not the field there and are
-ignored (NaN is the honest value to put in them).
+and supplies ``observations`` -- a mapping observable name -> ``(x, values)``, ``values`` of shape ``(n, k)``; those
+parameters become trainable alongside the network. Only the entries ``provider.owns(name, x)`` marks are fitted; the
+others are not the observable there and are ignored (NaN is the honest value to put in them). Each observable is one
+data term scaled by the root-mean-square of its owned values, in its own unit: a derived observable (a slope, a flux
+density) can carry a coefficient the field itself hides below the fit's accuracy.
 """
 
 from __future__ import annotations
@@ -67,7 +73,12 @@ class ResidualProvider(Protocol):
     @property
     def parameters(self) -> Mapping[str, float]: ...
 
-    def owns(self, points: np.ndarray) -> np.ndarray: ...
+    @property
+    def observables(self) -> Mapping[str, int]: ...
+
+    def observe(self, name: str, field: Field, points: torch.Tensor) -> torch.Tensor: ...
+
+    def owns(self, name: str, points: np.ndarray) -> np.ndarray: ...
 
     def collocation(self, runtime: Runtime) -> Mapping[str, torch.Tensor]: ...
 
@@ -98,14 +109,14 @@ class PhysicsInformedField:
         provider: ResidualProvider,
         *,
         identify: Sequence[str] = (),
-        observations: tuple[np.ndarray, np.ndarray] | None = None,
+        observations: Mapping[str, tuple[np.ndarray, np.ndarray]] | None = None,
     ) -> FittedField:
         """Fit the field to the provider's residuals; ``identify`` + ``observations`` make it an inverse problem."""
         unknown = set(identify) - set(provider.parameters)
         if unknown:
             refuse(f'identify names {sorted(unknown)}; the provider declares {sorted(provider.parameters)}')
         if identify and observations is None:
-            refuse('identifying parameters needs observations of the field; none were given')
+            refuse('identifying parameters needs observations; none were given')
         rt = self.runtime
         rt.seeded()
         dim = provider.domain.width
@@ -121,34 +132,14 @@ class PhysicsInformedField:
             return _mapped(net, rt, provider.domain, x)
 
         points = {name: p.detach().requires_grad_(True) for name, p in provider.collocation(rt).items()}
-        data = None
-        if observations is not None:
-            xo, uo = (
-                provider.domain.require(observations[0], 'an observation point'),
-                np.asarray(observations[1], float),
-            )
-            if uo.shape != (xo.shape[0], provider.outputs):
-                refuse(f'observations are ({xo.shape[0]}, {provider.outputs}) values, got {uo.shape}')
-            owned = np.asarray(provider.owns(xo), bool)
-            if owned.shape != uo.shape:
-                refuse(f'provider.owns returns {owned.shape}, the observations are {uo.shape}')
-            if not owned.any():
-                refuse('no observed value lies in a column the provider owns at its point')
-            if not np.isfinite(uo[owned]).all():
-                refuse('an observed value in an owned column is not finite')
-            values = uo[owned]
-            data = (
-                rt.tensor(xo),
-                rt.tensor(np.where(owned, uo, 0.0)),
-                torch.as_tensor(owned, device=rt.torch_device),
-                float(np.std(values)) or 1.0,
-            )
+        data = [] if observations is None else [_observed(provider, rt, n, o) for n, o in observations.items()]
+        if observations is not None and not data:
+            refuse('observations name no observable; give at least one')
 
         def loss() -> torch.Tensor:
             total = sum(term.loss() for term in provider.residuals(field_at, points, params).values())
-            if data is not None:
-                xt, ut, mask, scale = data
-                total = total + Term((field_at(xt) - ut)[mask], scale).loss()
+            for name, xt, ut, mask, scale in data:
+                total = total + Term((provider.observe(name, field_at, xt) - ut)[mask], scale).loss()
             return total
 
         trainable = [*net.parameters(), *(params[name] for name in identify)]
@@ -161,6 +152,30 @@ class PhysicsInformedField:
             parameters={name: float(value.detach()) for name, value in params.items()},
             history=history,
         )
+
+
+def _observed(provider: ResidualProvider, rt: Runtime, name: str, observation: tuple[np.ndarray, np.ndarray]):
+    """One observable's data term: points, values (unowned zeroed), ownership mask, RMS scale in its unit."""
+    if name not in provider.observables:
+        refuse(f'observable {name!r} is not declared; the provider declares {sorted(provider.observables)}')
+    k = provider.observables[name]
+    xo = provider.domain.require(observation[0], 'an observation point')
+    uo = np.asarray(observation[1], float)
+    if uo.shape != (xo.shape[0], k):
+        refuse(f'observations of {name!r} are ({xo.shape[0]}, {k}) values, got {uo.shape}')
+    owned = np.asarray(provider.owns(name, xo), bool)
+    if owned.shape != uo.shape:
+        refuse(f'provider.owns({name!r}) returns {owned.shape}, the observations are {uo.shape}')
+    if not owned.any():
+        refuse(f'no observed value of {name!r} lies in a component the provider owns at its point')
+    values = uo[owned]
+    if not np.isfinite(values).all():
+        refuse(f'an observed value of {name!r} in an owned component is not finite')
+    scale = float(np.sqrt(np.mean(values**2)))
+    if not scale > 0:
+        refuse(f'every owned observation of {name!r} is zero: it carries no scale in its unit')
+    points = rt.tensor(xo).requires_grad_(True)
+    return name, points, rt.tensor(np.where(owned, uo, 0.0)), torch.as_tensor(owned, device=rt.torch_device), scale
 
 
 @dataclass(frozen=True, slots=True, eq=False)

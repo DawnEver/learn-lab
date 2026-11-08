@@ -36,15 +36,15 @@ dev = [
 ]
 
 # One CUDA build serves both platforms: native Windows CUDA (workstations, incl. Blackwell sm_120 which needs
-# CUDA >= 12.8) and Linux (Ada A100/H200). macOS falls through to PyPI's CPU wheel.
+# CUDA >= 12.8; cu130 builds cover it and Ada sm_80) and Linux (Ada A100/H200). macOS falls through to PyPI's CPU wheel.
 [tool.uv.sources]
 # dev-lab floats on integrate/main like every family repo; the lock is the pin.
 dev-lab = { git = "https://github.com/DawnEver/dev-lab.git", branch = "integrate/main" }
-torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
 
 [[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [tool.setuptools.packages.find]

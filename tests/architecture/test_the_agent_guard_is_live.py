@@ -22,7 +22,7 @@ _SHIPPED: Final = frozenset({
     'BARE-INTERPRETER',
     'BARE-PYTHON',
     'BARE-TEST-INVOCATION',
-    'CONSENT-CODE-NEVER-TYPED',  # gained 2026-11-07 with dev-lab 83c4f29
+    'CONSENT-CODE-FROM-THE-USER',  # gained 2026-11-07 with dev-lab 83c4f29
     'FORGE-WRITE-VIA-CLI',
     'FORGE-WRITE-VIA-GH-API',
     'FORGE-WRITE-VIA-HTTP',

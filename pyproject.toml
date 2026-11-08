@@ -75,12 +75,12 @@ worker_mem_gb = 3.5
 produce = ["-m", "dev_lab.dev.verify", "--part", "{part}"]
 
 # The family branch flow: integrate/main coordinates; main moves only by `integrate promote` (fast-forward)
-# on a full forge PASS. pr_merges_since is the last founding commit: every commit after it is a forge merge.
+# on a full forge PASS. Past c623e25 (integrate/main created at the founding commits) every commit is a forge merge.
 [tool.dev_lab.integrator]
 trunk = "main"
 integration = "integrate/main"
-pr_merges_since = "8be94e3889513c57967f1c4bc8f891512fac5a7a"  # INTEGRATION-TAKES-ONLY-FORGE-MERGES after the founding commits
-merges_only_since = "8be94e3889513c57967f1c4bc8f891512fac5a7a"  # INTEGRATION-IS-MERGES-ONLY from the same founding commit
+merges_only_since = "8be94e3889513c57967f1c4bc8f891512fac5a7a"  # INTEGRATION-IS-MERGES-ONLY after the founding commits
+pr_merges_since = "c623e25949988135489296ad4562d05334a0dcec"  # INTEGRATION-TAKES-ONLY-FORGE-MERGES after the integration branch was created
 
 # GitHub Actions: the family's one PR lifecycle (dev_lab/dev/ci_base.toml) as is; rendered to
 # .github/workflows/ci.yml by `python -m dev_lab.dev.ciworkflows render`, never hand-edited.

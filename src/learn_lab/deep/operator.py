@@ -20,12 +20,12 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.channels import ChannelEnvelope, Standardiser
 from learn_lab.deep.fit import Schedule, minimise
 from learn_lab.deep.networks import mlp
 from learn_lab.deep.runtime import Runtime, numpy
+from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
-from learn_lab.validity import BoxEnvelope
+from learn_lab.validity import BoxEnvelope, ChannelEnvelope
 
 __all__ = ['FNO', 'DeepONet', 'FittedDeepONet', 'FittedFNO', 'SpectralConv']
 

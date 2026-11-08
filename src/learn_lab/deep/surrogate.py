@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
@@ -41,7 +41,9 @@ class DeepEnsemble:
     def gives(self) -> frozenset[Give]:
         return _GIVES if self.members > 1 else frozenset({Give.GRADIENT})
 
-    def fit(self, x: np.ndarray, y: np.ndarray, *, domain: BoxEnvelope | None = None) -> FittedEnsemble:
+    def fit(
+        self, x: np.ndarray, y: np.ndarray, *, domain: BoxEnvelope | None = None, checkpoint: Checkpoint | None = None
+    ) -> FittedEnsemble:
         """The envelope is *domain* when declared, else the training box widened by ``margin``."""
         x, y, envelope = training_data(x, y, domain)
         rt = self.runtime
@@ -53,7 +55,15 @@ class DeepEnsemble:
             replace(rt, seed=rt.seed + member).seeded()
             net = MLP([x.shape[1], *self.hidden, y.shape[1]], activation='silu')
             net = net.to(rt.torch_device, rt.torch_dtype)
-            histories.append(minimise(net.parameters(), lambda net=net: ((net(xt) - yt) ** 2).mean(), self.schedule))
+            histories.append(
+                minimise(
+                    net.parameters(),
+                    lambda net=net: ((net(xt) - yt) ** 2).mean(),
+                    self.schedule,
+                    checkpoint=None if checkpoint is None else checkpoint.member(member),
+                    config=repr(self),
+                )
+            )
             nets.append(net.eval())
         return FittedEnsemble(
             nets=tuple(nets),

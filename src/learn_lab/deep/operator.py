@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
@@ -66,7 +66,9 @@ class DeepONet:
     runtime: Runtime = field(default_factory=lambda: Runtime(dtype='float32'))
     margin: float = 0.0
 
-    def fit(self, sensors: np.ndarray, points: np.ndarray, values: np.ndarray) -> FittedDeepONet:
+    def fit(
+        self, sensors: np.ndarray, points: np.ndarray, values: np.ndarray, *, checkpoint: Checkpoint | None = None
+    ) -> FittedDeepONet:
         """``sensors (n, m)`` input functions, ``points (p, d)`` shared query points, ``values (n, p)``."""
         u = require_finite(np.asarray(sensors, float), 'the sensor values')
         y = require_finite(np.asarray(points, float), 'the query points')
@@ -87,7 +89,7 @@ class DeepONet:
         def loss() -> torch.Tensor:
             return ((net(ut, yt) - gt) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule)
+        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
         envelope = ChannelEnvelope.of(u[:, None, :], margin=self.margin)
         return FittedDeepONet(
             net=net.eval(), runtime=rt, sensors=envelope, points=box, inputs=su, outputs=sg, history=history
@@ -196,7 +198,7 @@ class FNO:
         if len(self.modes) not in {1, 2} or min(self.modes) < 1:
             refuse(f'an FNO keeps >= 1 mode on each of 1 or 2 axes, got modes={self.modes}')
 
-    def fit(self, x: np.ndarray, y: np.ndarray) -> FittedFNO:
+    def fit(self, x: np.ndarray, y: np.ndarray, *, checkpoint: Checkpoint | None = None) -> FittedFNO:
         """``x (n, c_in, *grid) -> y (n, c_out, *grid)`` on a regular grid of the unit domain."""
         x = require_finite(np.asarray(x, float), 'the input functions')
         y = require_finite(np.asarray(y, float), 'the output functions')
@@ -214,7 +216,7 @@ class FNO:
         def loss() -> torch.Tensor:
             return ((net(xt) - yt) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule)
+        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
         envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
         return FittedFNO(
             net=net.eval(), modes=self.modes, runtime=rt, envelope=envelope, inputs=sx, outputs=sy, history=history

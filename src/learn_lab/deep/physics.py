@@ -37,7 +37,7 @@ from typing import Protocol
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
@@ -110,6 +110,7 @@ class PhysicsInformedField:
         *,
         identify: Sequence[str] = (),
         observations: Mapping[str, tuple[np.ndarray, np.ndarray]] | None = None,
+        checkpoint: Checkpoint | None = None,
     ) -> FittedField:
         """Fit the field to the provider's residuals; ``identify`` + ``observations`` make it an inverse problem."""
         unknown = set(identify) - set(provider.parameters)
@@ -143,7 +144,7 @@ class PhysicsInformedField:
             return total
 
         trainable = [*net.parameters(), *(params[name] for name in identify)]
-        history = minimise(trainable, loss, self.schedule)
+        history = minimise(trainable, loss, self.schedule, checkpoint=checkpoint, config=repr(self))
         net.eval()
         return FittedField(
             net=net,

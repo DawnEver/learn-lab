@@ -75,7 +75,9 @@ class FieldModel:
         def loss() -> torch.Tensor:
             return ((net(xt) - yt) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
+        history = minimise(
+            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, yt]
+        )
         envelope = ChannelEnvelope.of(x, margin=self.margin)
         return FittedFieldModel(net=net.eval(), runtime=rt, envelope=envelope, inputs=sx, outputs=sy, history=history)
 

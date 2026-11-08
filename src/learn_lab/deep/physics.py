@@ -144,7 +144,14 @@ class PhysicsInformedField:
             return total
 
         trainable = [*net.parameters(), *(params[name] for name in identify)]
-        history = minimise(trainable, loss, self.schedule, checkpoint=checkpoint, config=repr(self))
+        history = minimise(
+            trainable,
+            loss,
+            self.schedule,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=_trained_on(points, data, params),
+        )
         net.eval()
         return FittedField(
             net=net,
@@ -197,3 +204,9 @@ class FittedField:
         x = self.domain.require(x, 'a field query')
         with torch.no_grad():
             return numpy(self.field_at(self.runtime.tensor(x)))
+
+
+def _trained_on(points, data, params) -> list:
+    """The arrays a physics fit trains on: the collocation points, the observations and the starting parameters."""
+    observed = [array for _, xt, ut, mask, _ in data for array in (xt, ut, mask)]
+    return [*(points[name] for name in sorted(points)), *observed, *(params[name] for name in sorted(params))]

@@ -62,6 +62,7 @@ class DeepEnsemble:
                     self.schedule,
                     checkpoint=None if checkpoint is None else checkpoint.member(member),
                     config=repr(self),
+                    data=[xt, yt],
                 )
             )
             nets.append(net.eval())

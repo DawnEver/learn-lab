@@ -89,7 +89,9 @@ class DeepONet:
         def loss() -> torch.Tensor:
             return ((net(ut, yt) - gt) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
+        history = minimise(
+            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[ut, yt, gt]
+        )
         envelope = ChannelEnvelope.of(u[:, None, :], margin=self.margin)
         return FittedDeepONet(
             net=net.eval(), runtime=rt, sensors=envelope, points=box, inputs=su, outputs=sg, history=history
@@ -216,7 +218,9 @@ class FNO:
         def loss() -> torch.Tensor:
             return ((net(xt) - yt) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
+        history = minimise(
+            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, yt]
+        )
         envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
         return FittedFNO(
             net=net.eval(), modes=self.modes, runtime=rt, envelope=envelope, inputs=sx, outputs=sy, history=history

@@ -71,7 +71,9 @@ class NeuralODE:
         def loss() -> torch.Tensor:
             return ((rk4(lambda s: net(s) / time_scale, windows[:, 0], window_t) - windows) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
+        history = minimise(
+            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[windows, window_t]
+        )
         return FittedDynamics(
             net=net.eval(),
             time_scale=time_scale,

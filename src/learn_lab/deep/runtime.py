@@ -6,6 +6,7 @@ against an adjoint or an FEA golden run ``float64``; data-driven fits may run ``
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Literal
 
@@ -52,7 +53,14 @@ class Runtime:
         return out.requires_grad_(grad)
 
     def seeded(self) -> None:
-        """Seed parameter initialisation (module constructors draw from the global generator)."""
+        """Make the fit reproducible: seed initialisation and select deterministic kernels.
+
+        A seed alone does not fix a CUDA result: scatter sums (``index_add_``) accumulate in a nondeterministic
+        order, which moved a GNN's held-out error across its bar between runs. Deterministic kernels cost speed
+        and buy goldens; cuBLAS needs its workspace declared before its first call, so it is set here when absent.
+        """
+        os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
+        torch.use_deterministic_algorithms(True, warn_only=True)
         torch.manual_seed(self.seed)
 
 

@@ -56,7 +56,8 @@ _MECHANISMS: Final = {
     # lands on a merged PR).
     'DRAFT-UNTIL-READY': (TestPath('pyproject.toml'),),
     'FORGE-DOORS-ARE-CONSENT': (TestPath('pyproject.toml'),),
-    'NO-PUSH-ONTO-A-LANDED-PR': (TestPath('pyproject.toml'),),
+    'LANDED-BRANCH-CONTINUES': (TestPath('pyproject.toml'),),
+    'NO-PUSH-ONTO-A-CLOSED-PR': (TestPath('pyproject.toml'),),
     # November 2026, the founding month, is the first month this tree holds.
     'MONTHLY-PLANS-CARRIED': (TestPath('tests/architecture/test_every_month_carries_its_plans.py'),),
     # The agent guard ships in every family repo; the rendered

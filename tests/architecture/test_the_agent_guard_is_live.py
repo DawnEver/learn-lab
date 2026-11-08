@@ -36,6 +36,7 @@ _SHIPPED: Final = frozenset({
     'PUSH-REMOTE-DELETE',
     'RECURSIVE-DELETE',  # gained 2026-10-29 with dev-lab e8b8991
     'RECURSIVE-GREP',
+    'REMOTE-WRITE-THROUGH-A-DOOR',  # gained 2026-11-08 with the dev-lab relock
     'REPORTS-LIVE-IN-MEMORY',
     'STATUS-VIA-DOORS',
     'SUBAGENT-NO-PUSH',

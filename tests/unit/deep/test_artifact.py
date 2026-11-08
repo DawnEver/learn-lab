@@ -86,7 +86,7 @@ CASES = {
         lambda f: f.value(np.array([3.0])),
     ),
     'play_hysteresis': (
-        PlayHysteresis(plays=4, hidden=4, schedule=FEW, runtime=CPU64),
+        PlayHysteresis(input_is='displacement', plays=4, hidden=4, schedule=FEW, runtime=CPU64),
         lambda m: m.fit(HISTORIES, [np.tanh(2 * h) for h in HISTORIES]),
         _hysteresis,
         lambda f: f.respond(np.array([0.0, 2.0])),

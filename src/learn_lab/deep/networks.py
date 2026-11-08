@@ -1,24 +1,40 @@
-"""Network bodies shared by the families: a plain MLP and a monotone scalar map."""
+"""Network bodies shared by the families: a plain MLP and a monotone scalar map.
+
+Every module a family persists records the ``arguments`` it was built with, so an artifact rebuilds the same
+architecture before loading its weights (:mod:`learn_lab.deep.artifact`).
+"""
 
 from __future__ import annotations
 
 import itertools
 from collections.abc import Sequence
+from typing import Final
 
 import torch
 from torch import nn
 
-__all__ = ['MonotoneScalar', 'mlp']
+from learn_lab.errors import refuse
+
+__all__ = ['ACTIVATIONS', 'MLP', 'MonotoneScalar']
+
+#: The activations a persisted MLP may name.
+ACTIVATIONS: Final = {'tanh': nn.Tanh, 'silu': nn.SiLU, 'gelu': nn.GELU}
 
 
-def mlp(widths: Sequence[int], *, activation: type[nn.Module] = nn.Tanh) -> nn.Sequential:
+class MLP(nn.Sequential):
     """``widths[0] -> ... -> widths[-1]``, *activation* between layers, linear output. Smooth by default (PINN)."""
-    layers: list[nn.Module] = []
-    for i, (a, b) in enumerate(itertools.pairwise(widths)):
-        layers.append(nn.Linear(a, b))
-        if i < len(widths) - 2:
-            layers.append(activation())
-    return nn.Sequential(*layers)
+
+    def __init__(self, widths: Sequence[int], *, activation: str = 'tanh') -> None:
+        if activation not in ACTIVATIONS:
+            refuse(f'an MLP activation is one of {list(ACTIVATIONS)}, got {activation!r}')
+        widths = tuple(int(w) for w in widths)
+        layers: list[nn.Module] = []
+        for i, (a, b) in enumerate(itertools.pairwise(widths)):
+            layers.append(nn.Linear(a, b))
+            if i < len(widths) - 2:
+                layers.append(ACTIVATIONS[activation]())
+        super().__init__(*layers)
+        self.arguments = {'widths': widths, 'activation': activation}
 
 
 class MonotoneScalar(nn.Module):
@@ -34,6 +50,7 @@ class MonotoneScalar(nn.Module):
 
     def __init__(self, hidden: int = 16, *, odd: bool = True) -> None:
         super().__init__()
+        self.arguments = {'hidden': hidden, 'odd': odd}
         self.odd = odd
         knots = torch.linspace(0.0, 1.0, hidden) if odd else torch.linspace(-1.0, 1.0, hidden)
         self.raw_slope = nn.Parameter(torch.tensor(-2.0))

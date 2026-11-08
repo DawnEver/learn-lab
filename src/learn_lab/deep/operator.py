@@ -21,7 +21,7 @@ import torch
 from torch import nn
 
 from learn_lab.deep.fit import Schedule, minimise
-from learn_lab.deep.networks import mlp
+from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
@@ -39,8 +39,16 @@ def _scalar(s: Standardiser, a: np.ndarray, *, back: bool = False) -> np.ndarray
 class _DeepONetNet(nn.Module):
     def __init__(self, sensors: int, dim: int, hidden: Sequence[int], basis: int, lower, upper) -> None:
         super().__init__()
-        self.branch = mlp([sensors, *hidden, basis], activation=nn.GELU)
-        self.trunk = mlp([dim, *hidden, basis], activation=nn.GELU)
+        self.arguments = {
+            'sensors': sensors,
+            'dim': dim,
+            'hidden': tuple(hidden),
+            'basis': basis,
+            'lower': lower,
+            'upper': upper,
+        }
+        self.branch = MLP([sensors, *hidden, basis], activation='gelu')
+        self.trunk = MLP([dim, *hidden, basis], activation='gelu')
         self.bias = nn.Parameter(torch.zeros(()))
         span = np.where(upper > lower, upper - lower, 1.0)
         self.register_buffer('lower', torch.as_tensor(lower, dtype=torch.float64))
@@ -152,10 +160,11 @@ def _pointwise(layer: nn.Module, x: torch.Tensor) -> torch.Tensor:
 class _FNONet(nn.Module):
     def __init__(self, c_in: int, c_out: int, *, modes: Sequence[int], width: int, layers: int) -> None:
         super().__init__()
+        self.arguments = {'c_in': c_in, 'c_out': c_out, 'modes': tuple(modes), 'width': width, 'layers': layers}
         self.lift = nn.Linear(c_in + len(modes), width)
         self.spectral = nn.ModuleList(SpectralConv(width, width, modes) for _ in range(layers))
         self.mix = nn.ModuleList(nn.Linear(width, width) for _ in range(layers))
-        self.head = mlp([width, 2 * width, c_out], activation=nn.GELU)
+        self.head = MLP([width, 2 * width, c_out], activation='gelu')
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         axes = (torch.linspace(0.0, 1.0, n, dtype=x.dtype, device=x.device) for n in x.shape[2:])

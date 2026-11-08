@@ -27,12 +27,27 @@ from learn_lab.validity import BoxEnvelope
 __all__ = [
     'IdentifiedLaw',
     'Library',
+    'Monomial',
     'SparseRegression',
     'pde_data',
     'pde_library',
     'polynomial_library',
     'time_derivative',
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class Monomial:
+    """A candidate term as data: the product of the variables at ``factors`` (repeats are powers; none is 1).
+
+    A term that is data persists with the law it identified (:mod:`learn_lab.artifact`); any other callable
+    remains a valid term, and a law built on one is refused at save, naming it.
+    """
+
+    factors: tuple[int, ...]
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        return np.prod(x[:, list(self.factors)], axis=1)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -64,7 +79,7 @@ def polynomial_library(variables: Sequence[str], *, degree: int) -> Library:
         for combo in itertools.combinations_with_replacement(range(len(variables)), d):
             counts = {i: combo.count(i) for i in dict.fromkeys(combo)}
             names.append('*'.join(variables[i] + (f'^{c}' if c > 1 else '') for i, c in counts.items()) or '1')
-            terms.append(lambda x, combo=combo: np.prod(x[:, list(combo)], axis=1))
+            terms.append(Monomial(combo))
     return Library(variables, tuple(names), tuple(terms))
 
 
@@ -92,7 +107,7 @@ def pde_library(*, order: int, degree: int) -> Library:
         for p in range(degree + 1):
             power = '' if p == 0 else 'u' + (f'^{p}' if p > 1 else '')
             names.append('*'.join(filter(None, [power, _derivative_name(k) if k else ''])) or '1')
-            terms.append(lambda x, k=k, p=p: x[:, 0] ** p * (x[:, k] if k else 1.0))
+            terms.append(Monomial((0,) * p + ((k,) if k else ())))
     return Library(variables, tuple(names), tuple(terms))
 
 

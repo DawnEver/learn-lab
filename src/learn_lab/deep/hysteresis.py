@@ -78,6 +78,7 @@ class PlayBank(nn.Module):
 
     def __init__(self, plays: int, hidden: int, *, odd: bool) -> None:
         super().__init__()
+        self.arguments = {'plays': plays, 'hidden': hidden, 'odd': odd}
         start = torch.linspace(0.02, 1.0, plays)  # thresholds spread over the scaled input amplitude
         self.raw_thresholds = nn.Parameter(torch.log(torch.expm1(start)))
         self.raw_weights = nn.Parameter(torch.full((plays,), float(np.log(np.expm1(1.0 / plays)))))

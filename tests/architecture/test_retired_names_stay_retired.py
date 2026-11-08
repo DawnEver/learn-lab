@@ -12,7 +12,12 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[2]
 
 #: old spelling -> what replaced it.
-RETIRED: dict[str, str] = {}
+RETIRED: dict[str, str] = {
+    # 2026-11-08, the artifact contract: a persisted module records the arguments it was built with.
+    'networks import mlp': 'networks import MLP (a class recording its widths and activation name)',
+    # 2026-11-08: a fitted neural ODE holds its net and time span, not a closure over them.
+    'rate_net': 'FittedDynamics.net and FittedDynamics.time_scale',
+}
 
 
 def live_spellings(text: str, retired: dict[str, str] = RETIRED) -> set[str]:

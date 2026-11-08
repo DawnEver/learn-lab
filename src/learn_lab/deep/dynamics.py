@@ -14,10 +14,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import torch
-from torch import nn
 
 from learn_lab.deep.fit import Schedule, minimise
-from learn_lab.deep.networks import mlp
+from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse, require_finite
 from learn_lab.validity import BoxEnvelope, Validity
@@ -66,18 +65,16 @@ class NeuralODE:
         windows = np.stack([z[:, i : i + self.horizon + 1] for i in range(t.size - self.horizon)], 1)
         windows = rt.tensor(windows.reshape(-1, self.horizon + 1, x.shape[2]))
         window_t = rt.tensor(t[: self.horizon + 1] - t[0])
-        net = mlp([x.shape[2], *self.hidden, x.shape[2]], activation=nn.Tanh).to(rt.torch_device, rt.torch_dtype)
+        net = MLP([x.shape[2], *self.hidden, x.shape[2]], activation='tanh').to(rt.torch_device, rt.torch_dtype)
         time_scale = float(t[-1] - t[0])
 
-        def rate(s: torch.Tensor) -> torch.Tensor:
-            return net(s) / time_scale
-
         def loss() -> torch.Tensor:
-            return ((rk4(rate, windows[:, 0], window_t) - windows) ** 2).mean()
+            return ((rk4(lambda s: net(s) / time_scale, windows[:, 0], window_t) - windows) ** 2).mean()
 
         history = minimise(net.parameters(), loss, self.schedule)
         return FittedDynamics(
-            rate_net=rate,
+            net=net.eval(),
+            time_scale=time_scale,
             runtime=rt,
             envelope=BoxEnvelope.of(flat, margin=self.margin),
             shift=shift,
@@ -88,18 +85,23 @@ class NeuralODE:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class FittedDynamics:
-    rate_net: Callable[[torch.Tensor], torch.Tensor]
+    net: MLP
+    time_scale: float
     runtime: Runtime
     envelope: BoxEnvelope
     shift: np.ndarray
     scale: np.ndarray
     history: list[float]
 
+    def _rate(self, s: torch.Tensor) -> torch.Tensor:
+        """The learned rate in standardised state per unit time: the net's output over the trained time span."""
+        return self.net(s) / self.time_scale
+
     def rate(self, x: np.ndarray) -> np.ndarray:
         """``dx/dt (n, d)`` at in-domain states."""
         x = self.envelope.require(x, 'a learned-rate query')
         with torch.no_grad():
-            return numpy(self.rate_net(self.runtime.tensor((x - self.shift) / self.scale))) * self.scale
+            return numpy(self._rate(self.runtime.tensor((x - self.shift) / self.scale))) * self.scale
 
     def integrate(self, x0: np.ndarray, t: np.ndarray) -> np.ndarray:
         """``(n, T, d)`` from in-domain starts ``x0 (n, d)`` over increasing times ``t (T,)``, ``t[0]`` at ``x0``."""
@@ -109,7 +111,7 @@ class FittedDynamics:
             refuse(f'integration times are increasing (T >= 2,), got {t.shape}')
         rt = self.runtime
         with torch.no_grad():
-            z = numpy(rk4(self.rate_net, rt.tensor((x0 - self.shift) / self.scale), rt.tensor(t)))
+            z = numpy(rk4(self._rate, rt.tensor((x0 - self.shift) / self.scale), rt.tensor(t)))
         out = z * self.scale + self.shift
         verdict = self.envelope.classify(out.reshape(-1, out.shape[2])).reshape(out.shape[:2])
         left = np.argwhere(verdict != Validity.IN_DOMAIN)

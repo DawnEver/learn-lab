@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from learn_lab.deep.fit import Schedule, minimise
-from learn_lab.deep.networks import mlp
+from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
 from learn_lab.protocol import Give, Prediction, require_gives, training_data
@@ -50,7 +50,7 @@ class DeepEnsemble:
         nets, histories = [], []
         for member in range(self.members):
             replace(rt, seed=rt.seed + member).seeded()
-            net = mlp([x.shape[1], *self.hidden, y.shape[1]], activation=torch.nn.SiLU)
+            net = MLP([x.shape[1], *self.hidden, y.shape[1]], activation='silu')
             net = net.to(rt.torch_device, rt.torch_dtype)
             histories.append(minimise(net.parameters(), lambda net=net: ((net(xt) - yt) ** 2).mean(), self.schedule))
             nets.append(net.eval())

@@ -26,7 +26,7 @@ import numpy as np
 import torch
 
 from learn_lab.deep.fit import Schedule, minimise
-from learn_lab.deep.networks import mlp
+from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
 from learn_lab.validity import BoxEnvelope
@@ -73,6 +73,12 @@ def derivative(values: torch.Tensor, points: torch.Tensor) -> torch.Tensor:
     return torch.autograd.grad(values.sum(), points, create_graph=True)[0]
 
 
+def _mapped(net: MLP, runtime: Runtime, domain: BoxEnvelope, x: torch.Tensor) -> torch.Tensor:
+    """The net at coordinates *x* mapped from the *domain* box onto ``[-1, 1]``."""
+    lo, hi = runtime.tensor(domain.lower), runtime.tensor(domain.upper)
+    return net(2.0 * (x - lo) / (hi - lo) - 1.0)
+
+
 @dataclass(frozen=True, slots=True)
 class PhysicsInformedField:
     hidden: Sequence[int] = (32, 32, 32)
@@ -95,17 +101,16 @@ class PhysicsInformedField:
         rt = self.runtime
         rt.seeded()
         dim = provider.domain.width
-        net = mlp([dim, *self.hidden, provider.outputs]).to(rt.torch_device, rt.torch_dtype)
+        net = MLP([dim, *self.hidden, provider.outputs]).to(rt.torch_device, rt.torch_dtype)
         params = {
             name: torch.tensor(
                 float(value), dtype=rt.torch_dtype, device=rt.torch_device, requires_grad=name in identify
             )
             for name, value in provider.parameters.items()
         }
-        lo, hi = rt.tensor(provider.domain.lower), rt.tensor(provider.domain.upper)
 
         def field_at(x: torch.Tensor) -> torch.Tensor:
-            return net(2.0 * (x - lo) / (hi - lo) - 1.0)
+            return _mapped(net, rt, provider.domain, x)
 
         points = {name: p.detach().requires_grad_(True) for name, p in provider.collocation(rt).items()}
         data = None
@@ -128,7 +133,7 @@ class PhysicsInformedField:
         history = minimise(trainable, loss, self.schedule)
         net.eval()
         return FittedField(
-            field_at=field_at,
+            net=net,
             runtime=rt,
             domain=provider.domain,
             parameters={name: float(value.detach()) for name, value in params.items()},
@@ -140,11 +145,15 @@ class PhysicsInformedField:
 class FittedField:
     """The fitted field of ONE problem instance and the parameters it was fitted with (identified ones updated)."""
 
-    field_at: Field
+    net: MLP
     runtime: Runtime
     domain: BoxEnvelope
     parameters: Mapping[str, float]
     history: list[float]
+
+    def field_at(self, x: torch.Tensor) -> torch.Tensor:
+        """The field at ``(n, dim)`` coordinates, differentiable."""
+        return _mapped(self.net, self.runtime, self.domain, x)
 
     def evaluate(self, x: np.ndarray) -> np.ndarray:
         x = self.domain.require(x, 'a field query')

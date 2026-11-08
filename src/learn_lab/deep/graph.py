@@ -21,7 +21,7 @@ import torch
 from torch import nn
 
 from learn_lab.deep.fit import Schedule, minimise
-from learn_lab.deep.networks import mlp
+from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
@@ -85,12 +85,13 @@ class Graphs:
 class MessagePassing(nn.Module):
     def __init__(self, node_in: int, edge_in: int, out: int, *, hidden: int, rounds: int) -> None:
         super().__init__()
-        self.encode = mlp([node_in, hidden, hidden], activation=nn.GELU)
-        self.encode_edge = mlp([max(edge_in, 1), hidden, hidden], activation=nn.GELU)
+        self.arguments = {'node_in': node_in, 'edge_in': edge_in, 'out': out, 'hidden': hidden, 'rounds': rounds}
+        self.encode = MLP([node_in, hidden, hidden], activation='gelu')
+        self.encode_edge = MLP([max(edge_in, 1), hidden, hidden], activation='gelu')
         self.edge_in = edge_in
-        self.message = nn.ModuleList(mlp([3 * hidden, hidden, hidden], activation=nn.GELU) for _ in range(rounds))
-        self.update = nn.ModuleList(mlp([2 * hidden, hidden, hidden], activation=nn.GELU) for _ in range(rounds))
-        self.decode = mlp([hidden, hidden, out], activation=nn.GELU)
+        self.message = nn.ModuleList(MLP([3 * hidden, hidden, hidden], activation='gelu') for _ in range(rounds))
+        self.update = nn.ModuleList(MLP([2 * hidden, hidden, hidden], activation='gelu') for _ in range(rounds))
+        self.decode = MLP([hidden, hidden, out], activation='gelu')
 
     def forward(self, x: torch.Tensor, edges: torch.Tensor, edge_features: torch.Tensor | None) -> torch.Tensor:
         source, target = edges

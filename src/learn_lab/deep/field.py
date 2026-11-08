@@ -33,6 +33,7 @@ class UNet(nn.Module):
 
     def __init__(self, c_in: int, c_out: int, *, width: int, levels: int) -> None:
         super().__init__()
+        self.arguments = {'c_in': c_in, 'c_out': c_out, 'width': width, 'levels': levels}
         widths = [width * 2**i for i in range(levels + 1)]
         self.down = nn.ModuleList([_block(c_in, widths[0]), *(_block(a, b) for a, b in itertools.pairwise(widths))])
         self.up = nn.ModuleList(nn.ConvTranspose2d(b, a, 2, stride=2) for a, b in itertools.pairwise(widths))

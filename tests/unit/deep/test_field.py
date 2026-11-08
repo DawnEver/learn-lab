@@ -43,7 +43,7 @@ def data():
 
 def test_the_field_model_learns_the_poisson_operator_on_held_out_sources(data):
     f, u, f_test, u_test = data
-    fitted = FieldModel(schedule=Schedule(adam_steps=600, learning_rate=3e-3)).fit(f, u)
+    fitted = FieldModel(schedule=Schedule(adam_steps=1500, learning_rate=3e-3)).fit(f, u)
     inside = fitted.envelope.classify(f_test) == 'in_domain'
     assert inside.sum() >= 48  # the held-out set is mostly in the envelope; the rest would be refused
     error = _relative_l2(fitted.predict(f_test[inside]), u_test[inside])

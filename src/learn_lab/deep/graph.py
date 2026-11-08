@@ -131,7 +131,14 @@ class GraphModel:
         def loss() -> torch.Tensor:
             return ((net(*inputs) - yt) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
+        history = minimise(
+            net.parameters(),
+            loss,
+            self.schedule,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[t for t in (*inputs, yt) if t is not None],
+        )
         edges = None if se is None else ChannelEnvelope.of(graphs.edge_features, margin=self.margin)
         return FittedGraphModel(
             net=net.eval(),

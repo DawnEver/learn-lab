@@ -219,7 +219,9 @@ class PlayHysteresis:
             u = bank.played(x_t)
             return (((bank.output_of(u, bank.histories(u)) - y_t) ** 2) * mask).sum() / mask.sum()
 
-        history = minimise(bank.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
+        history = minimise(
+            bank.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[x_t, y_t, mask]
+        )
         span = float(np.max(np.abs(seen)))
         envelope = BoxEnvelope(np.array([-span]), np.array([span])) if self.odd else BoxEnvelope.of(seen[:, None])
         return FittedHysteresis(

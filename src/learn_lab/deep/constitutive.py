@@ -46,6 +46,7 @@ class MonotoneLaw:
             self.schedule,
             checkpoint=checkpoint,
             config=repr(self),
+            data=[xt, yt],
         )
         span = np.abs(x).max() if self.odd else None
         envelope = BoxEnvelope(np.array([-span]), np.array([span])) if self.odd else BoxEnvelope.of(x[:, None])

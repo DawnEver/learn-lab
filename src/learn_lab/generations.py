@@ -16,6 +16,7 @@ import numpy as np
 from learn_lab.errors import refuse
 from learn_lab.registry import surrogate
 from learn_lab.validation import ScoredFit, scored_fit
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['RunHistory', 'generation_errors', 'generation_predictions']
 
@@ -53,8 +54,13 @@ def _settings(key: str) -> dict:
 
 
 def _fit(key: str, x: np.ndarray, y: np.ndarray, lo: np.ndarray, span: np.ndarray) -> tuple[ScoredFit, float, float]:
+    """A generation's fit on the rows' box mapped to the unit cube -- its declared domain, which every later
+    generation's samples lie in.
+    """
     mu, sd = float(y.mean()), float(y.std()) or 1.0
-    return scored_fit(surrogate(key, **_settings(key)), (x - lo) / span, ((y - mu) / sd)[:, np.newaxis]), mu, sd
+    cube = BoxEnvelope(np.zeros(x.shape[1]), np.ones(x.shape[1]))
+    fit = scored_fit(surrogate(key, **_settings(key)), (x - lo) / span, ((y - mu) / sd)[:, np.newaxis], domain=cube)
+    return fit, mu, sd
 
 
 def _box(history: RunHistory) -> tuple[np.ndarray, np.ndarray]:

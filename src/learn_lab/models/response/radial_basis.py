@@ -24,6 +24,7 @@ from numerics_lab.linear.kkt import solve_kkt
 from learn_lab.errors import refuse
 from learn_lab.models.response.polynomial import monomial_exponents
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['RADIAL_KERNELS', 'FittedRadialBasis', 'RadialBasis']
 
@@ -94,8 +95,8 @@ class RadialBasis:
     def gives(self) -> frozenset[Give]:
         return frozenset({Give.GRADIENT})
 
-    def fit(self, x, y) -> FittedRadialBasis:
-        x, y = training_data(x, y)
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedRadialBasis:
+        x, y, envelope = training_data(x, y, domain)
         phi = _KERNELS[self.kernel][0]
         degree = max(_KERNELS[self.kernel][2], 0) if self.degree is None else self.degree
         exponents = _tail_exponents(x.shape[1], degree)
@@ -110,7 +111,7 @@ class RadialBasis:
             weights.append(solution.x)
             tails.append(solution.multipliers)
         return FittedRadialBasis(
-            self.kernel, self.epsilon, x, np.column_stack(weights), exponents, np.column_stack(tails)
+            self.kernel, self.epsilon, x, np.column_stack(weights), exponents, np.column_stack(tails), envelope
         )
 
 
@@ -124,6 +125,7 @@ class FittedRadialBasis:
     weights: np.ndarray
     exponents: np.ndarray
     tail: np.ndarray
+    envelope: BoxEnvelope
 
     @property
     def gives(self) -> frozenset[Give]:
@@ -131,7 +133,7 @@ class FittedRadialBasis:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='a radial basis surface')
-        x = query_points(x, self.centres.shape[1])
+        x = query_points(x, self.envelope)
         phi, slope, _ = _KERNELS[self.kernel]
         offset = x[:, None, :] - self.centres[None, :, :]
         s = self.epsilon * np.linalg.norm(offset, axis=2)

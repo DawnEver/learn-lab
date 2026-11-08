@@ -41,8 +41,9 @@ class DeepEnsemble:
     def gives(self) -> frozenset[Give]:
         return _GIVES if self.members > 1 else frozenset({Give.GRADIENT})
 
-    def fit(self, x: np.ndarray, y: np.ndarray) -> FittedEnsemble:
-        x, y = training_data(x, y)
+    def fit(self, x: np.ndarray, y: np.ndarray, *, domain: BoxEnvelope | None = None) -> FittedEnsemble:
+        """The envelope is *domain* when declared, else the training box widened by ``margin``."""
+        x, y, envelope = training_data(x, y, domain)
         rt = self.runtime
         x_shift, x_scale = x.mean(0), np.where(x.std(0) > 0, x.std(0), 1.0)
         y_shift, y_scale = y.mean(0), np.where(y.std(0) > 0, y.std(0), 1.0)
@@ -57,7 +58,7 @@ class DeepEnsemble:
         return FittedEnsemble(
             nets=tuple(nets),
             runtime=rt,
-            envelope=BoxEnvelope.of(x, margin=self.margin),
+            envelope=BoxEnvelope.of(x, margin=self.margin) if domain is None else envelope,
             x_shift=x_shift,
             x_scale=x_scale,
             y_shift=y_shift,

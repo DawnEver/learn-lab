@@ -13,12 +13,18 @@ from sklearn.preprocessing import PolynomialFeatures
 
 from learn_lab.errors import Refused
 from learn_lab.models.response import Lasso, Polynomial, Ridge
+from learn_lab.validity import BoxEnvelope
 
 #: Absolute, target units: a direct least-squares solve agrees with sklearn's to rounding of a
 #: condition number ~1e4 basis.
 EXACT = 1e-9
 #: Absolute, target units: both lasso solvers stop at a coordinate-descent tolerance of 1e-12.
 LASSO = 1e-6
+
+
+def _cube_of(x) -> BoxEnvelope:
+    """The unit cube in the width of *x*: the declared domain of data drawn on [0, 1)."""
+    return BoxEnvelope(np.zeros(np.shape(x)[1]), np.ones(np.shape(x)[1]))
 
 
 @pytest.fixture(scope='module')
@@ -36,7 +42,7 @@ def _sklearn(degree, regressor):
 @pytest.mark.parametrize('degree', [1, 2, 3])
 def test_ordinary_least_squares_agrees_with_sklearn(data, degree) -> None:
     x, y, q = data
-    ours = Polynomial(degree=degree).fit(x, y).predict(q).mean
+    ours = Polynomial(degree=degree).fit(x, y, domain=_cube_of(x)).predict(q).mean
     theirs = _sklearn(degree, LinearRegression()).fit(x, y).predict(q)
     assert np.max(np.abs(ours - theirs)) <= EXACT
 
@@ -44,7 +50,7 @@ def test_ordinary_least_squares_agrees_with_sklearn(data, degree) -> None:
 @pytest.mark.parametrize('alpha', [1e-3, 0.1, 10.0])
 def test_ridge_agrees_with_sklearn(data, alpha) -> None:
     x, y, q = data
-    ours = Polynomial(degree=2, penalty=Ridge(alpha)).fit(x, y).predict(q).mean
+    ours = Polynomial(degree=2, penalty=Ridge(alpha)).fit(x, y, domain=_cube_of(x)).predict(q).mean
     theirs = _sklearn(2, SkRidge(alpha=alpha)).fit(x, y).predict(q)
     assert np.max(np.abs(ours - theirs)) <= EXACT
 
@@ -52,7 +58,7 @@ def test_ridge_agrees_with_sklearn(data, alpha) -> None:
 @pytest.mark.parametrize('alpha', [1e-3, 1e-2, 0.1])
 def test_lasso_agrees_with_sklearn(data, alpha) -> None:
     x, y, q = data
-    ours = Polynomial(degree=2, penalty=Lasso(alpha)).fit(x, y).predict(q).mean
+    ours = Polynomial(degree=2, penalty=Lasso(alpha)).fit(x, y, domain=_cube_of(x)).predict(q).mean
     theirs = _sklearn(2, SkLasso(alpha=alpha, tol=1e-14, max_iter=1_000_000)).fit(x, y).predict(q)
     assert np.max(np.abs(ours - theirs)) <= LASSO
 
@@ -60,15 +66,15 @@ def test_lasso_agrees_with_sklearn(data, alpha) -> None:
 def test_lasso_zeroes_coefficients_and_ridge_does_not(data) -> None:
     """The planted control for the penalty: an l1 penalty makes exact zeros, an l2 penalty only shrinks."""
     x, y, _ = data
-    lasso = Polynomial(degree=3, penalty=Lasso(0.05)).fit(x, y[:, :1])
-    ridge = Polynomial(degree=3, penalty=Ridge(0.05)).fit(x, y[:, :1])
+    lasso = Polynomial(degree=3, penalty=Lasso(0.05)).fit(x, y[:, :1], domain=_cube_of(x))
+    ridge = Polynomial(degree=3, penalty=Ridge(0.05)).fit(x, y[:, :1], domain=_cube_of(x))
     assert np.sum(lasso.coefficients == 0.0) > 5
     assert np.sum(ridge.coefficients == 0.0) == 0
 
 
 def test_the_gradient_is_the_derivative_of_the_mean(data) -> None:
     x, y, q = data
-    fitted = Polynomial(degree=3).fit(x, y)
+    fitted = Polynomial(degree=3).fit(x, y, domain=_cube_of(x))
     analytic = fitted.predict(q, gradient=True).gradient
     h = 1e-6
     for j in range(3):

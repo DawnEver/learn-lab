@@ -25,6 +25,7 @@ from scipy.special import ndtri
 
 from learn_lab.errors import refuse
 from learn_lab.protocol import Fitted, Prediction, Surrogate, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = [
     'COVERAGE_LEVELS',
@@ -89,16 +90,28 @@ def folds(n: int, k: int, *, seed: int | None = None) -> tuple[np.ndarray, ...]:
     return tuple(order[edges[i] : edges[i + 1]] for i in range(k))
 
 
-def cross_validate(surrogate: Surrogate, x: object, y: object, *, k: int = 5, seed: int | None = None) -> Prediction:
-    """Each point's prediction by *surrogate* fitted on the other folds (with the variance when it gives one)."""
-    x, y = training_data(x, y)
+def cross_validate(
+    surrogate: Surrogate,
+    x: object,
+    y: object,
+    *,
+    k: int = 5,
+    seed: int | None = None,
+    domain: BoxEnvelope | None = None,
+) -> Prediction:
+    """Each point's prediction by *surrogate* fitted on the other folds (with the variance when it gives one).
+
+    Every fold is fitted in ONE envelope -- *domain*, else the box all rows span -- so a held-out row is
+    never out of its fold's domain merely because it was the extreme one.
+    """
+    x, y, envelope = training_data(x, y, domain)
     want = 'variance' in surrogate.gives
     mean = np.empty_like(y)
     var = np.empty_like(y) if want else None
     everything = np.arange(len(x))
     for test in folds(len(x), k, seed=seed):
         train = np.setdiff1d(everything, test)
-        p = surrogate.fit(x[train], y[train]).predict(x[test], variance=want)
+        p = surrogate.fit(x[train], y[train], domain=envelope).predict(x[test], variance=want)
         mean[test] = p.mean
         if want:
             var[test] = p.variance
@@ -137,11 +150,13 @@ class ScoredFit:
     fitted: Fitted
 
 
-def scored_fit(surrogate: Surrogate, x: object, y: object, *, seed: int = 3) -> ScoredFit:
-    """*surrogate* fitted on ``(x, y)``, scored by ``min(5, n)``-fold cross-validation split by *seed*."""
-    x, y = training_data(x, y)
-    predicted = cross_validate(surrogate, x, y, k=min(5, len(x)), seed=seed).mean
-    return ScoredFit({metric: score(metric, y, predicted) for metric in SCORES}, surrogate.fit(x, y))
+def scored_fit(
+    surrogate: Surrogate, x: object, y: object, *, seed: int = 3, domain: BoxEnvelope | None = None
+) -> ScoredFit:
+    """*surrogate* fitted on ``(x, y)`` in *domain*, scored by ``min(5, n)``-fold cross-validation split by *seed*."""
+    x, y, envelope = training_data(x, y, domain)
+    predicted = cross_validate(surrogate, x, y, k=min(5, len(x)), seed=seed, domain=envelope).mean
+    return ScoredFit({metric: score(metric, y, predicted) for metric in SCORES}, surrogate.fit(x, y, domain=envelope))
 
 
 def box_predictions(surrogate: Surrogate, x: object, y: object, *, samples: int, seed: int) -> tuple[np.ndarray, float]:

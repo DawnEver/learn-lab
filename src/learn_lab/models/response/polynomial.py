@@ -21,6 +21,7 @@ from numerics_lab.linear.dense import least_squares
 
 from learn_lab.errors import refuse
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['FittedPolynomial', 'Lasso', 'Polynomial', 'Ridge', 'monomial_exponents']
 
@@ -100,8 +101,8 @@ class Polynomial:
     def gives(self) -> frozenset[Give]:
         return frozenset({Give.GRADIENT})
 
-    def fit(self, x, y) -> FittedPolynomial:
-        x, y = training_data(x, y)
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedPolynomial:
+        x, y, envelope = training_data(x, y, domain)
         exponents = monomial_exponents(x.shape[1], self.degree)
         features = _features(x, exponents)
         centre, level = features.mean(axis=0), y.mean(axis=0)
@@ -115,7 +116,7 @@ class Polynomial:
             )
         else:
             w = least_squares(a, b)
-        return FittedPolynomial(exponents, w, level - centre @ w)
+        return FittedPolynomial(exponents, w, level - centre @ w, envelope)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -125,6 +126,7 @@ class FittedPolynomial:
     exponents: np.ndarray
     coefficients: np.ndarray
     intercept: np.ndarray
+    envelope: BoxEnvelope
 
     @property
     def gives(self) -> frozenset[Give]:
@@ -132,7 +134,7 @@ class FittedPolynomial:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='a polynomial surface')
-        x = query_points(x, self.exponents.shape[1])
+        x = query_points(x, self.envelope)
         mean = self.intercept + _features(x, self.exponents) @ self.coefficients
         if not gradient:
             return Prediction(mean)

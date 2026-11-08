@@ -6,8 +6,8 @@ the verified record for an audit without building the model. The directory holds
 
 - ``manifest.json`` -- the format and its version, the learn-lab version and git commit that wrote it, the
   family (its :data:`FAMILIES` name), the declaration it was fitted from (its constructor settings), the input
-  and output schema, the seed, the runtime, the caller's data identity and metrics, the fitted STATE as a
-  tagged tree, the SHA-256 of each payload file, and ``content_hash`` -- the SHA-256 of the rest of itself;
+  and output schema (a response family's inputs carry the ENVELOPE its fit answers in), the seed, the runtime,
+  the caller's data identity and metrics, the fitted STATE as a tagged tree, the SHA-256 of each payload file, and ``content_hash`` -- the SHA-256 of the rest of itself;
 - ``arrays.npz`` -- every numpy array of the fit, read back with ``allow_pickle=False``;
 - ``weights.pt`` -- a deep family's torch state as one flat ``{name: tensor}`` dict, read back with
   ``weights_only=True`` (only present for a deep family; written and read by :mod:`learn_lab.deep.artifact`).
@@ -41,6 +41,7 @@ from typing import Final
 import numpy as np
 
 from learn_lab.errors import refuse
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['FAMILIES', 'FORMAT', 'VERSION', 'load', 'manifest', 'save']
 
@@ -94,23 +95,29 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
 }
 
 
-def _vector(d: int, k: int) -> dict:
-    return {'inputs': {'kind': 'vector', 'width': int(d)}, 'outputs': {'kind': 'vector', 'width': int(k)}}
+def _vector(envelope: BoxEnvelope, k: int) -> dict:
+    """A vector family's schema: the input width and the ENVELOPE its fit answers in, and the output width."""
+    inputs = {
+        'kind': 'vector',
+        'width': envelope.width,
+        'envelope': {'lower': envelope.lower.tolist(), 'upper': envelope.upper.tolist()},
+    }
+    return {'inputs': inputs, 'outputs': {'kind': 'vector', 'width': int(k)}}
 
 
 #: The input/output schema of each numpy family, read off its fitted state; the deep rows are the codec's.
 _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
-    'polynomial': lambda f: _vector(f.exponents.shape[1], f.coefficients.shape[1]),
-    'radial_basis': lambda f: _vector(f.centres.shape[1], f.weights.shape[1]),
-    'gaussian_process': lambda f: _vector(f.x.shape[1], len(f.columns)),
-    'gradient_enhanced_kriging': lambda f: _vector(f.x.shape[1], len(f.columns)),
-    'multi_output_kriging': lambda f: _vector(f.x.shape[1], f.level.size),
-    'co_kriging': lambda f: _vector(f.base.x.shape[1], len(f.base.columns)),
-    'nearest_neighbours': lambda f: _vector(f.x.shape[1], f.y.shape[1]),
-    'regression_tree': lambda f: _vector(f.width, f.value.shape[1]),
-    'forest': lambda f: _vector(f.trees[0].width, f.trees[0].value.shape[1]),
-    'multilayer_perceptron': lambda f: _vector(f.weights[0].shape[0], f.weights[-1].shape[1]),
-    'chaos_expansion': lambda f: _vector(f.indices.shape[1], f.coefficients.shape[1]),
+    'polynomial': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
+    'radial_basis': lambda f: _vector(f.envelope, f.weights.shape[1]),
+    'gaussian_process': lambda f: _vector(f.envelope, len(f.columns)),
+    'gradient_enhanced_kriging': lambda f: _vector(f.envelope, len(f.columns)),
+    'multi_output_kriging': lambda f: _vector(f.envelope, f.level.size),
+    'co_kriging': lambda f: _vector(f.envelope, len(f.base.columns)),
+    'nearest_neighbours': lambda f: _vector(f.envelope, f.y.shape[1]),
+    'regression_tree': lambda f: _vector(f.envelope, f.value.shape[1]),
+    'forest': lambda f: _vector(f.envelope, f.trees[0].value.shape[1]),
+    'multilayer_perceptron': lambda f: _vector(f.envelope, f.weights[-1].shape[1]),
+    'chaos_expansion': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
     'ensemble': lambda f: _schema(_family_of(f.members[0]), f.members[0]),
     'sparse_regression': lambda f: {
         'inputs': {'kind': 'state', 'variables': list(f.library.variables)},

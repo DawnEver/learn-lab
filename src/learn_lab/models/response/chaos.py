@@ -19,6 +19,7 @@ from numerics_lab.linear.dense import least_squares
 from learn_lab.errors import refuse
 from learn_lab.models.response.polynomial import monomial_exponents
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['ChaosExpansion', 'FittedChaos', 'legendre_table']
 
@@ -54,16 +55,21 @@ class ChaosExpansion:
     def gives(self) -> frozenset[Give]:
         return frozenset({Give.GRADIENT})
 
-    def fit(self, x, y) -> FittedChaos:
-        x, y = training_data(x, y)
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedChaos:
+        """Fitted on the unit cube, which is also its envelope unless a narrower *domain* is declared."""
+        x, y, _ = training_data(x, y)
         if np.any((x < 0) | (x > 1)):
             refuse('a Legendre chaos is fitted on the unit cube; encode the points first')
+        cube = BoxEnvelope(np.zeros(x.shape[1]), np.ones(x.shape[1]))
+        if domain is not None and np.any((domain.lower < 0) | (domain.upper > 1)):
+            refuse('a Legendre chaos lives on the unit cube; a declared domain lies inside it')
+        x, y, envelope = training_data(x, y, cube if domain is None else domain)
         d = x.shape[1]
         indices = np.vstack([np.zeros((1, d), dtype=int), monomial_exponents(d, self.degree)])
         if len(indices) > len(x):
             refuse(f'a degree-{self.degree} chaos in {d} inputs has {len(indices)} terms, more than {len(x)} points')
         table, _ = legendre_table(x, self.degree)
-        return FittedChaos(self.degree, indices, least_squares(_basis(table, indices), y))
+        return FittedChaos(self.degree, indices, least_squares(_basis(table, indices), y), envelope)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -73,6 +79,7 @@ class FittedChaos:
     degree: int
     indices: np.ndarray
     coefficients: np.ndarray
+    envelope: BoxEnvelope
 
     @property
     def gives(self) -> frozenset[Give]:
@@ -101,7 +108,7 @@ class FittedChaos:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='a chaos expansion')
-        q = query_points(x, self.indices.shape[1])
+        q = query_points(x, self.envelope)
         table, slopes = legendre_table(q, self.degree)
         mean = _basis(table, self.indices) @ self.coefficients
         if not gradient:

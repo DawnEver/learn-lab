@@ -17,6 +17,7 @@ from sklearn.gaussian_process.kernels import RBF, ConstantKernel, Matern, WhiteK
 from learn_lab.errors import Refused
 from learn_lab.models.response import KERNEL_FAMILIES, GaussianProcess, log_likelihood
 from learn_lab.protocol import Give
+from learn_lab.validity import BoxEnvelope
 
 #: Relative: the same Cholesky of the same matrix.
 SAME_POINT = 1e-9
@@ -24,6 +25,11 @@ SAME_POINT = 1e-9
 PREDICT = 1e-8
 #: Relative: our maximised log-likelihood may not fall below sklearn's L-BFGS-B optimum by more.
 NOT_WORSE = 1e-6
+
+
+def _cube_of(x) -> BoxEnvelope:
+    """The unit cube in the width of *x*: the declared domain of data drawn on [0, 1)."""
+    return BoxEnvelope(np.zeros(np.shape(x)[1]), np.ones(np.shape(x)[1]))
 
 
 def _kernel(family: str, d: int):
@@ -68,7 +74,7 @@ def test_the_fit_reaches_at_least_sklearns_maximum(data, family) -> None:
         _kernel(family, 2), normalize_y=True, n_restarts_optimizer=4, random_state=0, alpha=0.0
     )
     sk.fit(x, y)
-    fitted = GaussianProcess(family, restarts=4).fit(x, y)
+    fitted = GaussianProcess(family, restarts=4).fit(x, y, domain=_cube_of(x))
     best = sk.log_marginal_likelihood_value_
     assert fitted.log_likelihood[0] >= best - NOT_WORSE * abs(best)
 
@@ -76,7 +82,7 @@ def test_the_fit_reaches_at_least_sklearns_maximum(data, family) -> None:
 @pytest.mark.parametrize('family', KERNEL_FAMILIES)
 def test_mean_and_variance_equal_sklearns_at_the_same_hyperparameters(data, family) -> None:
     x, y, q = data
-    fitted = GaussianProcess(family).fit(x, y)
+    fitted = GaussianProcess(family).fit(x, y, domain=_cube_of(x))
     theta = fitted.hyperparameters[0]
     sk = GaussianProcessRegressor(
         _kernel(family, 2).clone_with_theta(theta), normalize_y=True, optimizer=None, alpha=0.0
@@ -92,7 +98,7 @@ def test_mean_and_variance_equal_sklearns_at_the_same_hyperparameters(data, fami
 @pytest.mark.parametrize('family', ['squared_exponential', 'matern32', 'matern52'])
 def test_the_mean_gradient_is_the_derivative_of_the_mean(data, family) -> None:
     x, y, q = data
-    fitted = GaussianProcess(family).fit(x, y)
+    fitted = GaussianProcess(family).fit(x, y, domain=_cube_of(x))
     analytic = fitted.predict(q, gradient=True).gradient
     # The step balances the central difference's two errors: truncation h^2 |f'''| / 6 and roundoff
     # eps * sum|k_i alpha_i| / h, where the fitted nugget (~e^-9) makes alpha large. Measured on this
@@ -110,7 +116,7 @@ def test_the_mean_gradient_is_the_derivative_of_the_mean(data, family) -> None:
 def test_closed_form_leave_one_out_equals_refitting_without_each_point(data) -> None:
     """D47: Dubrule's identities against n brute-force posteriors at the fitted hyperparameters."""
     x, y, _ = data
-    fitted = GaussianProcess('squared_exponential').fit(x, y)
+    fitted = GaussianProcess('squared_exponential').fit(x, y, domain=_cube_of(x))
     loo = fitted.leave_one_out()
     theta = fitted.hyperparameters[0]
     kernel = _kernel('squared_exponential', 2).clone_with_theta(theta)
@@ -127,7 +133,7 @@ def test_closed_form_leave_one_out_equals_refitting_without_each_point(data) -> 
 def test_each_output_column_gets_its_own_hyperparameters(data) -> None:
     x, y, _ = data
     two = np.column_stack([y[:, 0], np.cos(9 * x[:, 1])])
-    fitted = GaussianProcess('squared_exponential').fit(x, two)
+    fitted = GaussianProcess('squared_exponential').fit(x, two, domain=_cube_of(x))
     assert len(fitted.hyperparameters) == 2
     assert not np.allclose(fitted.hyperparameters[0], fitted.hyperparameters[1])
     assert fitted.predict(x, variance=True).variance.shape == (25, 2)
@@ -142,12 +148,12 @@ def test_a_gp_gives_variance_and_gradient_and_a_stranger_family_names_the_set() 
 def test_the_fit_beats_a_planted_wrong_hyperparameter_and_loo_flags_a_planted_outlier(data) -> None:
     """Planted controls: a deliberately wrong theta scores lower, and a corrupted value stands out in LOO."""
     x, y, _ = data
-    fitted = GaussianProcess('squared_exponential').fit(x, y)
+    fitted = GaussianProcess('squared_exponential').fit(x, y, domain=_cube_of(x))
     wrong = fitted.hyperparameters[0] + np.array([0.0, 3.0, 3.0, 0.0])  # lengths 20x too long
     assert log_likelihood('squared_exponential', wrong, x, _normalised(y)[:, 0])[0] < fitted.log_likelihood[0] - 1
     corrupted = y.copy()
     corrupted[7] += 5 * np.std(y)
-    loo = GaussianProcess('squared_exponential').fit(x, corrupted).leave_one_out()
+    loo = GaussianProcess('squared_exponential').fit(x, corrupted, domain=_cube_of(x)).leave_one_out()
     z = np.abs(loo.mean[:, 0] - corrupted[:, 0]) / np.sqrt(loo.variance[:, 0])
     assert int(np.argmax(z)) == 7
 
@@ -160,7 +166,7 @@ JOINT = 1e-9
 
 def _fitted(data):
     x, y, _ = data
-    return GaussianProcess(restarts=0).fit(x, y)
+    return GaussianProcess(restarts=0).fit(x, y, domain=_cube_of(x))
 
 
 def test_the_joint_posterior_diagonal_is_the_predicted_variance(data):
@@ -192,7 +198,9 @@ def test_planted_a_refit_is_not_a_fantasy(data):
     x, y, q = data
     fitted = _fitted(data)
     y_extra = np.full((len(q), 1), 3.0)
-    refit = GaussianProcess(restarts=0).fit(np.vstack([x, q]), np.vstack([y, y_extra]))
+    refit = GaussianProcess(restarts=0).fit(
+        np.vstack([x, q]), np.vstack([y, y_extra]), domain=_cube_of(np.vstack([x, q]))
+    )
     assert not np.allclose(refit.hyperparameters[0], fitted.condition(q, y_extra).hyperparameters[0])
 
 

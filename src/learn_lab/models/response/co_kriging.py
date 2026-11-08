@@ -28,6 +28,7 @@ from learn_lab.models.response.gaussian_process import (
 from learn_lab.models.response.kernel import require_family
 from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximise_likelihood
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['CoKriging', 'FittedCoKriging']
 
@@ -64,8 +65,9 @@ class CoKriging:
     def gives(self) -> frozenset[Give]:
         return frozenset({Give.VARIANCE, Give.GRADIENT})
 
-    def fit(self, x, y, level) -> FittedCoKriging:
-        x, y = training_data(x, y)
+    def fit(self, x, y, level, *, domain: BoxEnvelope | None = None) -> FittedCoKriging:
+        """Every level answers in one envelope: *domain*, else the box the points of ALL levels span."""
+        x, y, envelope = training_data(x, y, domain)
         level = np.asarray(level)
         if level.shape != (len(x),) or level.min() != 0:
             refuse(f'level is one integer per point, from 0 (cheapest), got shape {level.shape}')
@@ -73,17 +75,19 @@ class CoKriging:
         missing = [t for t in range(top + 1) if not np.any(level == t)]
         if missing:
             refuse(f'every fidelity level from 0 to {top} needs data; level(s) {missing} have none')
-        base = GaussianProcess(self.family, self.restarts, self.seed, self.bounds).fit(x[level == 0], y[level == 0])
+        base = GaussianProcess(self.family, self.restarts, self.seed, self.bounds).fit(
+            x[level == 0], y[level == 0], domain=envelope
+        )
         steps: list[tuple[_Step, ...]] = []
         for t in range(1, top + 1):
             xt, yt = x[level == t], y[level == t]
             if len(xt) < 3:
                 refuse(f'level {t} has {len(xt)} point(s); a scale, an offset and a discrepancy need at least 3')
             below = FittedCoKriging(base, tuple(steps)).predict(xt).mean
-            steps.append(tuple(self._step(xt, yt[:, c], below[:, c]) for c in range(y.shape[1])))
+            steps.append(tuple(self._step(xt, yt[:, c], below[:, c], envelope) for c in range(y.shape[1])))
         return FittedCoKriging(base, tuple(steps))
 
-    def _step(self, x: np.ndarray, values: np.ndarray, below: np.ndarray) -> _Step:
+    def _step(self, x: np.ndarray, values: np.ndarray, below: np.ndarray, envelope: BoxEnvelope) -> _Step:
         spread = float(np.std(values)) or 1.0
         v, trend = values / spread, np.column_stack([below / spread, np.ones(len(x))])
 
@@ -101,7 +105,9 @@ class CoKriging:
         )
         coefficients, residual = _gls(covariance(self.family, theta, x)[0], trend, v)
         column = GaussianProcessColumn.at(self.family, theta, x, residual, level=0.0, scale=spread)
-        return _Step(float(coefficients[0]), float(coefficients[1] * spread), FittedGaussianProcess(x, (column,)))
+        return _Step(
+            float(coefficients[0]), float(coefficients[1] * spread), FittedGaussianProcess(x, (column,), envelope)
+        )
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -116,13 +122,18 @@ class FittedCoKriging:
         return frozenset({Give.VARIANCE, Give.GRADIENT})
 
     @property
+    def envelope(self) -> BoxEnvelope:
+        """The envelope every level answers in (held once, by the level-0 GP)."""
+        return self.base.envelope
+
+    @property
     def scales(self) -> np.ndarray:
         """``scale_t`` per level above 0 and output, ``(L - 1, k)`` (dimensionless ratio of the levels)."""
         return np.array([[s.scale for s in level] for level in self.steps])
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='co-Kriging')
-        q = query_points(x, self.base.x.shape[1])
+        q = query_points(x, self.envelope)
         p = self.base.predict(q, variance=variance, gradient=gradient)
         mean = p.mean.copy()
         var = None if p.variance is None else p.variance.copy()

@@ -33,6 +33,7 @@ from learn_lab.errors import refuse
 from learn_lab.models.response.kernel import correlation, input_slopes, length_slopes, require_family
 from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximise_likelihood
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['FittedGaussianProcess', 'GaussianProcess', 'GaussianProcessColumn', 'covariance', 'log_likelihood']
 
@@ -78,8 +79,8 @@ class GaussianProcess:
     def gives(self) -> frozenset[Give]:
         return _GIVES
 
-    def fit(self, x, y) -> FittedGaussianProcess:
-        x, y = training_data(x, y)
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedGaussianProcess:
+        x, y, envelope = training_data(x, y, domain)
         normalised, level, scale = _normalise(y)
         d = x.shape[1]
         box = Box(np.full(d + 2, np.log(self.bounds[0])), np.full(d + 2, np.log(self.bounds[1])))
@@ -95,7 +96,7 @@ class GaussianProcess:
                 seed=self.seed,
             )
             columns.append(GaussianProcessColumn.at(self.family, theta, x, column, level=level[k], scale=scale[k]))
-        return FittedGaussianProcess(x, tuple(columns))
+        return FittedGaussianProcess(x, tuple(columns), envelope)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -124,10 +125,11 @@ class GaussianProcessColumn:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class FittedGaussianProcess:
-    """The training points and one :class:`GaussianProcessColumn` per output."""
+    """The training points, one :class:`GaussianProcessColumn` per output, and the envelope it answers in."""
 
     x: np.ndarray
     columns: tuple[GaussianProcessColumn, ...]
+    envelope: BoxEnvelope
 
     @property
     def gives(self) -> frozenset[Give]:
@@ -145,7 +147,7 @@ class FittedGaussianProcess:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='a Gaussian process')
-        q = query_points(x, self.x.shape[1])
+        q = query_points(x, self.envelope)
         means, variances, slopes = [], [], []
         for c in self.columns:
             amplitude, lengths = np.exp(c.theta[0]), np.exp(c.theta[1:-1])
@@ -171,7 +173,7 @@ class FittedGaussianProcess:
 
     def posterior_covariance(self, a, b) -> np.ndarray:
         """The latent posterior covariance between points *a* ``(p, d)`` and *b* ``(q, d)``: ``(k, p, q)``."""
-        a, b = query_points(a, self.x.shape[1]), query_points(b, self.x.shape[1])
+        a, b = query_points(a, self.envelope), query_points(b, self.envelope)
         blocks = []
         for c in self.columns:
             amplitude, lengths = np.exp(c.theta[0]), np.exp(c.theta[1:-1])
@@ -205,8 +207,8 @@ class FittedGaussianProcess:
         return draws
 
     def condition(self, x, y) -> FittedGaussianProcess:
-        """The model with ``(x (p, d), y (p, k))`` appended, at the same hyperparameters and normalisation."""
-        x, y = training_data(x, y)
+        """The model with ``(x (p, d), y (p, k))`` appended at the same hyperparameters, normalisation, envelope."""
+        x, y, _ = training_data(x, y, self.envelope)
         if x.shape[1] != self.x.shape[1] or y.shape[1] != len(self.columns):
             refuse(f'conditioning data is (p, {self.x.shape[1]}) points and (p, {len(self.columns)}) values')
         joined = np.vstack([self.x, x])
@@ -221,7 +223,7 @@ class FittedGaussianProcess:
             )
             for k, c in enumerate(self.columns)
         )
-        return FittedGaussianProcess(joined, columns)
+        return FittedGaussianProcess(joined, columns, self.envelope)
 
     def leave_one_out(self) -> Prediction:
         """Each training point predicted from the others (Dubrule): mean, and the held-out observation's variance."""

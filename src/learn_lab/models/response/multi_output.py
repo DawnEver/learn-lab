@@ -20,6 +20,7 @@ from learn_lab.errors import refuse
 from learn_lab.models.response.kernel import correlation, input_slopes, length_slopes, require_family
 from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximise_likelihood
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['FittedMultiOutput', 'MultiOutputKriging']
 
@@ -86,8 +87,8 @@ class MultiOutputKriging:
         c, slopes = self._covariance(np.asarray(theta, dtype=float), x, y.shape[1])
         return gaussian_log_likelihood(c, y.T.reshape(-1), np.array(slopes))
 
-    def fit(self, x, y) -> FittedMultiOutput:
-        x, y = training_data(x, y)
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedMultiOutput:
+        x, y, envelope = training_data(x, y, domain)
         _n, d = x.shape
         k = y.shape[1]
         level, scale = y.mean(axis=0), np.where(y.std(axis=0) > 0, y.std(axis=0), 1.0)
@@ -116,6 +117,7 @@ class MultiOutputKriging:
             chol.solve(normalised.T.reshape(-1)),
             level,
             scale,
+            envelope,
         )
 
 
@@ -131,6 +133,7 @@ class FittedMultiOutput:
     alpha: np.ndarray
     level: np.ndarray
     scale: np.ndarray
+    envelope: BoxEnvelope
 
     @property
     def gives(self) -> frozenset[Give]:
@@ -144,7 +147,7 @@ class FittedMultiOutput:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='an ICM model')
-        q = query_points(x, self.x.shape[1])
+        q = query_points(x, self.envelope)
         b = self.coregionalisation
         r = correlation(self.family, q, self.x, self.lengths)
         dr = input_slopes(self.family, q, self.x, self.lengths) if gradient else None

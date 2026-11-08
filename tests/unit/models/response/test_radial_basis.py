@@ -9,9 +9,15 @@ from scipy.interpolate import RBFInterpolator
 
 from learn_lab.errors import Refused
 from learn_lab.models.response import RADIAL_KERNELS, RadialBasis
+from learn_lab.validity import BoxEnvelope
 
 #: Absolute, target units: two direct solves of the same saddle system (condition ~1e6 at most here).
 AGREE = 1e-8
+
+
+def _cube_of(x) -> BoxEnvelope:
+    """The unit cube in the width of *x*: the declared domain of data drawn on [0, 1)."""
+    return BoxEnvelope(np.zeros(np.shape(x)[1]), np.ones(np.shape(x)[1]))
 
 
 @pytest.fixture(scope='module')
@@ -28,23 +34,28 @@ def test_every_kernel_agrees_with_scipy(data, kernel, smoothing) -> None:
     x, y, q = data
     epsilon = 2.0
     degree = 1 if kernel != 'quintic' else 2
-    ours = RadialBasis(kernel, epsilon=epsilon, smoothing=smoothing, degree=degree).fit(x, y).predict(q).mean
+    ours = (
+        RadialBasis(kernel, epsilon=epsilon, smoothing=smoothing, degree=degree)
+        .fit(x, y, domain=_cube_of(x))
+        .predict(q)
+        .mean
+    )
     theirs = RBFInterpolator(x, y, kernel=kernel, epsilon=epsilon, smoothing=smoothing, degree=degree)(q)
     assert np.max(np.abs(ours - theirs)) <= AGREE
 
 
 def test_without_smoothing_the_surface_interpolates(data) -> None:
     x, y, _ = data
-    fitted = RadialBasis('thin_plate_spline').fit(x, y)
+    fitted = RadialBasis('thin_plate_spline').fit(x, y, domain=_cube_of(x))
     assert np.max(np.abs(fitted.predict(x).mean - y)) <= AGREE
-    smoothed = RadialBasis('thin_plate_spline', smoothing=1.0).fit(x, y)
+    smoothed = RadialBasis('thin_plate_spline', smoothing=1.0).fit(x, y, domain=_cube_of(x))
     assert np.max(np.abs(smoothed.predict(x).mean - y)) > 1e-3  # planted: smoothing must leave a residual
 
 
 @pytest.mark.parametrize('kernel', RADIAL_KERNELS)
 def test_the_gradient_is_the_derivative_of_the_mean(data, kernel) -> None:
     x, y, q = data
-    fitted = RadialBasis(kernel, epsilon=2.0, degree=2).fit(x, y)
+    fitted = RadialBasis(kernel, epsilon=2.0, degree=2).fit(x, y, domain=_cube_of(x))
     analytic = fitted.predict(q, gradient=True).gradient
     h = 1e-6
     for j in range(2):

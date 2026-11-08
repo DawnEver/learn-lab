@@ -23,6 +23,7 @@ import numpy as np
 
 from learn_lab.errors import refuse
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['SPLITTERS', 'FittedForest', 'FittedTree', 'Forest', 'RegressionTree']
 
@@ -87,7 +88,9 @@ def _random(xs: np.ndarray, ys: np.ndarray, leaf: int, rng: np.random.Generator)
     return float(_proxy(ys[left].sum(axis=0), n_left, ys.sum(axis=0), len(xs))), threshold
 
 
-def _grow(x: np.ndarray, y: np.ndarray, rows: np.ndarray, rules: _Rules, rng: np.random.Generator) -> FittedTree:
+def _grow(
+    x: np.ndarray, y: np.ndarray, rows: np.ndarray, rules: _Rules, rng: np.random.Generator, envelope: BoxEnvelope
+) -> FittedTree:
     feature, threshold, left, right, value = [], [], [], [], []
 
     def node(members: np.ndarray) -> int:
@@ -126,7 +129,9 @@ def _grow(x: np.ndarray, y: np.ndarray, rows: np.ndarray, rules: _Rules, rng: np
         feature[at], threshold[at] = f, t
         left[at], right[at] = node(members[goes_left]), node(members[~goes_left])
         stack += [(left[at], members[goes_left], depth + 1), (right[at], members[~goes_left], depth + 1)]
-    return FittedTree(np.array(feature), np.array(threshold), np.array(left), np.array(right), np.array(value), d)
+    return FittedTree(
+        np.array(feature), np.array(threshold), np.array(left), np.array(right), np.array(value), envelope
+    )
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -138,7 +143,7 @@ class FittedTree:
     left: np.ndarray
     right: np.ndarray
     value: np.ndarray
-    width: int
+    envelope: BoxEnvelope
 
     @property
     def gives(self) -> frozenset[Give]:
@@ -157,7 +162,7 @@ class FittedTree:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='a regression tree')
-        return Prediction(self.value[self.leaves(query_points(x, self.width))])
+        return Prediction(self.value[self.leaves(query_points(x, self.envelope))])
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,10 +183,10 @@ class RegressionTree:
     def gives(self) -> frozenset[Give]:
         return frozenset()
 
-    def fit(self, x, y) -> FittedTree:
-        x, y = training_data(x, y)
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedTree:
+        x, y, envelope = training_data(x, y, domain)
         rules = _Rules(self.max_depth, self.min_samples_split, self.min_samples_leaf, self.max_features, self.splitter)
-        return _grow(x, y, np.arange(len(x)), rules, np.random.default_rng(self.seed))
+        return _grow(x, y, np.arange(len(x)), rules, np.random.default_rng(self.seed), envelope)
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,13 +211,14 @@ class Forest:
     def gives(self) -> frozenset[Give]:
         return frozenset()
 
-    def fit(self, x, y) -> FittedForest:
-        x, y = training_data(x, y)
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedForest:
+        """Every tree answers in the one envelope of the whole sample, not its own bootstrap's span."""
+        x, y, envelope = training_data(x, y, domain)
         rules = _Rules(self.max_depth, self.min_samples_split, self.min_samples_leaf, self.max_features, self.splitter)
         rng = np.random.default_rng(self.seed)
         n = len(x)
         trees = tuple(
-            _grow(x, y, rng.integers(0, n, n) if self.bootstrap else np.arange(n), rules, rng)
+            _grow(x, y, rng.integers(0, n, n) if self.bootstrap else np.arange(n), rules, rng, envelope)
             for _ in range(self.n_trees)
         )
         return FittedForest(trees)
@@ -225,9 +231,15 @@ class FittedForest:
     trees: tuple[FittedTree, ...]
 
     @property
+    def envelope(self) -> BoxEnvelope:
+        """The one envelope every tree was grown in."""
+        return self.trees[0].envelope
+
+    @property
     def gives(self) -> frozenset[Give]:
         return frozenset()
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='a forest')
+        x = query_points(x, self.envelope)
         return Prediction(np.mean([tree.predict(x).mean for tree in self.trees], axis=0))

@@ -17,6 +17,7 @@ from numerics_lab.minimize import minimize_lbfgs
 
 from learn_lab.errors import refuse
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['ACTIVATIONS', 'MultilayerPerceptron', 'Network']
 
@@ -47,8 +48,11 @@ def _slope(name: str, a: np.ndarray) -> np.ndarray:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Network:
-    """Layer weights ``W_l (in, out)`` and biases ``b_l (out,)``; hidden layers use *activation*, the output none."""
+    """The *envelope* it answers in, layer weights ``W_l (in, out)`` and biases ``b_l (out,)``; hidden layers use
+    *activation*, the output none.
+    """
 
+    envelope: BoxEnvelope
     weights: tuple[np.ndarray, ...]
     biases: tuple[np.ndarray, ...]
     activation: str = 'tanh'
@@ -74,7 +78,7 @@ class Network:
             at += w.size
             biases.append(flat[at : at + b.size])
             at += b.size
-        return Network(tuple(weights), tuple(biases), self.activation)
+        return Network(self.envelope, tuple(weights), tuple(biases), self.activation)
 
     def _forward(self, x: np.ndarray) -> list[np.ndarray]:
         layers = [x]
@@ -99,7 +103,7 @@ class Network:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='a multilayer perceptron')
-        q = query_points(x, self.weights[0].shape[0])
+        q = query_points(x, self.envelope)
         layers = self._forward(q)
         if not gradient:
             return Prediction(layers[-1])
@@ -133,21 +137,21 @@ class MultilayerPerceptron:
     def gives(self) -> frozenset[Give]:
         return frozenset({Give.GRADIENT})
 
-    def initial(self, d: int, k: int) -> Network:
-        """The Glorot-uniform starting network for *d* inputs and *k* outputs."""
+    def initial(self, envelope: BoxEnvelope, k: int) -> Network:
+        """The Glorot-uniform starting network for the inputs of *envelope* and *k* outputs."""
         rng = np.random.default_rng(self.seed)
-        sizes = (d, *self.hidden, k)
+        sizes = (envelope.width, *self.hidden, k)
         factor = 2.0 if self.activation == 'logistic' else 6.0
         weights, biases = [], []
         for fan_in, fan_out in itertools.pairwise(sizes):
             bound = np.sqrt(factor / (fan_in + fan_out))
             weights.append(rng.uniform(-bound, bound, (fan_in, fan_out)))
             biases.append(rng.uniform(-bound, bound, fan_out))
-        return Network(tuple(weights), tuple(biases), self.activation)
+        return Network(envelope, tuple(weights), tuple(biases), self.activation)
 
-    def fit(self, x, y) -> Network:
-        x, y = training_data(x, y)
-        start = self.initial(x.shape[1], y.shape[1])
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> Network:
+        x, y, envelope = training_data(x, y, domain)
+        start = self.initial(envelope, y.shape[1])
         trained = minimize_lbfgs(
             lambda flat: start.with_flat(flat).loss(x, y, alpha=self.alpha),
             start.flat,

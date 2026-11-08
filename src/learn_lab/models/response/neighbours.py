@@ -14,6 +14,7 @@ import numpy as np
 
 from learn_lab.errors import refuse
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['NEIGHBOUR_WEIGHTS', 'FittedNeighbours', 'NearestNeighbours']
 
@@ -38,11 +39,11 @@ class NearestNeighbours:
     def gives(self) -> frozenset[Give]:
         return frozenset()
 
-    def fit(self, x, y) -> FittedNeighbours:
-        x, y = training_data(x, y)
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedNeighbours:
+        x, y, envelope = training_data(x, y, domain)
         if self.k > len(x):
             refuse(f'{self.k} neighbours were asked for and only {len(x)} points were measured')
-        return FittedNeighbours(self.k, self.weights, x, y)
+        return FittedNeighbours(self.k, self.weights, x, y, envelope)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -53,6 +54,7 @@ class FittedNeighbours:
     weights: str
     x: np.ndarray
     y: np.ndarray
+    envelope: BoxEnvelope
 
     @property
     def gives(self) -> frozenset[Give]:
@@ -60,7 +62,7 @@ class FittedNeighbours:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='nearest neighbours')
-        q = query_points(x, self.x.shape[1])
+        q = query_points(x, self.envelope)
         distance = np.sqrt(np.maximum(np.sum((q[:, None, :] - self.x[None, :, :]) ** 2, axis=2), 0.0))
         nearest = np.argsort(distance, axis=1, kind='stable')[:, : self.k]
         near = np.take_along_axis(distance, nearest, axis=1)

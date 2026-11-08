@@ -96,7 +96,12 @@ def test_a_reloaded_response_model_answers_bit_for_bit(family, tmp_path) -> None
     assert all(_same(a, b) for a, b in zip(before, after, strict=True))
     record = artifact.manifest(path)
     assert record['family'] == family
-    assert record['schema']['inputs'] == {'kind': 'vector', 'width': 2}
+    envelope = {'lower': fitted.envelope.lower.tolist(), 'upper': fitted.envelope.upper.tolist()}
+    assert record['schema']['inputs'] == {'kind': 'vector', 'width': 2, 'envelope': envelope}
+    assert _same(loaded.envelope.lower, fitted.envelope.lower)
+    assert _same(loaded.envelope.upper, fitted.envelope.upper)
+    with pytest.raises(Refused, match='out_of_domain'):
+        loaded.predict(fitted.envelope.upper[None, :] + 1.0)
     assert record['schema']['outputs']['width'] == fitted.predict(QUERY).mean.shape[1]
 
 

@@ -15,8 +15,9 @@ from typing import Final
 import numpy as np
 
 from learn_lab.errors import refuse
-from learn_lab.protocol import Fitted, Give, Prediction, Surrogate, require_gives, training_data
+from learn_lab.protocol import Fitted, Give, Prediction, Surrogate, query_points, require_gives, training_data
 from learn_lab.validation import cross_validate, score
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['WEIGHTINGS', 'Ensemble', 'FittedEnsemble']
 
@@ -43,9 +44,12 @@ class Ensemble:
     def gives(self) -> frozenset[Give]:
         return frozenset.intersection(*(m.gives for m in self.members))
 
-    def fit(self, x, y) -> FittedEnsemble:
-        x, y = training_data(x, y)
-        r2 = np.array([score('r2', y, cross_validate(m, x, y, k=self.k, seed=self.seed).mean) for m in self.members])
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedEnsemble:
+        x, y, envelope = training_data(x, y, domain)
+        r2 = np.array([
+            score('r2', y, cross_validate(m, x, y, k=self.k, seed=self.seed, domain=envelope).mean)
+            for m in self.members
+        ])
         if not np.any(r2 > 0):
             refuse(
                 f'every ensemble member scored r2 <= 0 in cross-validation ({r2.tolist()}); there is no weight to give'
@@ -55,7 +59,7 @@ class Ensemble:
             if self.weighting == 'best'
             else np.maximum(r2, 0) / np.maximum(r2, 0).sum()
         )
-        return FittedEnsemble(tuple(m.fit(x, y) for m in self.members), weights, self.gives)
+        return FittedEnsemble(tuple(m.fit(x, y, domain=envelope) for m in self.members), weights, self.gives)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -66,8 +70,14 @@ class FittedEnsemble:
     weights: np.ndarray
     gives: frozenset[Give]
 
+    @property
+    def envelope(self) -> BoxEnvelope:
+        """The one envelope every member was fitted in (held by the members)."""
+        return self.members[0].envelope
+
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='this ensemble')
+        x = query_points(x, self.envelope)
         live = [(w, m) for w, m in zip(self.weights, self.members, strict=True) if w > 0]
         parts = [(w, m.predict(x, variance=variance, gradient=gradient)) for w, m in live]
         mean = sum(w * p.mean for w, p in parts)

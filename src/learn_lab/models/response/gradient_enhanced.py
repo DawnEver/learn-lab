@@ -24,6 +24,7 @@ from numerics_lab.linear.dense import solve_triangular
 from learn_lab.errors import refuse
 from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximise_likelihood
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
+from learn_lab.validity import BoxEnvelope
 
 __all__ = ['FittedGradientEnhanced', 'GradientEnhancedKriging']
 
@@ -92,8 +93,8 @@ class GradientEnhancedKriging:
         stacked = np.concatenate([values, gradients.reshape(-1)])
         return gaussian_log_likelihood(slopes[0], stacked, np.array(slopes))
 
-    def fit(self, x, y, gradients) -> FittedGradientEnhanced:
-        x, y = training_data(x, y)
+    def fit(self, x, y, gradients, *, domain: BoxEnvelope | None = None) -> FittedGradientEnhanced:
+        x, y, envelope = training_data(x, y, domain)
         g = np.asarray(gradients, dtype=float)
         if g.shape != (*y.shape, x.shape[1]):
             refuse(f'gradients are (points, outputs, inputs) = {(*y.shape, x.shape[1])}, got {g.shape}')
@@ -115,7 +116,7 @@ class GradientEnhancedKriging:
                 refuse(f'the gradient-enhanced covariance at theta={theta} cannot be factored')
             stacked = np.concatenate([values, slopes.reshape(-1)])
             columns.append((theta, chol.lower, chol.solve(stacked), float(level[c]), float(scale[c])))
-        return FittedGradientEnhanced(x, tuple(columns))
+        return FittedGradientEnhanced(x, tuple(columns), envelope)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -124,6 +125,7 @@ class FittedGradientEnhanced:
 
     x: np.ndarray
     columns: tuple[tuple[np.ndarray, np.ndarray, np.ndarray, float, float], ...]
+    envelope: BoxEnvelope
 
     @property
     def gives(self) -> frozenset[Give]:
@@ -131,7 +133,7 @@ class FittedGradientEnhanced:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='gradient-enhanced Kriging')
-        q = query_points(x, self.x.shape[1])
+        q = query_points(x, self.envelope)
         m, d = q.shape
         means, variances, slopes = [], [], []
         for theta, lower, alpha, level, scale in self.columns:

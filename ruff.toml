@@ -1,7 +1,7 @@
 # The family lint and format rules, as numerics-lab carries them.
 target-version = "py313"
 line-length = 120
-unsafe-fixes = true
+unsafe-fixes = false  # an unsafe fix rewrote a loss lambda into a stale bound method (2026-11-07)
 src = ["src", "tests"]
 exclude = [
     ".claude/memory",

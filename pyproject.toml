@@ -104,3 +104,4 @@ ENV-MUTATION-THROUGH-THE-DOOR = "<any family venv python> -m dev_lab.dev.dep --b
 # The family files famfiles renders read their per-repo deltas from this one module.
 [tool.dev_lab.render]
 deltas = "tests/architecture/_famconfig.py"
+adoption = "scripts/deny_rules.py"

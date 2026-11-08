@@ -100,3 +100,7 @@ BARE-TEST-INVOCATION = "<venv python> -m dev_lab.dev.verify -- <paths>  (the mea
 PUSH-NO-VERIFY = "push without skipping the hook; no hook runs a test, and the forge produces the part"
 NETWORK-VERB = "<venv python> -m dev_lab.dev.netverb -- <git push|fetch|pull|clone|ls-remote|submodule update ...  or  uv lock|add|remove ...>  (retries 3x, then reports a diagnosis); an environment change is <venv python> -m dev_lab.dev.dep --sync, which retries inside"
 ENV-MUTATION-THROUGH-THE-DOOR = "<any family venv python> -m dev_lab.dev.dep --bootstrap <this checkout> --group dev --extra torch  (run from this checkout)"
+
+# The family files famfiles renders read their per-repo deltas from this one module.
+[tool.dev_lab.render]
+deltas = "tests/architecture/_famconfig.py"

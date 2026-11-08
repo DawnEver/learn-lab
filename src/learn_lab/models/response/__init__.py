@@ -11,8 +11,9 @@ and the latent variance ``(n, k)`` and mean gradient ``(n, k, d)`` when asked fo
   :class:`CoKriging` (AR1 multi-fidelity);
 * learners -- :class:`NearestNeighbours`, :class:`RegressionTree`, :class:`Forest` (random forest,
   extra trees, bagging), :class:`MultilayerPerceptron`;
-* composition -- :class:`Ensemble`, :class:`Bagging`. Tuning a model's settings is :mod:`learn_lab.tuning`; judging one is
-  :mod:`learn_lab.validation`; naming one is :mod:`learn_lab.registry`.
+* composition -- :class:`Ensemble`, :class:`Bagging`. Naming one and the settings it tunes is
+  :mod:`learn_lab.registry`; scoring a setting for a search is :mod:`learn_lab.tuning`; judging one is
+  :mod:`learn_lab.validation`.
 
 scikit-learn is a TEST oracle only.
 """

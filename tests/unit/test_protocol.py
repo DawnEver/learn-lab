@@ -98,6 +98,6 @@ def test_every_registered_surrogate_declares_what_it_gives() -> None:
     assert {'polynomial', 'radial_basis', 'gaussian_process', 'nearest_neighbours', 'regression_tree', 'forest'} <= set(
         SURROGATES
     )
-    for name, factory in SURROGATES.items():
-        gives = factory().gives
+    for name, row in SURROGATES.items():
+        gives = row.build().gives
         assert gives <= set(Give), name

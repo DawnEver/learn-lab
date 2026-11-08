@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
@@ -59,7 +59,7 @@ class FieldModel:
     runtime: Runtime = field(default_factory=lambda: Runtime(dtype='float32'))
     margin: float = 0.0
 
-    def fit(self, x: np.ndarray, y: np.ndarray) -> FittedFieldModel:
+    def fit(self, x: np.ndarray, y: np.ndarray, *, checkpoint: Checkpoint | None = None) -> FittedFieldModel:
         x = require_finite(np.asarray(x, float), 'the input fields')
         y = require_finite(np.asarray(y, float), 'the output fields')
         if x.ndim != 4 or y.ndim != 4 or x.shape[0] != y.shape[0] or x.shape[2:] != y.shape[2:] or not len(x):
@@ -75,7 +75,7 @@ class FieldModel:
         def loss() -> torch.Tensor:
             return ((net(xt) - yt) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule)
+        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
         envelope = ChannelEnvelope.of(x, margin=self.margin)
         return FittedFieldModel(net=net.eval(), runtime=rt, envelope=envelope, inputs=sx, outputs=sy, history=history)
 

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse, require_finite
@@ -45,7 +45,7 @@ class NeuralODE:
     runtime: Runtime = field(default_factory=Runtime)
     margin: float = 0.0
 
-    def fit(self, t: np.ndarray, trajectories: np.ndarray) -> FittedDynamics:
+    def fit(self, t: np.ndarray, trajectories: np.ndarray, *, checkpoint: Checkpoint | None = None) -> FittedDynamics:
         """``t (T,)`` uniform sample times, ``trajectories (m, T, d)`` states sampled at them."""
         t = require_finite(np.asarray(t, float), 'the sample times')
         x = require_finite(np.asarray(trajectories, float), 'the trajectories')
@@ -71,7 +71,7 @@ class NeuralODE:
         def loss() -> torch.Tensor:
             return ((rk4(lambda s: net(s) / time_scale, windows[:, 0], window_t) - windows) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule)
+        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
         return FittedDynamics(
             net=net.eval(),
             time_scale=time_scale,

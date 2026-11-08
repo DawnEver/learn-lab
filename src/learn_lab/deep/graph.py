@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
@@ -112,7 +112,7 @@ class GraphModel:
     runtime: Runtime = field(default_factory=lambda: Runtime(dtype='float32'))
     margin: float = 0.0
 
-    def fit(self, graphs: Graphs, targets: np.ndarray) -> FittedGraphModel:
+    def fit(self, graphs: Graphs, targets: np.ndarray, *, checkpoint: Checkpoint | None = None) -> FittedGraphModel:
         """``targets (N, k)``: one row per node of the batch."""
         graphs = graphs.require_valid('the training graphs')
         y = require_finite(np.asarray(targets, float), 'the node targets')
@@ -131,7 +131,7 @@ class GraphModel:
         def loss() -> torch.Tensor:
             return ((net(*inputs) - yt) ** 2).mean()
 
-        history = minimise(net.parameters(), loss, self.schedule)
+        history = minimise(net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
         edges = None if se is None else ChannelEnvelope.of(graphs.edge_features, margin=self.margin)
         return FittedGraphModel(
             net=net.eval(),

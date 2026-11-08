@@ -51,7 +51,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.networks import MonotoneScalar
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse, require_finite
@@ -188,7 +188,9 @@ class PlayHysteresis:
     schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=1500, learning_rate=1e-2))
     runtime: Runtime = field(default_factory=Runtime)
 
-    def fit(self, inputs: Sequence[np.ndarray], outputs: Sequence[np.ndarray]) -> FittedHysteresis:
+    def fit(
+        self, inputs: Sequence[np.ndarray], outputs: Sequence[np.ndarray], *, checkpoint: Checkpoint | None = None
+    ) -> FittedHysteresis:
         """Input histories and the outputs measured along them, each from the demagnetised state."""
         xs = [require_finite(np.asarray(x, float).ravel(), 'an input history') for x in inputs]
         ys = [require_finite(np.asarray(y, float).ravel(), 'an output history') for y in outputs]
@@ -217,7 +219,7 @@ class PlayHysteresis:
             u = bank.played(x_t)
             return (((bank.output_of(u, bank.histories(u)) - y_t) ** 2) * mask).sum() / mask.sum()
 
-        history = minimise(bank.parameters(), loss, self.schedule)
+        history = minimise(bank.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self))
         span = float(np.max(np.abs(seen)))
         envelope = BoxEnvelope(np.array([-span]), np.array([span])) if self.odd else BoxEnvelope.of(seen[:, None])
         return FittedHysteresis(

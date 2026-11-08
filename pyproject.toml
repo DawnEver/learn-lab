@@ -12,8 +12,13 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Mingyang Bao" }]
 # The public boundary speaks numpy only. torch is the [torch] extra, imported only inside learn_lab.deep
-# (tests/architecture/test_layers.py), so the classical models never load it.
-dependencies = ["numpy"]
+# (tests/architecture/test_the_layers_point_one_way.py), so the response models never load it. The response
+# models solve through numerics-lab (the family's equation-solving engine) and read scipy.special only.
+dependencies = [
+    "numerics-lab @ git+https://github.com/DawnEver/numerics-lab.git",
+    "numpy",
+    "scipy",
+]
 
 [project.optional-dependencies]
 torch = ["torch>=2.7"]
@@ -23,6 +28,8 @@ dev = [
     "pytest",
     "pytest-xdist",
     "ruff",
+    # Reference oracles for the self-implemented response models: tests only, never runtime.
+    "scikit-learn",
     # The family development system (verify door, rules, hooks). DEV ONLY: learn_lab imports neither dev_lab nor
     # lab_commons. [test] brings the JS engine the agent-guard tests run the guard in (dev_lab.dev.jsrun).
     "dev-lab[test] @ git+https://github.com/DawnEver/dev-lab.git",

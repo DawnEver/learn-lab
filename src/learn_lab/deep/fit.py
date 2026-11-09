@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from learn_lab.artifact import canonical, sha256
 from learn_lab.errors import refuse
 
 __all__ = ['Checkpoint', 'Schedule', 'minimise']
@@ -67,14 +68,6 @@ class Checkpoint:
         return replace(self, directory=self.directory / f'member-{index}')
 
 
-def _sha256(data: bytes) -> str:
-    return 'sha256:' + hashlib.sha256(data).hexdigest()
-
-
-def _canonical(record: dict) -> bytes:
-    return json.dumps(record, sort_keys=True, separators=(',', ':'), allow_nan=True).encode()
-
-
 def _digest(data: Sequence[torch.Tensor | np.ndarray]) -> str:
     """SHA-256 over every array's dtype, shape and bytes, in order."""
     digest = hashlib.sha256()
@@ -82,7 +75,7 @@ def _digest(data: Sequence[torch.Tensor | np.ndarray]) -> str:
         if isinstance(array, torch.Tensor):
             array = array.detach().to('cpu').numpy()
         array = np.ascontiguousarray(array)
-        digest.update(_canonical({'dtype': str(array.dtype), 'shape': list(array.shape)}))
+        digest.update(canonical({'dtype': str(array.dtype), 'shape': list(array.shape)}))
         digest.update(array.tobytes())
     return 'sha256:' + digest.hexdigest()
 
@@ -90,7 +83,7 @@ def _digest(data: Sequence[torch.Tensor | np.ndarray]) -> str:
 def _identity(config: str, schedule: Schedule, parameters: list[torch.Tensor], data: str) -> str:
     shapes = [[str(p.dtype), list(p.shape)] for p in parameters]
     record = {'config': config, 'schedule': repr(schedule), 'parameters': shapes, 'data': data}
-    return _sha256(_canonical(record))
+    return sha256(canonical(record))
 
 
 def _phase(step: int, schedule: Schedule) -> str:
@@ -122,9 +115,9 @@ def _write(checkpoint: Checkpoint, identity: str, phase: str, parameters, optimi
         'step': len(history),
         'phase': phase,
         'history': history,
-        'payload': {WEIGHTS: _sha256((directory / WEIGHTS).read_bytes())},
+        'payload': {WEIGHTS: sha256((directory / WEIGHTS).read_bytes())},
     }
-    record['content_hash'] = _sha256(_canonical(record))
+    record['content_hash'] = sha256(canonical(record))
     (directory / f'{MANIFEST}.tmp').write_text(json.dumps(record, indent=1, sort_keys=True), encoding='utf-8')
     (directory / f'{MANIFEST}.tmp').replace(directory / MANIFEST)
 
@@ -141,12 +134,12 @@ def _read(checkpoint: Checkpoint, identity: str, schedule: Schedule) -> tuple[di
     if not isinstance(record, dict) or record.get('format') != FORMAT or record.get('version') != VERSION:
         refuse(f'{path} is not a {FORMAT} version {VERSION}')
     claimed = record.pop('content_hash', None)
-    if claimed != _sha256(_canonical(record)):
+    if claimed != sha256(canonical(record)):
         refuse(f'{path} does not match its content hash: the manifest was changed after it was written')
     if record['config'] != identity:
         refuse(f'{checkpoint.directory} holds a checkpoint of another config; resume only the fit that wrote it')
     weights = checkpoint.directory / WEIGHTS
-    if not weights.exists() or _sha256(weights.read_bytes()) != record['payload'][WEIGHTS]:
+    if not weights.exists() or sha256(weights.read_bytes()) != record['payload'][WEIGHTS]:
         refuse(f'{weights} does not match its hash in the manifest: the payload was changed after it was written')
     history = record['history']
     if len(history) != record['step']:

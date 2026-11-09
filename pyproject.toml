@@ -22,6 +22,9 @@ dependencies = [
 
 [project.optional-dependencies]
 torch = ["torch>=2.7"]
+# Inference export (learn_lab.deep.export): ONNX through torch, post-training quantization and the CPU/iGPU/NPU
+# runtime through OpenVINO + NNCF. Inference only; training stays on torch.
+openvino = ["onnx", "openvino", "nncf"]
 
 [dependency-groups]
 dev = [
@@ -58,7 +61,7 @@ xfail_strict = true
 
 [tool.lab_commons.hpc]
 # PIN + FRESHNESS (user ruling 2026-10-17): the venv is exactly the committed lock, and the lock keys it.
-install = 'uv sync --frozen --group dev --extra torch'
+install = 'uv sync --frozen --group dev --extra torch --extra openvino'
 dependency_inputs = ['pyproject.toml', 'uv.lock']
 source_roots = ['src']
 collect = 'tests'
@@ -99,7 +102,7 @@ prune_merged = true
 BARE-TEST-INVOCATION = "<venv python> -m dev_lab.dev.verify -- <paths>  (the measure door; a full run is the forge producer's; a hand-written pytest line has none)"
 PUSH-NO-VERIFY = "push without skipping the hook; no hook runs a test, and the forge produces the part"
 NETWORK-VERB = "<venv python> -m dev_lab.dev.netverb -- <git push|fetch|pull|clone|ls-remote|submodule update ...  or  uv lock|add|remove ...>  (retries 3x, then reports a diagnosis); an environment change is <venv python> -m dev_lab.dev.dep --sync, which retries inside"
-ENV-MUTATION-THROUGH-THE-DOOR = "<any family venv python> -m dev_lab.dev.dep --bootstrap <this checkout> --group dev --extra torch  (run from this checkout)"
+ENV-MUTATION-THROUGH-THE-DOOR = "<any family venv python> -m dev_lab.dev.dep --bootstrap <this checkout> --group dev --extra torch --extra openvino  (run from this checkout)"
 
 # The family files famfiles renders read their per-repo deltas from this one module.
 [tool.dev_lab.render]

@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import torch
 
-from learn_lab.deep import fit
+from learn_lab import artifact
 from learn_lab.deep.constitutive import MonotoneLaw
 from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.networks import MLP
@@ -114,7 +114,7 @@ def test_a_checkpoint_whose_phase_disagrees_with_its_step_is_refused(tmp_path):
     record = json.loads(path.read_text())
     record.pop('content_hash')
     record['phase'] = 'adam'
-    record['content_hash'] = fit._sha256(fit._canonical(record))
+    record['content_hash'] = artifact.sha256(artifact.canonical(record))
     path.write_text(json.dumps(record))
     with pytest.raises(Refused, match='phase'):
         _fit(Checkpoint(tmp_path, every=1), schedule=POLISHED)

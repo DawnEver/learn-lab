@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+import torch
 
 from learn_lab.deep.field import FieldModel
 from learn_lab.deep.fit import Schedule
@@ -65,3 +66,40 @@ def test_another_grid_shape_is_invalid_and_a_stronger_source_out_of_domain(data)
 def test_a_grid_the_levels_cannot_halve_is_refused():
     with pytest.raises(Refused, match='divisible'):
         FieldModel(levels=2, schedule=Schedule(adam_steps=1)).fit(np.zeros((2, 1, 10, 10)), np.zeros((2, 1, 10, 10)))
+
+
+def _largest_saved_batch(model, x, y):
+    """The largest leading (sample) dimension of any 4-D tensor autograd saves while *model* fits."""
+    seen = [0]
+
+    def pack(t):
+        if t.dim() == 4:
+            seen[0] = max(seen[0], t.shape[0])
+        return t
+
+    with torch.autograd.graph.saved_tensors_hooks(pack, lambda t: t):
+        model.fit(x, y)
+    return seen[0]
+
+
+def test_a_fit_holds_one_chunk_of_activations_at_a_time():
+    # Planted: 64 samples in chunks of 8. A full-batch loss saves (64, width, H, W) activations for backward,
+    # which is what a tuned width x 840 designs turned into 17 GB; a chunked one never saves more than 8.
+    x = np.random.default_rng(0).random((64, 1, 8, 8))
+    few = Schedule(adam_steps=2)
+    assert _largest_saved_batch(FieldModel(width=4, levels=1, schedule=few, chunk=8), x, x) <= 8
+    assert _largest_saved_batch(FieldModel(width=4, levels=1, schedule=few, chunk=None), x, x) == 64
+
+
+def test_chunking_trains_on_the_full_batch_gradient():
+    x = np.random.default_rng(1).random((20, 1, 8, 8))
+    y = np.random.default_rng(2).random((20, 1, 8, 8))
+    few = Schedule(adam_steps=5, learning_rate=1e-2, lbfgs_steps=2)
+    whole = FieldModel(width=4, levels=1, schedule=few, chunk=None).fit(x, y)
+    chunked = FieldModel(width=4, levels=1, schedule=few, chunk=6).fit(x, y)
+    assert chunked.history == pytest.approx(whole.history, rel=1e-4, abs=1e-6)  # loss, standardised units
+
+
+def test_a_chunk_is_a_positive_sample_count():
+    with pytest.raises(Refused, match='chunk'):
+        FieldModel(chunk=0)

@@ -34,7 +34,16 @@ IDENTITY = 'sha256:planted-training-data'
 #: Relative to the largest |output| (float32 eps ~1.2e-7, a few hundred ops deep), with an absolute floor in
 #: the output's unit for an output near zero.
 CROSS_DEVICE, FLOOR = 1e-5, 1e-6
-CUDA = pytest.mark.skipif(not torch.cuda.is_available(), reason='this torch sees no CUDA device')
+_NO_CUDA = 'this torch sees no CUDA device'
+#: A CUDA test does not apply where torch sees no device (GitHub's hosted runners): a skip there is NOT_APPLICABLE,
+#: posted as such, never a hole in the part.
+
+
+def CUDA(test):
+    return pytest.mark.not_applicable(_NO_CUDA)(
+        pytest.mark.skipif(not torch.cuda.is_available(), reason=_NO_CUDA)(test)
+    )
+
 
 RNG = np.random.default_rng(5)
 X = RNG.uniform(-1, 1, (32, 2))

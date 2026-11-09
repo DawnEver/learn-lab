@@ -71,6 +71,7 @@ def test_the_onnx_graph_answers_raw_inputs_as_the_fit_does(fitted, exported, que
     assert record['input'] == {'name': 'x', 'shape': [BATCH, 1, GRID, GRID], 'dtype': 'float32'}
     assert set(record['payload']) == {'model.onnx'}
     run = _openvino.compile_on(ov.Core(), exported, 'CPU')
+    assert run.precision == 'f32', 'an f32 export judged in bf16 measures the plugin, not the export'
     reference = fitted.predict(queries)
     scale = float(np.max(np.abs(reference)))
     assert np.max(np.abs(_batched(run)(queries) - reference)) < SAME_PRECISION * scale

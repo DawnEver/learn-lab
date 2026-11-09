@@ -75,6 +75,10 @@ output = "output/logs"
 # 1 GB unmeasured floor got every deep test killed 0xC0000017 (out of memory) by the box.
 [tool.dev_lab.verify]
 worker_mem_gb = 3.5
+# The one test that needs a CUDA device. GitHub's hosted runners have none and no GPU host produces parts for this
+# repo, so it runs where a GPU is (a workstation's verify) and is declared here rather than truncating tests/base
+# (user ruling 2026-11-09). Every other CUDA path is exercised on the CPU runtime.
+allowed_skips = ["tests/unit/deep/test_artifact.py::test_a_fit_saved_on_cuda_loads_on_cuda_exactly_and_on_the_cpu_within_float32"]
 
 [tool.lab_commons.tests]
 produce = ["-m", "dev_lab.dev.verify", "--part", "{part}"]

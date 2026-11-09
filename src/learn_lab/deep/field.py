@@ -4,6 +4,10 @@ Channels are standardised on the training set. The envelope is the input channel
 shape the model was trained on: another shape is INVALID (the convolutions would run, the answer would not
 be the trained one), a value outside the box is OUT_OF_DOMAIN. ``levels`` halvings need ``H`` and ``W``
 divisible by ``2**levels``; at the bottom every cell sees the whole grid when ``H / 2**levels <= 3``.
+
+Every step trains on the full-batch loss, evaluated ``chunk`` samples at a time with activation
+checkpointing: the gradient is the full batch's, while autograd holds one chunk's activations, so peak
+memory is set by ``chunk x width`` rather than ``n x width`` (``None`` evaluates the batch in one pass).
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 from torch import nn
+from torch.utils.checkpoint import checkpoint as recomputed
 
 from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.runtime import Runtime, numpy
@@ -58,6 +63,11 @@ class FieldModel:
     schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=3000, learning_rate=2e-3))
     runtime: Runtime = field(default_factory=lambda: Runtime(dtype='float32'))
     margin: float = 0.0
+    chunk: int | None = 32
+
+    def __post_init__(self) -> None:
+        if self.chunk is not None and (isinstance(self.chunk, bool) or self.chunk < 1):
+            refuse(f'a chunk is a sample count >= 1 (or None for one pass), got {self.chunk!r}')
 
     def fit(self, x: np.ndarray, y: np.ndarray, *, checkpoint: Checkpoint | None = None) -> FittedFieldModel:
         x = require_finite(np.asarray(x, float), 'the input fields')
@@ -72,8 +82,19 @@ class FieldModel:
         xt, yt = rt.tensor(sx.forward(x)), rt.tensor(sy.forward(y))
         net = UNet(x.shape[1], y.shape[1], width=self.width, levels=self.levels).to(rt.torch_device, rt.torch_dtype)
 
+        chunk = self.chunk
+
+        def squared(xc: torch.Tensor, yc: torch.Tensor) -> torch.Tensor:
+            return ((net(xc) - yc) ** 2).sum()
+
         def loss() -> torch.Tensor:
-            return ((net(xt) - yt) ** 2).mean()
+            if chunk is None or chunk >= len(xt):
+                return squared(xt, yt) / yt.numel()
+            parts = (
+                recomputed(squared, xt[i : i + chunk], yt[i : i + chunk], use_reentrant=False)
+                for i in range(0, len(xt), chunk)
+            )
+            return torch.stack(list(parts)).sum() / yt.numel()
 
         history = minimise(
             net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, yt]

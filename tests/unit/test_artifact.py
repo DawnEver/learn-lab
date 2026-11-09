@@ -29,6 +29,7 @@ from learn_lab.models.response import (
     MultiOutputKriging,
     NearestNeighbours,
     Polynomial,
+    PowerLaw,
     RadialBasis,
     RegressionTree,
 )
@@ -44,6 +45,7 @@ IDENTITY = 'sha256:planted-training-data'
 #: name -> (declaration, its fit). Every response family of the registry, plus the ensemble.
 CASES = {
     'polynomial': (Polynomial(degree=3, penalty=Lasso(1e-4)), lambda m: m.fit(X, Y)),
+    'power_law': (PowerLaw(fixed=((None, 1.0), (1.0, None))), lambda m: m.fit(X, Y)),
     'radial_basis': (RadialBasis(), lambda m: m.fit(X, Y)),
     'gaussian_process': (GaussianProcess(restarts=1), lambda m: m.fit(X, Y)),
     'gradient_enhanced_kriging': (GradientEnhancedKriging(restarts=1), lambda m: m.fit(X, Y[:, :1], SLOPES)),

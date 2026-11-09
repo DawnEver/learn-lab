@@ -26,6 +26,16 @@ parameters become trainable alongside the network. Only the entries ``provider.o
 others are not the observable there and are ignored (NaN is the honest value to put in them). Each observable is one
 data term scaled by the root-mean-square of its owned values, in its own unit: a derived observable (a slope, a flux
 density) can carry a coefficient the field itself hides below the fit's accuracy.
+
+The scale is the UNIT carrier; it cannot fix training dynamics. With several regions and interface conditions the
+dimensionless terms' gradients can differ by orders of magnitude, and the weak ones (an interface, a boundary) stay
+under-fitted. A :class:`Balance` multiplies each dimensionless term by a dimensionless weight: ``fixed`` (the
+default, every weight 1) or ``gradient_norm`` -- learning-rate annealing (Wang, Teng & Perdikaris 2021): every
+``every`` Adam steps ``w_i <- (1 - alpha) w_i + alpha max|grad L_ref| / mean|grad L_i|`` over the network weights,
+the ``reference`` condition (the PDE interior) held at 1. Data terms join the balance as ``observed:<name>``: an
+observation is a condition like any other, and under-fitting it is the same defect. The weights move during Adam
+only; L-BFGS polishes the objective they settled on (a moving objective would void its curvature memory). The
+final weights and each update are recorded on the :class:`FittedField`.
 """
 
 from __future__ import annotations
@@ -43,7 +53,7 @@ from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
 from learn_lab.validity import BoxEnvelope
 
-__all__ = ['FittedField', 'PhysicsInformedField', 'ResidualProvider', 'Term', 'derivative']
+__all__ = ['Balance', 'FittedField', 'PhysicsInformedField', 'ResidualProvider', 'Term', 'derivative']
 
 Field = Callable[[torch.Tensor], torch.Tensor]
 
@@ -61,6 +71,26 @@ class Term:
 
     def loss(self) -> torch.Tensor:
         return ((self.residual / self.scale) ** 2).mean()
+
+
+@dataclass(frozen=True, slots=True)
+class Balance:
+    """How the dimensionless terms are weighted: ``fixed`` (all 1) or ``gradient_norm`` against ``reference``."""
+
+    rule: str = 'fixed'
+    reference: str = ''
+    alpha: float = 0.1
+    every: int = 10
+
+    def __post_init__(self) -> None:
+        if self.rule not in ('fixed', 'gradient_norm'):
+            refuse(f"a balance rule is 'fixed' or 'gradient_norm', got {self.rule!r}")
+        if self.rule == 'gradient_norm' and not self.reference:
+            refuse('a gradient_norm balance names its reference condition (the PDE interior)')
+        if not 0.0 < self.alpha <= 1.0:
+            refuse(f'a balance alpha is in (0, 1], got {self.alpha}')
+        if self.every < 1:
+            refuse(f'a balance updates every >= 1 steps, got {self.every}')
 
 
 class ResidualProvider(Protocol):
@@ -103,6 +133,7 @@ class PhysicsInformedField:
     hidden: Sequence[int] = (32, 32, 32)
     schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=3000, learning_rate=1e-3, lbfgs_steps=500))
     runtime: Runtime = field(default_factory=Runtime)
+    balance: Balance = field(default_factory=Balance)
 
     def fit(
         self,
@@ -137,11 +168,26 @@ class PhysicsInformedField:
         if observations is not None and not data:
             refuse('observations name no observable; give at least one')
 
+        balancing = self.balance.rule != 'fixed'
+        if balancing and checkpoint is not None:
+            refuse('a balanced fit cannot be checkpointed: its weights are training state the checkpoint omits')
+        weights: dict[str, float] = {}
+        updates: list[tuple[int, dict[str, float]]] = []
+        calls = [0]
+
         def loss() -> torch.Tensor:
-            total = sum(term.loss() for term in provider.residuals(field_at, points, params).values())
+            terms = {name: term.loss() for name, term in provider.residuals(field_at, points, params).items()}
             for name, xt, ut, mask, scale in data:
-                total = total + Term((provider.observe(name, field_at, xt) - ut)[mask], scale).loss()
-            return total
+                terms[f'observed:{name}'] = Term((provider.observe(name, field_at, xt) - ut)[mask], scale).loss()
+            if not weights:
+                if balancing and self.balance.reference not in terms:
+                    refuse(f'the balance reference {self.balance.reference!r} is not a condition: {sorted(terms)}')
+                weights.update(dict.fromkeys(terms, 1.0))
+            step, calls[0] = calls[0], calls[0] + 1
+            if balancing and step < self.schedule.adam_steps and step % self.balance.every == 0:
+                self._rebalance(terms, list(net.parameters()), weights)
+                updates.append((step, dict(weights)))
+            return sum(weights[name] * value for name, value in terms.items())
 
         trainable = [*net.parameters(), *(params[name] for name in identify)]
         history = minimise(
@@ -159,7 +205,25 @@ class PhysicsInformedField:
             domain=provider.domain,
             parameters={name: float(value.detach()) for name, value in params.items()},
             history=history,
+            weights=dict(weights),
+            weight_history=updates,
         )
+
+    def _rebalance(self, terms: Mapping[str, torch.Tensor], theta: list[torch.Tensor], weights: dict) -> None:
+        """One learning-rate-annealing update of *weights* from the terms' gradients over the network *theta*."""
+
+        def grads(value: torch.Tensor) -> torch.Tensor:
+            g = torch.autograd.grad(value, theta, retain_graph=True, allow_unused=True)
+            return torch.cat([
+                (torch.zeros_like(p) if d is None else d).abs().flatten() for p, d in zip(theta, g, strict=True)
+            ])
+
+        b = self.balance
+        peak = float(grads(terms[b.reference]).max())
+        for name, value in terms.items():
+            mean = float(grads(value).mean()) if name != b.reference else 0.0
+            if mean > 0.0:
+                weights[name] = (1.0 - b.alpha) * weights[name] + b.alpha * peak / mean
 
 
 def _observed(provider: ResidualProvider, rt: Runtime, name: str, observation: tuple[np.ndarray, np.ndarray]):
@@ -195,6 +259,8 @@ class FittedField:
     domain: BoxEnvelope
     parameters: Mapping[str, float]
     history: list[float]
+    weights: Mapping[str, float]  # each condition's final balance weight (all 1 under a fixed balance)
+    weight_history: list[tuple[int, dict[str, float]]]  # (Adam step, weights after it) per balance update
 
     def field_at(self, x: torch.Tensor) -> torch.Tensor:
         """The field at ``(n, dim)`` coordinates, differentiable."""

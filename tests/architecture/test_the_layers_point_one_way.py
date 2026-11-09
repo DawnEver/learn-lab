@@ -1,5 +1,7 @@
 """learn-lab is a leaf library: it never imports its consumers, and torch lives only under ``learn_lab.deep``.
 
+So do onnx, openvino and nncf: the ``[openvino]`` extra, imported only by ``learn_lab.deep.export``.
+
 The public boundary speaks numpy; torch is the optional ``[torch]`` extra. A static scan refuses a torch import
 outside ``learn_lab/deep`` and any import of a consumer (optimi_lab, motronics); a subprocess import proves
 ``import learn_lab`` and every non-deep module leave torch unloaded.
@@ -16,7 +18,7 @@ from typing import Final
 _ROOT: Final = Path(__file__).resolve().parents[2]
 _PACKAGE: Final = _ROOT / 'src' / 'learn_lab'
 _CONSUMERS: Final = frozenset({'optimi_lab', 'motronics'})
-_DEEP_ONLY: Final = frozenset({'torch'})
+_DEEP_ONLY: Final = frozenset({'torch', 'onnx', 'openvino', 'nncf'})
 
 
 def imported_roots(source: str) -> set[str]:

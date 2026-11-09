@@ -43,7 +43,7 @@ import numpy as np
 from learn_lab.errors import refuse
 from learn_lab.validity import BoxEnvelope
 
-__all__ = ['FAMILIES', 'FORMAT', 'VERSION', 'load', 'manifest', 'save']
+__all__ = ['FAMILIES', 'FORMAT', 'VERSION', 'canonical', 'family_of', 'load', 'manifest', 'save', 'sha256']
 
 FORMAT: Final = 'learn-lab-artifact'
 VERSION: Final = 1
@@ -119,8 +119,8 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'forest': lambda f: _vector(f.envelope, f.trees[0].value.shape[1]),
     'multilayer_perceptron': lambda f: _vector(f.envelope, f.weights[-1].shape[1]),
     'chaos_expansion': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
-    'ensemble': lambda f: _schema(_family_of(f.members[0]), f.members[0]),
-    'bagging': lambda f: _schema(_family_of(f.members[0]), f.members[0]),
+    'ensemble': lambda f: _schema(family_of(f.members[0]), f.members[0]),
+    'bagging': lambda f: _schema(family_of(f.members[0]), f.members[0]),
     'sparse_regression': lambda f: {
         'inputs': {'kind': 'state', 'variables': list(f.library.variables)},
         'outputs': {'kind': 'rate', 'targets': list(f.targets)},
@@ -132,7 +132,7 @@ def _path_of(cls: type) -> str:
     return f'{cls.__module__}:{cls.__qualname__}'
 
 
-def _family_of(fitted: object) -> str:
+def family_of(fitted: object) -> str:
     path = _path_of(type(fitted))
     for name, (_, fitted_path) in FAMILIES.items():
         if fitted_path == path:
@@ -272,11 +272,11 @@ class _Reader:
         return made
 
 
-def _sha256(data: bytes) -> str:
+def sha256(data: bytes) -> str:
     return 'sha256:' + hashlib.sha256(data).hexdigest()
 
 
-def _canonical(record: Mapping[str, object]) -> bytes:
+def canonical(record: Mapping[str, object]) -> bytes:
     return json.dumps(record, sort_keys=True, separators=(',', ':'), allow_nan=True).encode()
 
 
@@ -334,7 +334,7 @@ def save(
     id) -- learn-lab never sees the data again, so it records what it is told; *metrics* are validation results
     by name, finite numbers in their own units. An existing *path* is refused: an artifact is never overwritten.
     """
-    family = _family_of(fitted)
+    family = family_of(fitted)
     if _path_of(type(declaration)) != FAMILIES[family][0]:
         refuse(f'a {family} fit is declared by {FAMILIES[family][0]}, got {_path_of(type(declaration))}')
     if not isinstance(data_identity, str) or not data_identity.strip():
@@ -374,9 +374,9 @@ def save(
         'data_identity': data_identity,
         'metrics': metrics,
         'state': state,
-        'payload': {name: _sha256(data) for name, data in files.items()},
+        'payload': {name: sha256(data) for name, data in files.items()},
     }
-    record['content_hash'] = _sha256(_canonical(record))
+    record['content_hash'] = sha256(canonical(record))
     (path / MANIFEST).write_text(json.dumps(record, indent=1, sort_keys=True, allow_nan=True), encoding='utf-8')
     return path
 
@@ -393,14 +393,14 @@ def manifest(path: str | Path) -> dict:
     if record.get('version') != VERSION:
         refuse(f'{path} is {FORMAT} version {record.get("version")!r}; this learn-lab reads version {VERSION} only')
     claimed = record.pop('content_hash', None)
-    if claimed != _sha256(_canonical(record)):
+    if claimed != sha256(canonical(record)):
         refuse(f'{path / MANIFEST} does not match its content hash: the manifest was changed after it was written')
     payload = record.get('payload', {})
     for name in (ARRAYS, WEIGHTS):
         present = (path / name).exists()
         if present != (name in payload):
             refuse(f'{path / name} is {"present" if present else "missing"}, the manifest says otherwise')
-        if present and _sha256((path / name).read_bytes()) != payload[name]:
+        if present and sha256((path / name).read_bytes()) != payload[name]:
             refuse(
                 f'{path / name} does not match its hash in the manifest: the payload was changed after it was written'
             )
@@ -429,6 +429,6 @@ def load(path: str | Path, *, device: str | None = None) -> object:
     if runtime is not None:
         reader.runtime = reader.decode(runtime)
     fitted = reader.decode(state)
-    if _family_of(fitted) != record['family']:
-        refuse(f'{path} declares family {record["family"]!r} but holds a {_family_of(fitted)}')
+    if family_of(fitted) != record['family']:
+        refuse(f'{path} declares family {record["family"]!r} but holds a {family_of(fitted)}')
     return fitted

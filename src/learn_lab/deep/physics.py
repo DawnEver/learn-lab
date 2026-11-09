@@ -36,6 +36,14 @@ the ``reference`` condition (the PDE interior) held at 1. Data terms join the ba
 observation is a condition like any other, and under-fitting it is the same defect. The weights move during Adam
 only; L-BFGS polishes the objective they settled on (a moving objective would void its curvature memory). The
 final weights and each update are recorded on the :class:`FittedField`.
+
+Where ``gradient_norm`` fails (measured, motronics EM cells, alpha 0.1, every 10, reference ``pde:steel``): it
+made both WORSE than fixed weights -- a saturating steel bar max|dB| 4.9e-2 T -> 5.13e-1 T, an identified
+saturation scale (truth 1.15) 1.1362 -> 1.2094 -- with side weights at 1.5e5-6.7e6 against the PDE's 1. The rule
+assumes the side terms are under-fitted; when the unit scaling already satisfies one, its mean gradient is tiny
+and ``max / mean`` has no upper bound (the max of millions of entries is an extreme statistic besides), the
+weights only grow since nothing renormalises them, and the PDE term's share of the loss falls towards zero. Use it
+only where a side condition is demonstrably under-fitted at fixed weights (the planted stiff Poisson).
 """
 
 from __future__ import annotations

@@ -115,3 +115,13 @@ ENV-MUTATION-THROUGH-THE-DOOR = "<any family venv python> -m dev_lab.dev.dep --b
 [tool.dev_lab.render]
 deltas = "tests/architecture/_famconfig.py"
 adoption = "scripts/deny_rules.py"
+
+# Who reviews this repo's PRs: the family's isolated judge host (user ruling 2026-11-10), gated on GitHub by the
+# family App's review/judge check run. Keys and defaults: dev_lab.dev.forgereview_declared.
+[tool.dev_lab.review]
+where = "judge"
+judge_app = 5619495
+
+# The bundle prepare the judge reads, on THIS forge (the base places it on Gitea unless a repo names GitHub).
+[tool.dev_lab.ci."review-prepare.yml"]
+forge = "github"

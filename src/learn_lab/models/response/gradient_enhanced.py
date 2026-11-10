@@ -8,7 +8,8 @@ the joint covariance of a value and the derivatives is ``k`` differentiated in e
 
 The data vector stacks the n values, then the n x d gradients point by point. ``theta = log[
 amplitude, l_1..l_d]`` maximises the likelihood of the NORMALISED data (values to zero mean and unit
-deviation, gradients divided by the same deviation); a nugget of ``1e-8 amplitude`` on the diagonal
+deviation, gradients divided by the same deviation), over the inputs mapped onto the unit box of the fit's
+envelope (gradients times its span; predicted gradients divided by it, back in the raw inputs' units); a nugget of ``1e-8 amplitude`` on the diagonal
 keeps the notoriously ill-conditioned matrix factorable. Predictions give the mean, its gradient
 (itself a cross-covariance prediction) and the latent variance of the value.
 """
@@ -95,6 +96,7 @@ class GradientEnhancedKriging:
 
     def fit(self, x, y, gradients, *, domain: BoxEnvelope | None = None) -> FittedGradientEnhanced:
         x, y, envelope = training_data(x, y, domain)
+        u = envelope.unit(x)
         g = np.asarray(gradients, dtype=float)
         if g.shape != (*y.shape, x.shape[1]):
             refuse(f'gradients are (points, outputs, inputs) = {(*y.shape, x.shape[1])}, got {g.shape}')
@@ -103,15 +105,15 @@ class GradientEnhancedKriging:
         level, scale = y.mean(axis=0), np.where(y.std(axis=0) > 0, y.std(axis=0), 1.0)
         columns = []
         for c in range(y.shape[1]):
-            values, slopes = (y[:, c] - level[c]) / scale[c], g[:, c, :] / scale[c]
+            values, slopes = (y[:, c] - level[c]) / scale[c], g[:, c, :] * envelope.span / scale[c]
             theta, _ = maximise_likelihood(
-                lambda t, v=values, s=slopes: self.log_likelihood(t, x, v, s),
+                lambda t, v=values, s=slopes: self.log_likelihood(t, u, v, s),
                 np.zeros(d + 1),
                 box,
                 restarts=self.restarts,
                 seed=self.seed,
             )
-            chol = factor(self.covariance(theta, x))
+            chol = factor(self.covariance(theta, u))
             if chol is None:
                 refuse(f'the gradient-enhanced covariance at theta={theta} cannot be factored')
             stacked = np.concatenate([values, slopes.reshape(-1)])
@@ -133,11 +135,11 @@ class FittedGradientEnhanced:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='gradient-enhanced Kriging')
-        q = query_points(x, self.envelope)
+        q, train = self.envelope.unit(query_points(x, self.envelope)), self.envelope.unit(self.x)
         m, d = q.shape
         means, variances, slopes = [], [], []
         for theta, lower, alpha, level, scale in self.columns:
-            ff, fg, gf, gg, _, _ = _blocks(theta, q, self.x)
+            ff, fg, gf, gg, _, _ = _blocks(theta, q, train)
             cross = np.hstack([ff, fg.reshape(m, -1)])
             means.append(level + scale * cross @ alpha)
             if variance:
@@ -145,7 +147,7 @@ class FittedGradientEnhanced:
                 variances.append(np.maximum(np.exp(theta[0]) - np.sum(v**2, axis=0), 0.0) * scale**2)
             if gradient:
                 rows = np.concatenate([gf.reshape(m, d, -1), gg.reshape(m, d, -1)], axis=2)
-                slopes.append(scale * rows @ alpha)
+                slopes.append(scale * rows @ alpha / self.envelope.span)
         return Prediction(
             np.column_stack(means),
             np.column_stack(variances) if variance else None,

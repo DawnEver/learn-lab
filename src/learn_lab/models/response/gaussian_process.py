@@ -5,7 +5,9 @@ with covariance
 
     C = amplitude R(x, x'; lengths) + noise I,     theta = log[amplitude, length_1..length_d, noise]
 
-(``R`` a :mod:`~learn_lab.models.response.kernel` family). ``theta`` maximises the log marginal likelihood
+(``R`` a :mod:`~learn_lab.models.response.kernel` family) over the inputs mapped onto the unit box of
+the fit's envelope (:meth:`~learn_lab.validity.BoxEnvelope.unit`), so the lengths are fractions of the
+envelope and inputs of any physical magnitude share one start and one ``bounds``. ``theta`` maximises the log marginal likelihood
 inside ``bounds`` (each of amplitude, length and noise), from the declared start and *restarts*
 seeded draws (:func:`~learn_lab.models.response.likelihood.maximise_likelihood`).
 
@@ -81,6 +83,7 @@ class GaussianProcess:
 
     def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedGaussianProcess:
         x, y, envelope = training_data(x, y, domain)
+        u = envelope.unit(x)
         normalised, level, scale = _normalise(y)
         d = x.shape[1]
         box = Box(np.full(d + 2, np.log(self.bounds[0])), np.full(d + 2, np.log(self.bounds[1])))
@@ -89,13 +92,13 @@ class GaussianProcess:
         for k in range(y.shape[1]):
             column = normalised[:, k]
             theta, _ = maximise_likelihood(
-                lambda t, column=column: log_likelihood(self.family, t, x, column),
+                lambda t, column=column: log_likelihood(self.family, t, u, column),
                 start,
                 box,
                 restarts=self.restarts,
                 seed=self.seed,
             )
-            columns.append(GaussianProcessColumn.at(self.family, theta, x, column, level=level[k], scale=scale[k]))
+            columns.append(GaussianProcessColumn.at(self.family, theta, u, column, level=level[k], scale=scale[k]))
         return FittedGaussianProcess(x, tuple(columns), envelope)
 
 
@@ -125,7 +128,10 @@ class GaussianProcessColumn:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class FittedGaussianProcess:
-    """The training points, one :class:`GaussianProcessColumn` per output, and the envelope it answers in."""
+    """The training points, one :class:`GaussianProcessColumn` per output, and the envelope it answers in.
+
+    Each column's kernel acts on :meth:`BoxEnvelope.unit` of the points; the raw points are what is held.
+    """
 
     x: np.ndarray
     columns: tuple[GaussianProcessColumn, ...]
@@ -145,20 +151,26 @@ class FittedGaussianProcess:
         """Each column's maximised log marginal likelihood (of its normalised values)."""
         return tuple(c.log_likelihood for c in self.columns)
 
+    def _unit(self, x) -> np.ndarray:
+        return self.envelope.unit(query_points(x, self.envelope))
+
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='a Gaussian process')
-        q = query_points(x, self.envelope)
+        q, train = self._unit(x), self.envelope.unit(self.x)
         means, variances, slopes = [], [], []
         for c in self.columns:
             amplitude, lengths = np.exp(c.theta[0]), np.exp(c.theta[1:-1])
-            k = amplitude * correlation(c.family, q, self.x, lengths)
+            k = amplitude * correlation(c.family, q, train, lengths)
             means.append(c.level + c.scale * (k @ c.alpha))
             if variance:
                 v = solve_triangular(c.lower, k.T, lower=True)
                 variances.append(np.maximum(amplitude - np.sum(v**2, axis=0), 0.0) * c.scale**2)
             if gradient:
                 slopes.append(
-                    c.scale * amplitude * np.einsum('mnd,n->md', input_slopes(c.family, q, self.x, lengths), c.alpha)
+                    c.scale
+                    * amplitude
+                    * np.einsum('mnd,n->md', input_slopes(c.family, q, train, lengths), c.alpha)
+                    / self.envelope.span
                 )
         return Prediction(
             np.column_stack(means),
@@ -173,12 +185,12 @@ class FittedGaussianProcess:
 
     def posterior_covariance(self, a, b) -> np.ndarray:
         """The latent posterior covariance between points *a* ``(p, d)`` and *b* ``(q, d)``: ``(k, p, q)``."""
-        a, b = query_points(a, self.envelope), query_points(b, self.envelope)
+        a, b, train = self._unit(a), self._unit(b), self.envelope.unit(self.x)
         blocks = []
         for c in self.columns:
             amplitude, lengths = np.exp(c.theta[0]), np.exp(c.theta[1:-1])
-            va = solve_triangular(c.lower, amplitude * correlation(c.family, self.x, a, lengths), lower=True)
-            vb = solve_triangular(c.lower, amplitude * correlation(c.family, self.x, b, lengths), lower=True)
+            va = solve_triangular(c.lower, amplitude * correlation(c.family, train, a, lengths), lower=True)
+            vb = solve_triangular(c.lower, amplitude * correlation(c.family, train, b, lengths), lower=True)
             blocks.append((amplitude * correlation(c.family, a, b, lengths) - va.T @ vb) * c.scale**2)
         return np.stack(blocks)
 
@@ -216,7 +228,7 @@ class FittedGaussianProcess:
             GaussianProcessColumn.at(
                 c.family,
                 c.theta,
-                joined,
+                self.envelope.unit(joined),
                 np.concatenate([c.values, (y[:, k] - c.level) / c.scale]),
                 level=c.level,
                 scale=c.scale,

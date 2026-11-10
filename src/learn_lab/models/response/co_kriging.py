@@ -91,8 +91,10 @@ class CoKriging:
         spread = float(np.std(values)) or 1.0
         v, trend = values / spread, np.column_stack([below / spread, np.ones(len(x))])
 
+        u = envelope.unit(x)
+
         def likelihood(theta: np.ndarray) -> tuple[float, np.ndarray]:
-            c, slopes = covariance(self.family, theta, x)
+            c, slopes = covariance(self.family, theta, u)
             fitted = _gls(c, trend, v)
             if fitted is None:
                 return -np.inf, np.full(theta.size, np.nan)
@@ -103,8 +105,8 @@ class CoKriging:
         theta, _ = maximise_likelihood(
             likelihood, np.log(np.r_[1.0, np.ones(d), 1e-2]), box, restarts=self.restarts, seed=self.seed
         )
-        coefficients, residual = _gls(covariance(self.family, theta, x)[0], trend, v)
-        column = GaussianProcessColumn.at(self.family, theta, x, residual, level=0.0, scale=spread)
+        coefficients, residual = _gls(covariance(self.family, theta, u)[0], trend, v)
+        column = GaussianProcessColumn.at(self.family, theta, u, residual, level=0.0, scale=spread)
         return _Step(
             float(coefficients[0]), float(coefficients[1] * spread), FittedGaussianProcess(x, (column,), envelope)
         )

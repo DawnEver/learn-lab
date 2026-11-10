@@ -49,6 +49,16 @@ class BoxEnvelope:
     def width(self) -> int:
         return self.lower.shape[0]
 
+    @property
+    def span(self) -> np.ndarray:
+        """``upper - lower`` per input, 1 where the box is flat (so :meth:`unit` stays finite)."""
+        span = self.upper - self.lower
+        return np.where(span > 0, span, 1.0)
+
+    def unit(self, x: np.ndarray) -> np.ndarray:
+        """``x`` mapped onto the unit box: ``(x - lower) / span``; a slope in it is ``span`` times the raw one."""
+        return (np.asarray(x, dtype=float) - self.lower) / self.span
+
     def classify(self, x: np.ndarray) -> np.ndarray:
         """One :class:`Validity` per row of ``x``."""
         x = np.asarray(x, dtype=float)

@@ -6,6 +6,7 @@ correlation over the points, ``B = W W^T + diag(kappa)`` the outputs' coregional
 is ``k x rank``), ``noise`` one variance per output. ``theta = [log l_1..l_d, W (row-major), log
 kappa_1..kappa_k, log noise_1..noise_k]`` maximises the likelihood
 of the NORMALISED columns; ``W`` is bounded to ``[-10, 10]`` (the columns have unit deviation).
+The kernel acts on the inputs mapped onto the unit box of the fit's envelope.
 :attr:`FittedMultiOutput.correlation` is ``B`` scaled to unit diagonal: how alike the outputs are.
 """
 
@@ -89,6 +90,7 @@ class MultiOutputKriging:
 
     def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedMultiOutput:
         x, y, envelope = training_data(x, y, domain)
+        u = envelope.unit(x)
         _n, d = x.shape
         k = y.shape[1]
         level, scale = y.mean(axis=0), np.where(y.std(axis=0) > 0, y.std(axis=0), 1.0)
@@ -97,13 +99,13 @@ class MultiOutputKriging:
         lo, hi = np.full(size, np.log(1e-5)), np.full(size, np.log(1e5))
         lo[d : d + k * self.rank], hi[d : d + k * self.rank] = -10.0, 10.0
         theta, _ = maximise_likelihood(
-            lambda t: self.log_likelihood(t, x, normalised),
+            lambda t: self.log_likelihood(t, u, normalised),
             self.initial(d, k),
             Box(lo, hi),
             restarts=self.restarts,
             seed=self.seed,
         )
-        c, _ = self._covariance(theta, x, k)
+        c, _ = self._covariance(theta, u, k)
         chol = factor(c)
         if chol is None:
             refuse(f'the ICM covariance at theta={theta} cannot be factored')
@@ -147,10 +149,10 @@ class FittedMultiOutput:
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
         require_gives(self.gives, variance=variance, gradient=gradient, what='an ICM model')
-        q = query_points(x, self.envelope)
+        q, train = self.envelope.unit(query_points(x, self.envelope)), self.envelope.unit(self.x)
         b = self.coregionalisation
-        r = correlation(self.family, q, self.x, self.lengths)
-        dr = input_slopes(self.family, q, self.x, self.lengths) if gradient else None
+        r = correlation(self.family, q, train, self.lengths)
+        dr = input_slopes(self.family, q, train, self.lengths) / self.envelope.span if gradient else None
         means, variances, slopes = [], [], []
         for a in range(len(b)):
             cross = np.hstack([b[a, c] * r for c in range(len(b))])

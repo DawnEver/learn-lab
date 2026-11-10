@@ -22,6 +22,7 @@ from learn_lab.models.response import (
     MultiOutputKriging,
     NearestNeighbours,
     Polynomial,
+    PowerLaw,
     RadialBasis,
     RegressionTree,
 )
@@ -37,6 +38,7 @@ CANDIDATE = np.array([[0.95, 0.05]])
 
 FITS = {
     'polynomial': lambda d: Polynomial(degree=2).fit(X, Y, domain=d),
+    'power_law': lambda d: PowerLaw().fit(X, Y, domain=d),
     'radial_basis': lambda d: RadialBasis().fit(X, Y, domain=d),
     'gaussian_process': lambda d: GaussianProcess(restarts=0).fit(X, Y, domain=d),
     'gradient_enhanced_kriging': lambda d: GradientEnhancedKriging(restarts=0).fit(

@@ -5,7 +5,7 @@ A model is a frozen declaration of its settings; ``fit`` returns a fitted model 
 and the latent variance ``(n, k)`` and mean gradient ``(n, k, d)`` when asked for and declared in ``gives``.
 
 * response surfaces -- :class:`Polynomial` (+ :class:`Ridge` / :class:`Lasso`), :class:`RadialBasis`,
-  :class:`ChaosExpansion`;
+  :class:`ChaosExpansion`, :class:`PowerLaw` (a scaling law, fitted in log space);
 * Kriging -- :class:`GaussianProcess` (kernels in :mod:`~learn_lab.models.response.kernel`, maximum likelihood,
   closed-form leave-one-out), :class:`GradientEnhancedKriging`, :class:`MultiOutputKriging` (ICM),
   :class:`CoKriging` (AR1 multi-fidelity);
@@ -29,6 +29,7 @@ from learn_lab.models.response.multi_output import FittedMultiOutput, MultiOutpu
 from learn_lab.models.response.neighbours import NEIGHBOUR_WEIGHTS, FittedNeighbours, NearestNeighbours
 from learn_lab.models.response.neural import ACTIVATIONS, MultilayerPerceptron, Network
 from learn_lab.models.response.polynomial import FittedPolynomial, Lasso, Polynomial, Ridge
+from learn_lab.models.response.power_law import FittedPowerLaw, PowerLaw
 from learn_lab.models.response.radial_basis import RADIAL_KERNELS, FittedRadialBasis, RadialBasis
 from learn_lab.models.response.tree import SPLITTERS, FittedForest, FittedTree, Forest, RegressionTree
 
@@ -53,6 +54,7 @@ __all__ = [
     'FittedMultiOutput',
     'FittedNeighbours',
     'FittedPolynomial',
+    'FittedPowerLaw',
     'FittedRadialBasis',
     'FittedTree',
     'Forest',
@@ -64,6 +66,7 @@ __all__ = [
     'NearestNeighbours',
     'Network',
     'Polynomial',
+    'PowerLaw',
     'RadialBasis',
     'RegressionTree',
     'Ridge',

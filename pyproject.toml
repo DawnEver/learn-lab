@@ -7,37 +7,49 @@ name = "learn-lab"
 version = "0.1.0"
 description = "Learned models: fit and evaluate surrogates, physics-informed fields, learned laws, inverse problems."
 readme = "README.md"
-requires-python = ">=3.13"
+# Bounded above by the newest CPython every locked wheel covers: openvino 2026.4.1 ships cp313/cp314 only, and an
+# open range let a runner pick 3.15 and fail to install (learn-lab#1, 2026-11-09). Raise it with the lock.
+requires-python = ">=3.13,<3.15"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Mingyang Bao" }]
 # The public boundary speaks numpy only. torch is the [torch] extra, imported only inside learn_lab.deep
-# (tests/architecture/test_layers.py), so the classical models never load it.
-dependencies = ["numpy"]
+# (tests/architecture/test_the_layers_point_one_way.py), so the response models never load it. The response
+# models solve through numerics-lab (the family's equation-solving engine) and read scipy.special only.
+dependencies = [
+    "numerics-lab @ git+https://github.com/DawnEver/numerics-lab.git",
+    "numpy",
+    "scipy",
+]
 
 [project.optional-dependencies]
 torch = ["torch>=2.7"]
+# Inference export (learn_lab.deep.export): ONNX through torch, post-training quantization and the CPU/iGPU/NPU
+# runtime through OpenVINO + NNCF. Inference only; training stays on torch.
+openvino = ["onnx", "openvino", "nncf"]
 
 [dependency-groups]
 dev = [
     "pytest",
     "pytest-xdist",
     "ruff",
+    # Reference oracles for the self-implemented response models: tests only, never runtime.
+    "scikit-learn",
     # The family development system (verify door, rules, hooks). DEV ONLY: learn_lab imports neither dev_lab nor
     # lab_commons. [test] brings the JS engine the agent-guard tests run the guard in (dev_lab.dev.jsrun).
     "dev-lab[test] @ git+https://github.com/DawnEver/dev-lab.git",
 ]
 
 # One CUDA build serves both platforms: native Windows CUDA (workstations, incl. Blackwell sm_120 which needs
-# CUDA >= 12.8) and Linux (Ada A100/H200). macOS falls through to PyPI's CPU wheel.
+# CUDA >= 12.8; cu130 builds cover it and Ada sm_80) and Linux (Ada A100/H200). macOS falls through to PyPI's CPU wheel.
 [tool.uv.sources]
 # dev-lab floats on integrate/main like every family repo; the lock is the pin.
 dev-lab = { git = "https://github.com/DawnEver/dev-lab.git", branch = "integrate/main" }
-torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
 
 [[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [tool.setuptools.packages.find]
@@ -51,7 +63,7 @@ xfail_strict = true
 
 [tool.lab_commons.hpc]
 # PIN + FRESHNESS (user ruling 2026-10-17): the venv is exactly the committed lock, and the lock keys it.
-install = 'uv sync --frozen --group dev --extra torch'
+install = 'uv sync --frozen --group dev --extra torch --extra openvino'
 dependency_inputs = ['pyproject.toml', 'uv.lock']
 source_roots = ['src']
 collect = 'tests'
@@ -59,15 +71,26 @@ collect = 'tests'
 [tool.dev_lab.parts]
 output = "output/logs"
 
+# One verify worker's measured peak: a CUDA torch process commits ~3.3 GB (test_graph, 2026-11-08), so the
+# 1 GB unmeasured floor got every deep test killed 0xC0000017 (out of memory) by the box.
+[tool.dev_lab.verify]
+worker_mem_gb = 3.5
+# The one test that needs a CUDA device. GitHub's hosted runners have none and no GPU host produces parts for this
+# repo, so it runs where a GPU is (a workstation's verify) and is declared here rather than truncating tests/base
+# (user ruling 2026-11-09). Every other CUDA path is exercised on the CPU runtime. verify reads this list; the
+# part poster reads the test's not_applicable marker (lab_commons.hpc.pytest_item): the family checks a skip at both.
+allowed_skips = ["tests/unit/deep/test_artifact.py::test_a_fit_saved_on_cuda_loads_on_cuda_exactly_and_on_the_cpu_within_float32"]
+
 [tool.lab_commons.tests]
 produce = ["-m", "dev_lab.dev.verify", "--part", "{part}"]
 
 # The family branch flow: integrate/main coordinates; main moves only by `integrate promote` (fast-forward)
-# on a full forge PASS. pr_merges_since is declared once integrate/main exists (its first sha).
+# on a full forge PASS. Past c623e25 (integrate/main created at the founding commits) every commit is a forge merge.
 [tool.dev_lab.integrator]
 trunk = "main"
 integration = "integrate/main"
 merges_only_since = "8be94e3889513c57967f1c4bc8f891512fac5a7a"  # INTEGRATION-IS-MERGES-ONLY after the founding commits
+pr_merges_since = "c623e25949988135489296ad4562d05334a0dcec"  # INTEGRATION-TAKES-ONLY-FORGE-MERGES after the integration branch was created
 
 # GitHub Actions: the family's one PR lifecycle (dev_lab/dev/ci_base.toml) as is; rendered to
 # .github/workflows/ci.yml by `python -m dev_lab.dev.ciworkflows render`, never hand-edited.
@@ -86,4 +109,9 @@ prune_merged = true
 BARE-TEST-INVOCATION = "<venv python> -m dev_lab.dev.verify -- <paths>  (the measure door; a full run is the forge producer's; a hand-written pytest line has none)"
 PUSH-NO-VERIFY = "push without skipping the hook; no hook runs a test, and the forge produces the part"
 NETWORK-VERB = "<venv python> -m dev_lab.dev.netverb -- <git push|fetch|pull|clone|ls-remote|submodule update ...  or  uv lock|add|remove ...>  (retries 3x, then reports a diagnosis); an environment change is <venv python> -m dev_lab.dev.dep --sync, which retries inside"
-ENV-MUTATION-THROUGH-THE-DOOR = "<any family venv python> -m dev_lab.dev.dep --bootstrap <this checkout> --group dev --extra torch  (run from this checkout)"
+ENV-MUTATION-THROUGH-THE-DOOR = "<any family venv python> -m dev_lab.dev.dep --bootstrap <this checkout> --group dev --extra torch --extra openvino  (run from this checkout)"
+
+# The family files famfiles renders read their per-repo deltas from this one module.
+[tool.dev_lab.render]
+deltas = "tests/architecture/_famconfig.py"
+adoption = "scripts/deny_rules.py"

@@ -56,7 +56,8 @@ _MECHANISMS: Final = {
     # lands on a merged PR).
     'DRAFT-UNTIL-READY': (TestPath('pyproject.toml'),),
     'FORGE-DOORS-ARE-CONSENT': (TestPath('pyproject.toml'),),
-    'NO-PUSH-ONTO-A-LANDED-PR': (TestPath('pyproject.toml'),),
+    'LANDED-BRANCH-CONTINUES': (TestPath('pyproject.toml'),),
+    'NO-PUSH-ONTO-A-CLOSED-PR': (TestPath('pyproject.toml'),),
     # November 2026, the founding month, is the first month this tree holds.
     'MONTHLY-PLANS-CARRIED': (TestPath('tests/architecture/test_every_month_carries_its_plans.py'),),
     # The agent guard ships in every family repo; the rendered
@@ -91,9 +92,14 @@ _ABSENT: Final = frozenset({
     'ONE-WRITER-PER-SESSION-BRANCH',
     # The environment: shims are installed per box.
     'HOOKS-ARE-WIRED', 'INSTALL-DOOR-DELIVERS-THE-DECLARATION', 'ENV-MUTATION-THROUGH-THE-DOOR',
-    # Domain and measurement rules with no subject in a domain-free learned-models library (no persisted format yet).
+    # Domain and measurement rules with no subject in a domain-free learned-models library.
     'IMPLEMENT-EVERYTHING', 'BAR-IS-A-CONSTANT', 'UNITS-GO-THROUGH-PINT', 'TOLERANCE-CARRIES-A-UNIT',
-    'REGISTRY-OWNS-THE-DECISION', 'FORMATS-UPGRADE-ON-READ', 'PRODUCTION-ENTRY-POINT', 'UNSUPPORTED-RAISES', 'REFUSAL-NAMES-THE-REMEDY',
+    'REGISTRY-OWNS-THE-DECISION', 'PRODUCTION-ENTRY-POINT', 'UNSUPPORTED-RAISES', 'REFUSAL-NAMES-THE-REMEDY',
+    # The rule HAS a subject since 2026-11-08 -- learn_lab.artifact, a persisted format -- but no case: version 1
+    # is the only schema ever issued, so there is no older one to upgrade, and a version this reader does not
+    # know is refused (tests/unit/test_artifact.py). It gains its mechanism with the second schema: an upgrade
+    # step declared as data beside artifact.VERSION, and this repo's own test of it.
+    'FORMATS-UPGRADE-ON-READ',
     'NO-REFLECTION', 'PUBLIC-SURFACE-DECLARED', 'FIX-THE-CAUSE',
     # Docs and memory: no rules pages, injected docs or dated-memory guard in this repo yet.
     'DOCS-SPLIT', 'MEMORY-SHAPE', 'INJECTED-DOC-WIDTH-CEILING',

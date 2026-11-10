@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.networks import MonotoneScalar
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
@@ -30,7 +30,7 @@ class MonotoneLaw:
     schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=3000, learning_rate=1e-2, lbfgs_steps=200))
     runtime: Runtime = field(default_factory=Runtime)
 
-    def fit(self, x: np.ndarray, y: np.ndarray) -> FittedLaw:
+    def fit(self, x: np.ndarray, y: np.ndarray, *, checkpoint: Checkpoint | None = None) -> FittedLaw:
         x, y = np.asarray(x, float).ravel(), np.asarray(y, float).ravel()
         if x.shape != y.shape or x.size < 2:
             refuse(f'a law is fitted on matched pairs (n >= 2), got {x.shape} and {y.shape}')
@@ -40,7 +40,14 @@ class MonotoneLaw:
         x_scale, y_scale = float(np.max(np.abs(x))) or 1.0, float(np.max(np.abs(y))) or 1.0
         net = MonotoneScalar(self.hidden, odd=self.odd).to(rt.torch_device, rt.torch_dtype)
         xt, yt = rt.tensor(x / x_scale), rt.tensor(y / y_scale)
-        history = minimise(net.parameters(), lambda: torch.nn.functional.mse_loss(net(xt), yt), self.schedule)
+        history = minimise(
+            net.parameters(),
+            lambda: torch.nn.functional.mse_loss(net(xt), yt),
+            self.schedule,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[xt, yt],
+        )
         span = np.abs(x).max() if self.odd else None
         envelope = BoxEnvelope(np.array([-span]), np.array([span])) if self.odd else BoxEnvelope.of(x[:, None])
         return FittedLaw(

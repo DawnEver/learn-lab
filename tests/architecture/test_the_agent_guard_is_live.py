@@ -22,7 +22,7 @@ _SHIPPED: Final = frozenset({
     'BARE-INTERPRETER',
     'BARE-PYTHON',
     'BARE-TEST-INVOCATION',
-    'CONSENT-CODE-NEVER-TYPED',  # gained 2026-11-07 with dev-lab 83c4f29
+    'CONSENT-CODE-FROM-THE-USER',  # gained 2026-11-07 with dev-lab 83c4f29
     'FORGE-WRITE-VIA-CLI',
     'FORGE-WRITE-VIA-GH-API',
     'FORGE-WRITE-VIA-HTTP',
@@ -36,6 +36,7 @@ _SHIPPED: Final = frozenset({
     'PUSH-REMOTE-DELETE',
     'RECURSIVE-DELETE',  # gained 2026-10-29 with dev-lab e8b8991
     'RECURSIVE-GREP',
+    'REMOTE-WRITE-THROUGH-A-DOOR',  # gained 2026-11-08 with the dev-lab relock
     'REPORTS-LIVE-IN-MEMORY',
     'STATUS-VIA-DOORS',
     'SUBAGENT-NO-PUSH',

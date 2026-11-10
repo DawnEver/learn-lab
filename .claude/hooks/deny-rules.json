@@ -8,16 +8,16 @@
   },
   {
     "name": "SUBAGENT-NO-PUSH",
-    "pattern": "(?:git(?:\\.exe)?(?:\\s+-C\\s+\\S+)*\\s+push\\b|(?:sh\\s+)?\\S*with-retry\\.sh\\s+push\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab.dev\\.netverb\\b[^\\n]*\\spush\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.forge\\s+pr\\s+(?:create|ready)\\b|git(?:\\.exe)?\\b[^\\n]*\\s--no-verify\\b|SKIP=|\\$env:SKIP\\s*=)",
+    "pattern": "(?:git(?:\\.exe)?(?:\\s+-C\\s+\\S+)*\\s+push\\b|(?:sh\\s+)?\\S*with-retry\\.sh\\s+push\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab.dev\\.netverb\\b[^\\n]*\\spush\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.forge\\s+(?:pr\\s+create|pr\\s+ready|pr\\s+draft|pr\\s+close|pr\\s+continue|review\\s+carry|pr\\s+close\\-landed|pr\\s+close\\-superseded|pr\\s+breakglass|breakglass\\s+open|review\\s+takeover|review\\s+again|security\\s+release|cancel\\-stuck|sync)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.ops\\.consent\\s+(?:grant)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.integrate\\s+(?:promote)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.branchprune\\s+(?:delete)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.hpcaccount\\s+(?:deploy\\-fleet)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.opsserver(?![\\w.-])|gh(?:\\.exe)?\\s+workflow\\s+enable(?![\\w-])|gh(?:\\.exe)?\\s+workflow\\s+disable(?![\\w-])|git(?:\\.exe)?\\b[^\\n]*\\s--no-verify\\b|SKIP=|\\$env:SKIP\\s*=)",
     "matches": "command",
     "reason": "SUBAGENT-NO-PUSH: publishing is the main session`s, and a skipped hook publishes what nobody checked.\nCommit on your lane and hand the commit SHA back to the main session, which merges and pushes; a targeted measure of the tests you touched is yours.\ndetails: docs-src/dev/refusals.md#subagent-no-push (lab-commons)",
     "scope": "subagent"
   },
   {
-    "name": "CONSENT-CODE-NEVER-TYPED",
-    "pattern": "(?:(?:dev_lab\\.ops\\.consent\\b|\\bconsent\\s+(?:grant|serve|enrol)\\b|\\bbreakglass\\s+(?:open|enrol|serve)\\b|\\b[Tt][Oo][Tt][Pp]\\b)[^\\n;&|]*[\\s=][\"']?\\d{6}[\"']?(?=[\\s;&|)]|$)|\\b\\d{6}\\b[^\\n;&|]*\\|[^\\n;&]*(?:dev_lab\\.ops\\.consent\\b|\\bconsent\\s+(?:grant|serve|enrol)\\b|\\bbreakglass\\s+(?:open|enrol|serve)\\b|\\b[Tt][Oo][Tt][Pp]\\b)|(?:dev_lab\\.ops\\.consent\\b|\\bconsent\\s+(?:grant|serve|enrol)\\b|\\bbreakglass\\s+(?:open|enrol|serve)\\b|\\b[Tt][Oo][Tt][Pp]\\b)[^\\n]*<<<\\s*[\"']?\\d{6}[\"']?|(?:dev_lab\\.ops\\.consent\\b|\\bconsent\\s+(?:grant|serve|enrol)\\b|\\bbreakglass\\s+(?:open|enrol|serve)\\b|\\b[Tt][Oo][Tt][Pp]\\b)[^\\n]*<<-?\\s*[\"\\']?\\w+[\"\\']?[^\\n]*\\n\\s*[\"']?\\d{6}[\"']?\\s*(?:\\n|$)|(?:>|\\btee\\b|\\bcp\\b|\\bmv\\b|\\bmkdir\\b|\\btouch\\b|Set-Content|Out-File|Add-Content|New-Item|Copy-Item|Move-Item)[^\\n;&|]*\\.motronics[\\\\/]+state[\\\\/]+consent)",
+    "name": "CONSENT-CODE-FROM-THE-USER",
+    "pattern": "(?:>|\\btee\\b|\\bcp\\b|\\bmv\\b|\\bmkdir\\b|\\btouch\\b|Set-Content|Out-File|Add-Content|New-Item|Copy-Item|Move-Item)[^\\n;&|]*\\.motronics[\\\\/]+state[\\\\/]+consent",
     "matches": "line",
-    "reason": "CONSENT-CODE-NEVER-TYPED: a consent code is the USER's word: an agent typing, piping or planting one forges the consent.\nWrite the request JSON, hand the user `{python} -m dev_lab.ops.consent grant <request.json>` to run in their own terminal, then read the credential it wrote.\ndetails: docs-src/dev/refusals.md#consent-code-never-typed (lab-commons)"
+    "reason": "CONSENT-CODE-FROM-THE-USER: a consent credential is written by the grant from a code the USER gave; a planted one forges the consent.\nWrite the request JSON, ask the user for their Authenticator code, run `{python} -m dev_lab.ops.consent grant <request.json> --code <the code they gave>`, then read the credential it wrote.\ndetails: docs-src/dev/refusals.md#consent-code-from-the-user (lab-commons)"
   },
   {
     "name": "BARE-TEST-INVOCATION",
@@ -29,20 +29,20 @@
     "name": "FORGE-WRITE-VIA-CLI",
     "pattern": "(?:\\bgh\\s+(?:issue|pr)\\s+(?:create|comment|close|reopen|edit|review|merge|delete|lock|unlock|transfer|pin|unpin|ready|develop)\\b|\\btea\\s+(?:(?:issues?|i|pulls?|pr)\\s+(?:create|c|new|edit|e|close|reopen|open|merge|m|approve|reject|review|comment|delete)\\b|comment\\b|c\\s))",
     "matches": "command",
-    "reason": "FORGE-WRITE-VIA-CLI: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create|close; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-cli (lab-commons)"
+    "reason": "FORGE-WRITE-VIA-CLI: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create|ready|draft|close|continue, review carry; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-cli (lab-commons)"
   },
   {
     "name": "FORGE-WRITE-VIA-GH-API",
     "pattern": "\\bgh\\s+api\\b(?=[^\\n]*\\b(?:issues|pulls)\\b)(?=[^\\n]*(?:\\s(?:-X|--method)[\\s=]*(?:POST|PATCH|PUT|DELETE|Post|Patch|Put|Delete|post|patch|put|delete)\\b|\\s(?:-[fF]|--field|--raw-field|--input)\\b))",
     "matches": "command",
-    "reason": "FORGE-WRITE-VIA-GH-API: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create|close; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-gh-api (lab-commons)",
+    "reason": "FORGE-WRITE-VIA-GH-API: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create|ready|draft|close|continue, review carry; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-gh-api (lab-commons)",
     "allow": "\\bgh\\s+api\\b[^\\n]*\\s(?:-X|--method)[\\s=]*(?:GET|get)\\b"
   },
   {
     "name": "FORGE-WRITE-VIA-HTTP",
     "pattern": "(?=[^\\n]*(?:/api/v1/repos/|api\\.github\\.com/repos/)[^\\s/\\'\"]+/[^\\s/\\'\"]+/(?:issues|pulls)\\b)(?:\\bcurl\\b(?=[^\\n]*(?:\\s(?:-X|--request)[\\s=]*[\\'\"]?(?:POST|PATCH|PUT|DELETE|Post|Patch|Put|Delete|post|patch|put|delete)\\b|\\s(?:-d|--data(?:-raw|-binary|-urlencode)?|--json|-F|--form)\\b))|\\b(?:Invoke-RestMethod|Invoke-WebRequest|irm|iwr)\\b(?=[^\\n]*\\s-Method\\s+[\\'\"]?(?:POST|PATCH|PUT|DELETE|Post|Patch|Put|Delete|post|patch|put|delete)\\b))",
     "matches": "argument",
-    "reason": "FORGE-WRITE-VIA-HTTP: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create|close; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-http (lab-commons)"
+    "reason": "FORGE-WRITE-VIA-HTTP: a forge write through any client but the family door does not record which machine or agent wrote it.\nWrite through the family door: {python} -m dev_lab.dev.forge issue create|comment|close, pr create|ready|draft|close|continue, review carry; a verb it lacks is the integrator`s.\ndetails: docs-src/dev/refusals.md#forge-write-via-http (lab-commons)"
   },
   {
     "name": "GIT-COMMIT-AMEND",
@@ -98,20 +98,21 @@
     "name": "WORKTREES-STAY-INSIDE",
     "pattern": "(?:git(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))*\\s+(?:worktree\\s+(?:add|move)|clone)|(?:sh|bash)\\s+\\S*retry\\S*\\s+clone)\\b",
     "matches": "command",
-    "reason": "WORKTREES-STAY-INSIDE: a checkout outside its repository is outside every scan, ignore rule and search that repository runs.\nPut it inside: git worktree add --detach .claude/worktrees/<name> <sha> (with -C, <repo>/.claude/worktrees/<name>); relocate with git worktree move <tree> <repo>/.claude/worktrees/<name>.\ndetails: docs-src/dev/refusals.md#worktrees-stay-inside (lab-commons)",
-    "allow": "^(?![\\s\\S]*(?:\\bgit(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))*\\s+(?:worktree\\s+add(?!(?:\\s+(?:-[bB]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+)|--reason(?:=|\\s+)(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+)|--(?!reason\\b)[\\w-]+|-(?![bB](?:\\s|$))\\w+))*\\s+(?:\"(?![^\"\\n]*\\.\\.)(?:[^\"\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?\"|'(?![^'\\n]*\\.\\.)(?:[^'\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?'|(?![^\\s;&|()]*\\.\\.)(?:[^\\s\"\\';&|()]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?)(?=\\s|$|[;&|)]))|worktree\\s+move(?!(?:\\s+-\\S+)*\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+)\\s+(?:\"(?![^\"\\n]*\\.\\.)(?:[^\"\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?\"|'(?![^'\\n]*\\.\\.)(?:[^'\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?'|(?![^\\s;&|()]*\\.\\.)(?:[^\\s\"\\';&|()]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?)(?=\\s|$|[;&|)]))|clone(?!(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))*?\\s+(?:\"(?![^\"\\n]*\\.\\.)(?:[^\"\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?\"|'(?![^'\\n]*\\.\\.)(?:[^'\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?'|(?![^\\s;&|()]*\\.\\.)(?:[^\\s\"\\';&|()]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?)\\s*(?=$|[;&|)\\n])))|\\b(?:sh|bash)\\s+\\S*retry\\S*\\s+clone(?!(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))*?\\s+(?:\"(?![^\"\\n]*\\.\\.)(?:[^\"\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?\"|'(?![^'\\n]*\\.\\.)(?:[^'\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?'|(?![^\\s;&|()]*\\.\\.)(?:[^\\s\"\\';&|()]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?)\\s*(?=$|[;&|)\\n]))))"
+    "reason": "WORKTREES-STAY-INSIDE: a checkout outside its repository is outside every scan, ignore rule and search that repository runs.\nPut it inside: git worktree add --detach .claude/worktrees/<name> <sha>; relocate with git worktree move. A family repo clones beside its siblings.\ndetails: docs-src/dev/refusals.md#worktrees-stay-inside (lab-commons)",
+    "allow": "^(?![\\s\\S]*(?:\\bgit(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))*\\s+(?:worktree\\s+add(?!(?:\\s+(?:-[bB]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+)|--reason(?:=|\\s+)(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+)|--(?!reason\\b)[\\w-]+|-(?![bB](?:\\s|$))\\w+))*\\s+(?:\"(?![^\"\\n]*\\.\\.)(?:[^\"\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?\"|'(?![^'\\n]*\\.\\.)(?:[^'\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?'|(?![^\\s;&|()]*\\.\\.)(?:[^\\s\"\\';&|()]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?)(?=\\s|$|[;&|)]))|worktree\\s+move(?!(?:\\s+-\\S+)*\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+)\\s+(?:\"(?![^\"\\n]*\\.\\.)(?:[^\"\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?\"|'(?![^'\\n]*\\.\\.)(?:[^'\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?'|(?![^\\s;&|()]*\\.\\.)(?:[^\\s\"\\';&|()]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?)(?=\\s|$|[;&|)]))|clone(?!(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))*?\\s+(?:\"(?![^\"\\n]*\\.\\.)(?:[^\"\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?\"|'(?![^'\\n]*\\.\\.)(?:[^'\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?'|(?![^\\s;&|()]*\\.\\.)(?:[^\\s\"\\';&|()]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?)\\s*(?=$|[;&|)\\n])))|\\b(?:sh|bash)\\s+\\S*retry\\S*\\s+clone(?!(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))*?\\s+(?:\"(?![^\"\\n]*\\.\\.)(?:[^\"\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?\"|'(?![^'\\n]*\\.\\.)(?:[^'\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?'|(?![^\\s;&|()]*\\.\\.)(?:[^\\s\"\\';&|()]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+[\\w.-]+[\\\\/]?)\\s*(?=$|[;&|)\\n]))))",
+    "admits": "family-sibling-clone"
   },
   {
     "name": "BARE-INTERPRETER",
     "pattern": "(?:uv(?:\\.exe)?\\s+run\\b|uvx(?:\\.exe)?\\b)",
     "matches": "command",
-    "reason": "BARE-INTERPRETER: `uv run` or `uvx` runs an interpreter somebody else chose and may sync the checkout environment outside the checked dependency door.\nUse {python}, this worktree's own interpreter (main's is main-only); bootstrap a missing one with {python} -m dev_lab.dev.dep --bootstrap <worktree> (checked doors are agent-allowed, not arbitrary installers; allowed: Bash(.venv/*/python* *)).\ndetails: docs-src/dev/refusals.md#bare-interpreter (lab-commons)"
+    "reason": "BARE-INTERPRETER: `uv run` or `uvx` runs an interpreter somebody else chose and may sync the checkout environment outside the checked dependency door.\nUse {python}, this worktree's own interpreter (main's is main-only); bootstrap a missing one with {python} -m dev_lab.dev.dep --bootstrap <worktree> (checked doors are agent-allowed, not arbitrary installers or code).\ndetails: docs-src/dev/refusals.md#bare-interpreter (lab-commons)"
   },
   {
     "name": "BARE-PYTHON",
     "pattern": "(?:python(?:3(?:\\.\\d+)?)?|py)(?:\\.exe)?(?![\\w./\\\\-])(?!\\s+-m\\s+pytest\\b)",
     "matches": "command",
-    "reason": "BARE-PYTHON: a bare python/py runs the interpreter PATH chose, not this checkout's venv.\nUse {python}, this worktree's own interpreter (main's is main-only); bootstrap a missing one with {python} -m dev_lab.dev.dep --bootstrap <worktree> (checked doors are agent-allowed, not arbitrary installers; allowed: Bash(.venv/*/python* *)).\ndetails: docs-src/dev/refusals.md#bare-python (lab-commons)",
+    "reason": "BARE-PYTHON: a bare python/py runs the interpreter PATH chose, not this checkout's venv.\nUse {python}, this worktree's own interpreter (main's is main-only); bootstrap a missing one with {python} -m dev_lab.dev.dep --bootstrap <worktree> (checked doors are agent-allowed, not arbitrary installers or code).\ndetails: docs-src/dev/refusals.md#bare-python (lab-commons)",
     "severity": "hint"
   },
   {
@@ -149,6 +150,12 @@
     "name": "HPC-THROUGH-THE-DOOR",
     "pattern": "(?:(?:ssh|scp|sftp|rsync)\\b[^\\n;&|]*?[\\s@][\\w-]*[Ll][Oo][Gg][Ii][Nn][\\w-]*(?:\\.[\\w.-]+)?(?=[\\s:/\"\\x27]|$)|ssh\\b[^\\n]*?\\b(?:sbatch|srun|salloc|scancel)\\b|(?:sbatch|srun|salloc|scancel)\\b)",
     "matches": "command",
-    "reason": "HPC-THROUGH-THE-DOOR: an agent on an HPC login host or Slurm opens connections nobody budgets; a poll loop took the cluster's ssh down (2026-11-06).\nStatus: the forge host card, {python} -m dev_lab.dev.forge queue, forge run show <sha>; deploy: {python} -m dev_lab.dev.hpchost deploy, run by the user on the account; tests: push and let the forge run them.\ndetails: docs-src/dev/refusals.md#hpc-through-the-door (lab-commons)"
+    "reason": "HPC-THROUGH-THE-DOOR: an agent on an HPC login host or Slurm opens connections nobody budgets; a poll loop took the cluster's ssh down (2026-11-06).\nStatus: the forge host card, {python} -m dev_lab.dev.forge queue, run show; a cluster account: {python} -m dev_lab.dev.hpcaccount deploy-fleet, deploy (deploy is run by the user on the account); tests: push and let the forge run them.\ndetails: docs-src/dev/refusals.md#hpc-through-the-door (lab-commons)"
+  },
+  {
+    "name": "REMOTE-WRITE-THROUGH-A-DOOR",
+    "pattern": "(?:ssh(?:\\s+(?:-[oplJiFLRDwWcmbeEQS]\\s*\\S+|-[46AaCfGgKkMNnqsTtVvXxYy]+))*\\s+\\S+\\s+[\\'\"]?(?:[^\\n\\'\"]*[;&|]\\s*)?(?:sudo|rm|mv|cp|tee|install|mkdir|rmdir|chmod|chown|ln|truncate|dd|kill|pkill|reboot|shutdown|crontab|systemctl\\s+(?:start|stop|restart|reload|enable|disable|daemon-reload|mask|edit)|apt(?:-get)?|dnf|yum|pip3?|uv|git\\s+(?:pull|push|checkout|switch|reset|merge|clone|fetch|clean|stash)|docker\\s+(?:run|rm|stop|start|restart|compose|pull|exec)|[\\w./-]*python[\\w.]*\\s+-m\\s+dev_lab\\.ops)\\b|(?:scp|rsync)\\b[^\\n;&|]*\\s\\S*[\\w.-]:\\S*\\s*$)",
+    "matches": "command",
+    "reason": "REMOTE-WRITE-THROUGH-A-DOOR: a hand-written write to a remote host leaves no record of which door, host or reason changed it.\nA server: {python} -m dev_lab.dev.opsserver <server> <verb> [<unit>]; a cluster account: {python} -m dev_lab.dev.hpcaccount deploy-fleet, deploy. Read-only ssh is open.\ndetails: docs-src/dev/refusals.md#remote-write-through-a-door (lab-commons)"
   }
 ]

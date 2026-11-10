@@ -63,6 +63,7 @@ _RESPONSE: Final = 'learn_lab.models.response.'
 FAMILIES: Final[dict[str, tuple[str, str]]] = {
     'polynomial': (f'{_RESPONSE}polynomial:Polynomial', f'{_RESPONSE}polynomial:FittedPolynomial'),
     'power_law': (f'{_RESPONSE}power_law:PowerLaw', f'{_RESPONSE}power_law:FittedPowerLaw'),
+    'loss_law_residual': (f'{_RESPONSE}loss_law:LossLawResidual', f'{_RESPONSE}loss_law:FittedLossLawResidual'),
     'radial_basis': (f'{_RESPONSE}radial_basis:RadialBasis', f'{_RESPONSE}radial_basis:FittedRadialBasis'),
     'gaussian_process': (
         f'{_RESPONSE}gaussian_process:GaussianProcess',
@@ -111,6 +112,7 @@ def _vector(envelope: BoxEnvelope, k: int) -> dict:
 _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'polynomial': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
     'power_law': lambda f: _vector(f.envelope, f.level.size),
+    'loss_law_residual': lambda f: _vector(f.envelope, f.level.size),
     'radial_basis': lambda f: _vector(f.envelope, f.weights.shape[1]),
     'gaussian_process': lambda f: _vector(f.envelope, len(f.columns)),
     'gradient_enhanced_kriging': lambda f: _vector(f.envelope, len(f.columns)),

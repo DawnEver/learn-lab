@@ -81,6 +81,11 @@ class Term:
         return ((self.residual / self.scale) ** 2).mean()
 
 
+#: The balance rules: ``fixed``; ``gradient_norm`` (max/mean, unbounded); ``normalised_gradient`` (mean/mean
+#: targets scaled to sum to the term count, so every weight stays in [0, N] and no term can be starved).
+RULES = ('fixed', 'gradient_norm', 'normalised_gradient')
+
+
 @dataclass(frozen=True, slots=True)
 class Balance:
     """How the dimensionless terms are weighted: ``fixed`` (all 1) or ``gradient_norm`` against ``reference``."""
@@ -91,10 +96,10 @@ class Balance:
     every: int = 10
 
     def __post_init__(self) -> None:
-        if self.rule not in ('fixed', 'gradient_norm'):
-            refuse(f"a balance rule is 'fixed' or 'gradient_norm', got {self.rule!r}")
-        if self.rule == 'gradient_norm' and not self.reference:
-            refuse('a gradient_norm balance names its reference condition (the PDE interior)')
+        if self.rule not in RULES:
+            refuse(f'a balance rule is one of {RULES}, got {self.rule!r}')
+        if self.rule != 'fixed' and not self.reference:
+            refuse(f'a {self.rule} balance names its reference condition (the PDE interior)')
         if not 0.0 < self.alpha <= 1.0:
             refuse(f'a balance alpha is in (0, 1], got {self.alpha}')
         if self.every < 1:
@@ -227,6 +232,14 @@ class PhysicsInformedField:
             ])
 
         b = self.balance
+        if b.rule == 'normalised_gradient':
+            means = {name: float(grads(value).mean()) for name, value in terms.items()}
+            ref = means[b.reference]
+            targets = {n: (ref / m if m > 0.0 else weights[n]) for n, m in means.items()}
+            scale = len(targets) / sum(targets.values())
+            for name, target in targets.items():
+                weights[name] = (1.0 - b.alpha) * weights[name] + b.alpha * target * scale
+            return
         peak = float(grads(terms[b.reference]).max())
         for name, value in terms.items():
             mean = float(grads(value).mean()) if name != b.reference else 0.0

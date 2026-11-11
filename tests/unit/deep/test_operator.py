@@ -5,6 +5,7 @@ import pytest
 
 from learn_lab.deep.fit import Schedule
 from learn_lab.deep.operator import FNO, DeepONet
+from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
 MODES = np.arange(1, 6)
@@ -76,3 +77,36 @@ def test_a_2d_fno_runs_and_refuses_a_grid_too_coarse_for_its_modes():
         fitted.predict(x[:, :, ::4, ::4])
     with pytest.raises(Refused, match='invalid'):
         fitted.predict(x[:, :, 0])
+
+
+def test_a_chunked_fno_fit_equals_the_one_pass_fit():
+    x = np.random.default_rng(3).standard_normal((10, 1, 16, 16))
+    fits = [
+        FNO(
+            modes=(3, 3),
+            width=8,
+            layers=2,
+            schedule=Schedule(adam_steps=3),
+            runtime=Runtime(dtype='float64'),
+            chunk=chunk,
+        ).fit(x, x[:, :1] ** 2)
+        for chunk in (None, 3)
+    ]
+    assert fits[0].history == pytest.approx(fits[1].history, rel=1e-10, abs=1e-12)  # standardised loss, dimensionless
+    np.testing.assert_allclose(fits[1].predict(x), fits[0].predict(x), rtol=1e-9, atol=1e-12)
+    with pytest.raises(Refused, match='chunk'):
+        FNO(chunk=0)
+
+
+def test_a_finer_grid_of_the_training_functions_is_in_domain_and_a_larger_one_is_not():
+    coarse, fine = np.linspace(0, 1, 17), np.linspace(0, 1, 129)
+    fitted = FNO(modes=(4,), width=8, layers=1, schedule=Schedule(adam_steps=1)).fit(
+        _source(TRAIN, coarse)[:, None], _solution(TRAIN, coarse)[:, None]
+    )
+    finer = _source(TRAIN, fine)[:, None]
+    assert finer.max() > _source(TRAIN, coarse).max()  # the raw value box alone WOULD refuse this query
+    assert fitted.predict(finer).shape == (len(TRAIN), 1, fine.size)
+    # PLANTED CONTROL: the same functions scaled past the training amplitudes are refused at any resolution.
+    for grid in (coarse, fine):
+        with pytest.raises(Refused, match='out_of_domain'):
+            fitted.predict(2.0 * _source(TRAIN, grid)[:, None])

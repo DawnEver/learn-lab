@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from learn_lab.deep.constitutive import MonotoneLaw
+from learn_lab.deep.fit import Schedule
 from learn_lab.errors import Refused
 
 
@@ -77,3 +78,34 @@ def test_a_classical_newton_solve_with_the_learned_law_matches_the_true_law(law)
     hybrid = _newton(law.value, law.derivative)
     assert np.max(np.abs(_gradients(exact))) > 1.0  # T: the solve reaches the knee, not the linear region
     assert np.max(np.abs(hybrid - exact)) < 0.01 * np.max(np.abs(exact))  # unit of u
+
+
+def _steel(h):
+    """A B(H) shape spanning four decades of H (A/m -> T): odd, monotone, saturating."""
+    return 1.6 * np.tanh(h / 300.0) + 0.05 * np.arcsinh(h / 50.0) + 4e-6 * h
+
+
+DECADES = np.logspace(1.0, 5.0, 60)
+LOW = np.logspace(1.02, 2.0, 12)  # A/m: the low-field decade, held out
+POLISHED = Schedule(adam_steps=3000, learning_rate=3e-3, lbfgs_steps=3000)
+
+
+def _low_field_error(loss):
+    x = np.concatenate([-DECADES[::-1], DECADES])
+    law = MonotoneLaw(loss=loss, schedule=POLISHED).fit(x, _steel(x))
+    return np.max(np.abs(law.value(LOW) - _steel(LOW)) / _steel(LOW)), law
+
+
+def test_a_relative_loss_fits_a_decades_spanning_law_uniformly_where_mse_misses_the_low_end():
+    mse, _ = _low_field_error('mse')
+    relative, law = _low_field_error('relative')
+    assert mse > 0.02  # PLANTED CONTROL: plain MSE misses the low-field decade by more than 2 %
+    assert relative < 0.01  # dimensionless: the relative loss holds the low end within 1 %
+    assert np.all(law.derivative(LOW) > 0)
+    np.testing.assert_allclose(law.value(-LOW), -law.value(LOW), rtol=0, atol=1e-12)  # T: exact oddness
+
+
+def test_mse_is_the_default_loss_and_an_unknown_loss_is_refused():
+    assert MonotoneLaw().loss == 'mse'
+    with pytest.raises(Refused, match='loss'):
+        MonotoneLaw(loss='huber').fit(np.array([1.0, 2.0]), np.array([1.0, 2.0]))

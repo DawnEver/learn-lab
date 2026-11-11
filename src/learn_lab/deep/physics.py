@@ -199,6 +199,7 @@ class PhysicsInformedField:
     balance: Balance = field(default_factory=Balance)
     continuation: Sequence[Continuation] = ()
     resample: Resample | None = None
+    input_scale: bool = False  # a learned per-coordinate input factor (networks.InputScale) before the first layer
 
     def fit(
         self,
@@ -217,7 +218,9 @@ class PhysicsInformedField:
         rt = self.runtime
         rt.seeded()
         dim = provider.domain.width
-        net = MLP([dim, *self.hidden, provider.outputs]).to(rt.torch_device, rt.torch_dtype)
+        net = MLP([dim, *self.hidden, provider.outputs], input_scale=self.input_scale).to(
+            rt.torch_device, rt.torch_dtype
+        )
         params = {
             name: torch.tensor(
                 float(value), dtype=rt.torch_dtype, device=rt.torch_device, requires_grad=name in identify

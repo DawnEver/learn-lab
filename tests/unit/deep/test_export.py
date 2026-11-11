@@ -1,4 +1,4 @@
-"""Export: a fitted U-Net as ONNX (raw in, raw out, static shape) and as f16/int8 OpenVINO IR, each sealed.
+"""Export: a fitted U-Net and an FNO as ONNX (raw in, raw out, static shape) and as f16/int8 OpenVINO IR, each sealed.
 
 Every runtime here is OpenVINO on the CPU; torch trains and answers on the CPU in float32.
 """
@@ -19,7 +19,7 @@ import openvino as ov
 from learn_lab.deep import export
 from learn_lab.deep.field import FieldModel
 from learn_lab.deep.fit import Schedule
-from learn_lab.deep.operator import FNO
+from learn_lab.deep.operator import FNO, DeepONet
 from learn_lab.deep.runtime import Runtime
 from learn_lab.equivalence import Statistic, Tolerance, equivalence
 from learn_lab.errors import Refused
@@ -100,10 +100,51 @@ def test_a_changed_byte_an_existing_path_and_a_stranger_example_are_refused(fitt
 
 
 def test_a_family_that_does_not_export_is_refused_by_name(tmp_path):
-    x = np.random.default_rng(0).uniform(-1, 1, (4, 1, 16))
-    fno = FNO(modes=(4,), width=4, layers=1, schedule=Schedule(adam_steps=1), runtime=CPU32).fit(x, x)
-    with pytest.raises(Refused, match="fno fit does not export.*'field_model'"):
-        export.to_onnx(fno, tmp_path / 'fno', example=x)
+    rng = np.random.default_rng(0)
+    u, y = rng.uniform(-1, 1, (4, 3)), rng.uniform(0, 1, (5, 1))
+    onet = DeepONet(hidden=(4,), basis=2, schedule=Schedule(adam_steps=1), runtime=CPU32).fit(u, y, np.ones((4, 5)))
+    with pytest.raises(Refused, match="deep_onet fit does not export.*'field_model', 'fno'"):
+        export.to_onnx(onet, tmp_path / 'onet', example=u)
+
+
+@pytest.fixture(scope='module')
+def fno_fitted():
+    x = np.random.default_rng(0).uniform(-1, 1, (256, 1, GRID, GRID))
+    model = FNO(modes=(4, 4), width=8, layers=2, schedule=Schedule(adam_steps=300, learning_rate=3e-3), runtime=CPU32)
+    return model.fit(x, _truth(x))
+
+
+@pytest.fixture(scope='module')
+def fno_exported(fno_fitted, queries, tmp_path_factory):
+    return export.to_onnx(fno_fitted, tmp_path_factory.mktemp('export') / 'fno', example=queries[:BATCH])
+
+
+def test_an_fno_exports_its_spectral_layers_as_real_arithmetic_on_the_static_grid(fno_fitted, fno_exported, queries):
+    """ONNX holds no complex tensor, so torch.fft cannot export; on one static grid the kept-mode DFT is exact."""
+    record = export.manifest(fno_exported)
+    assert record['family'] == 'fno'
+    assert record['input'] == {'name': 'x', 'shape': [BATCH, 1, GRID, GRID], 'dtype': 'float32'}
+    run = _openvino.compile_on(ov.Core(), fno_exported, 'CPU')
+    assert run.precision == 'f32'
+    reference = fno_fitted.predict(queries)
+    scale = float(np.max(np.abs(reference)))
+    assert np.max(np.abs(_batched(run)(queries) - reference)) < SAME_PRECISION * scale
+
+
+def test_a_1d_fno_exports_too(tmp_path):
+    x = np.random.default_rng(0).uniform(-1, 1, (16, 2, 15))  # odd grid: no Nyquist bin
+    fno = FNO(modes=(8,), width=4, layers=1, schedule=Schedule(adam_steps=20), runtime=CPU32).fit(x, x[:, :1] ** 2)
+    run = _openvino.compile_on(ov.Core(), export.to_onnx(fno, tmp_path / 'fno1', example=x), 'CPU')
+    reference = fno.predict(x)
+    assert np.max(np.abs(run(x) - reference)) < SAME_PRECISION * float(np.max(np.abs(reference)))
+
+
+@pytest.mark.parametrize('precision', ['f16', 'int8'])
+def test_a_quantized_fno_is_judged_on_the_models_own_statistic(fno_fitted, fno_exported, queries, precision):
+    path = export.quantize(fno_exported, queries, precision=precision)
+    assert export.manifest(path)['family'] == 'fno'
+    run = _batched(_openvino.compile_on(ov.Core(), path, 'CPU'))
+    equivalence(fno_fitted.predict, run, queries, statistic=RELATIVE_L2, tolerance=QUANTIZED)
 
 
 @pytest.mark.parametrize('precision', ['f16', 'int8'])

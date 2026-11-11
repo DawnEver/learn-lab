@@ -23,6 +23,7 @@ prediction's, and the gradient is the law's exact one plus the residual's (chain
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -34,7 +35,7 @@ from learn_lab.models.response.gaussian_process import GaussianProcess
 from learn_lab.protocol import Give, Prediction, Surrogate, query_points, require_gives, training_data
 from learn_lab.validity import BoxEnvelope
 
-__all__ = ['TEXTBOOK_EXPONENTS', 'FittedLossLawResidual', 'LossLawResidual']
+__all__ = ['DRIVER', 'TEXTBOOK_EXPONENTS', 'FittedLossLawResidual', 'LossLawResidual', 'scale', 'scale_terms']
 
 #: ``(frequency exponent, driver exponent)`` per loss term.
 TEXTBOOK_EXPONENTS: Final = {
@@ -44,7 +45,7 @@ TEXTBOOK_EXPONENTS: Final = {
     'magnet_eddy': (2.0, 2.0),
 }
 #: The amplitude each term scales with: flux linkage for iron, current for the magnet.
-_DRIVER: Final = {'hysteresis': 'flux', 'classical': 'flux', 'excess': 'flux', 'magnet_eddy': 'current'}
+DRIVER: Final = {'hysteresis': 'flux', 'classical': 'flux', 'excess': 'flux', 'magnet_eddy': 'current'}
 #: Each driver: its direct column, else its components (a product for frequency, a hypot otherwise).
 _SOURCES: Final = {
     'frequency': ('frequency', ('speed',), ('pole_pairs',)),
@@ -53,6 +54,26 @@ _SOURCES: Final = {
 }
 #: A training loss below this fraction of its column's largest is negligible and refused as an anchor.
 NEGLIGIBLE: Final = 1e-9
+
+
+def scale(p_ref, *, f_ratio, d_ratio, exponents: tuple[float, float]):
+    """The law from one anchor: ``p_ref * f_ratio**a * d_ratio**b``, broadcasting scalars and arrays.
+
+    *exponents* is ``(a, b)`` = (frequency, driver); *d_ratio* is the ratio of the term's :data:`DRIVER` amplitude.
+    """
+    a, b = exponents
+    return p_ref * f_ratio**a * d_ratio**b
+
+
+def scale_terms(
+    p_ref: Mapping[str, object],
+    *,
+    f_ratio,
+    d_ratio,
+    exponents: Mapping[str, tuple[float, float]] = TEXTBOOK_EXPONENTS,
+) -> dict[str, object]:
+    """:func:`scale` per loss term of *p_ref*, each with its own entry of *exponents*."""
+    return {term: scale(p, f_ratio=f_ratio, d_ratio=d_ratio, exponents=exponents[term]) for term, p in p_ref.items()}
 
 
 def _columns(inputs: tuple[str, ...], driver: str) -> tuple[str, tuple[int, ...]]:
@@ -112,7 +133,7 @@ class LossLawResidual:
             refuse(f'each input column is named once by a non-empty string, got {inputs}')
         if not terms or any(t not in TEXTBOOK_EXPONENTS for t in terms):
             refuse(f'a loss term is one of {list(TEXTBOOK_EXPONENTS)}, got {terms}')
-        for driver in {'frequency', *(_DRIVER[t] for t in terms)}:
+        for driver in {'frequency', *(DRIVER[t] for t in terms)}:
             _columns(inputs, driver)
         exponents = tuple(TEXTBOOK_EXPONENTS[t] for t in terms) if self.exponents is None else self.exponents
         exponents = tuple((float(a), float(b)) for a, b in exponents)
@@ -141,9 +162,9 @@ class LossLawResidual:
         frequency, _ = _driver(x, *_columns(self.inputs, 'frequency'))
         exponents, level = np.empty((len(self.terms), 2)), np.empty(len(self.terms))
         for k, term in enumerate(self.terms):
-            amplitude, _ = _driver(x, *_columns(self.inputs, _DRIVER[term]))
+            amplitude, _ = _driver(x, *_columns(self.inputs, DRIVER[term]))
             if np.any(frequency <= 0) or np.any(amplitude <= 0):
-                refuse(f'the {term} law is anchored on strictly positive frequency and {_DRIVER[term]} drivers')
+                refuse(f'the {term} law is anchored on strictly positive frequency and {DRIVER[term]} drivers')
             logs = np.column_stack([np.log(frequency), np.log(amplitude)])
             if self.fit_exponents:
                 solution = least_squares(np.column_stack([np.ones(n), logs]), np.log(y[:, k : k + 1]))[:, 0]
@@ -176,9 +197,9 @@ class FittedLossLawResidual:
         frequency, df = _driver(x, *_columns(self.inputs, 'frequency'))
         means, slopes = [], []
         for k, term in enumerate(self.terms):
-            amplitude, da = _driver(x, *_columns(self.inputs, _DRIVER[term]))
+            amplitude, da = _driver(x, *_columns(self.inputs, DRIVER[term]))
             a, b = self.exponents[k]
-            mean = np.exp(self.level[k]) * frequency**a * amplitude**b
+            mean = scale(np.exp(self.level[k]), f_ratio=frequency, d_ratio=amplitude, exponents=(a, b))
             means.append(mean)
             slopes.append(mean[:, None] * (a * df + b * da))
         return np.column_stack(means), np.stack(slopes, axis=1)

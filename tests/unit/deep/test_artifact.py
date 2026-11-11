@@ -241,3 +241,11 @@ def test_a_cuda_placement_on_a_box_without_cuda_is_refused_by_the_runtime(tmp_pa
     monkeypatch.setattr(torch.cuda, 'is_available', lambda: False)
     with pytest.raises(Refused, match='sees no CUDA device'):
         artifact.load(path, device='cuda')
+
+
+def test_a_monotone_law_records_the_loss_it_was_fitted_with(tmp_path) -> None:
+    _, fit, _, _ = CASES['monotone_law']
+    for loss in ('mse', 'relative'):
+        declaration = MonotoneLaw(hidden=4, schedule=FEW, runtime=CPU64, loss=loss)
+        path = artifact.save(fit(declaration), tmp_path / loss, declaration=declaration, data_identity=IDENTITY)
+        assert artifact.manifest(path)['declaration']['fields']['loss'] == loss

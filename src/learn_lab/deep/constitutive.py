@@ -5,11 +5,17 @@ The fitted law crosses the numpy boundary as two plain callables, :meth:`FittedL
 never imports learn-lab, it is handed a callable). Monotonicity gives ``f' > 0`` everywhere, so the
 solver's tangent never vanishes or flips sign; ``odd`` makes ``f(-x) = -f(x)`` exact (B-H through zero).
 The law is valid on the measured range only: a query outside it is refused.
+
+``loss`` picks what the fit makes uniform: ``'mse'`` (the default) the ABSOLUTE error, so a law spanning
+decades is fitted at its large end; ``'relative'`` the error RELATIVE to ``|y|`` at each sample, so every
+decade is fitted alike (a B-H curve over four decades of H). The divisor is floored at the smallest nonzero
+``|y|`` so a sample at ``y = 0`` stays finite.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Final
 
 import numpy as np
 import torch
@@ -20,7 +26,18 @@ from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
 from learn_lab.validity import BoxEnvelope
 
-__all__ = ['FittedLaw', 'MonotoneLaw']
+__all__ = ['LOSSES', 'FittedLaw', 'MonotoneLaw']
+
+#: The losses a law fits with; see the module docstring.
+LOSSES: Final = ('mse', 'relative')
+
+
+def _sample_weights(loss: str, y: np.ndarray) -> np.ndarray:
+    if loss == 'mse':
+        return np.ones_like(y)
+    nonzero = np.abs(y[y != 0])
+    floor = float(nonzero.min()) if nonzero.size else 1.0
+    return 1.0 / np.maximum(np.abs(y), floor) ** 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,20 +46,25 @@ class MonotoneLaw:
     odd: bool = True
     schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=3000, learning_rate=1e-2, lbfgs_steps=200))
     runtime: Runtime = field(default_factory=Runtime)
+    loss: str = 'mse'
 
     def fit(self, x: np.ndarray, y: np.ndarray, *, checkpoint: Checkpoint | None = None) -> FittedLaw:
         x, y = np.asarray(x, float).ravel(), np.asarray(y, float).ravel()
         if x.shape != y.shape or x.size < 2:
             refuse(f'a law is fitted on matched pairs (n >= 2), got {x.shape} and {y.shape}')
+        if self.loss not in LOSSES:
+            refuse(f'loss is one of {LOSSES}, got {self.loss!r}')
         rt = self.runtime
         rt.seeded()
         # Scale without shifting: a shift would break the exact oddness of the law.
         x_scale, y_scale = float(np.max(np.abs(x))) or 1.0, float(np.max(np.abs(y))) or 1.0
         net = MonotoneScalar(self.hidden, odd=self.odd).to(rt.torch_device, rt.torch_dtype)
         xt, yt = rt.tensor(x / x_scale), rt.tensor(y / y_scale)
+        w = _sample_weights(self.loss, y / y_scale)
+        wt = rt.tensor(w / w.mean())
         history = minimise(
             net.parameters(),
-            lambda: torch.nn.functional.mse_loss(net(xt), yt),
+            lambda: torch.mean(wt * (net(xt) - yt) ** 2),
             self.schedule,
             checkpoint=checkpoint,
             config=repr(self),

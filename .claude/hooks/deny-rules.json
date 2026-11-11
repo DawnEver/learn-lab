@@ -15,7 +15,7 @@
   },
   {
     "name": "CONSENT-CODE-FROM-THE-USER",
-    "pattern": "(?:>|\\btee\\b|\\bcp\\b|\\bmv\\b|\\bmkdir\\b|\\btouch\\b|Set-Content|Out-File|Add-Content|New-Item|Copy-Item|Move-Item)[^\\n;&|]*\\.motronics[\\\\/]+state[\\\\/]+consent",
+    "pattern": "(?:>|\\btee\\b|\\bcp\\b|\\bmv\\b|\\bmkdir\\b|\\btouch\\b|Set-Content|Out-File|Add-Content|New-Item|Copy-Item|Move-Item)[^\\n;&|]*[\\\\/]+state[\\\\/]+consent(?![^\\s\\\\/\"\\';&|])",
     "matches": "line",
     "reason": "CONSENT-CODE-FROM-THE-USER: a consent credential is written by the grant from a code the USER gave; a planted one forges the consent.\nWrite the request JSON, ask the user for their Authenticator code, run `{python} -m dev_lab.ops.consent grant <request.json> --code <the code they gave>`, then read the credential it wrote.\ndetails: docs-src/dev/refusals.md#consent-code-from-the-user (lab-commons)"
   },

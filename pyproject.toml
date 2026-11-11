@@ -92,6 +92,12 @@ integration = "integrate/main"
 merges_only_since = "8be94e3889513c57967f1c4bc8f891512fac5a7a"  # INTEGRATION-IS-MERGES-ONLY after the founding commits
 pr_merges_since = "c623e25949988135489296ad4562d05334a0dcec"  # INTEGRATION-TAKES-ONLY-FORGE-MERGES after the integration branch was created
 
+# FORGE-PROTECTION-DECLARED (dev_lab.dev.forgeprotect): the bypass identities per forge; on GitHub the
+# ops App and the repo admin (integrator ruling 2026-11-10). `python -m dev_lab.dev.forge protect plan|check|apply`.
+[tool.dev_lab.protection]
+[tool.dev_lab.protection.forges."github.com"]
+breakglass = ["app:5704921", "role:admin"]  # the ops App (motronics-ops) merges break-glass; admin stays
+
 # GitHub Actions: the family's one PR lifecycle (dev_lab/dev/ci_base.toml) as is; rendered to
 # .github/workflows/ci.yml by `python -m dev_lab.dev.ciworkflows render`, never hand-edited.
 [tool.dev_lab.ci."ci.yml"]

@@ -137,7 +137,11 @@ def quantize(
     model = ov.convert_model(source / ONNX)
     if precision == 'int8':
         batches = list(calibration.reshape(-1, *shape))
-        model = nncf.quantize(model, nncf.Dataset(batches), subset_size=len(batches))
+        # MIXED: asymmetric activations. The fields are signed and their outputs skewed, so a symmetric range
+        # spends half its codes on values that never occur (measured: 0.0072 -> 0.0040 worse than f32).
+        model = nncf.quantize(
+            model, nncf.Dataset(batches), subset_size=len(batches), preset=nncf.QuantizationPreset.MIXED
+        )
     target.mkdir()
     ov.save_model(model, target / IR[0], compress_to_fp16=precision == 'f16')
     derived = {k: record[k] for k in ('family', 'schema', 'input', 'output', 'opset')}

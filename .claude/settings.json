@@ -7,6 +7,10 @@
           {
             "type": "command",
             "command": "e=\"$CLAUDE_PROJECT_DIR/.claude/hooks/deny-commands.js\"; [ -f \"$e\" ] || { echo \"agent-guard: no engine at $e -- refused (fail closed); re-install: node $CLAUDE_PROJECT_DIR/.claude/hooks/py.js -m dev_lab.dev.hook_install --install\" >&2; exit 2; }; node \"$e\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/deny-rules.json\" || { echo \"agent-guard: the engine exited $? -- refused (fail closed)\" >&2; exit 2; }"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.journaldoor"
           }
         ]
       }

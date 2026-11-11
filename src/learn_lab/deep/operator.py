@@ -8,6 +8,14 @@
   map, so the trained weights do not depend on the grid: a finer grid of the same unit domain is in-domain;
   a grid too coarse to hold the modes is refused. The grid's coordinates in ``[0, 1]`` are appended as
   input channels.
+
+  The FNO's envelope is a per-channel value box over the input functions AT THE TRAINING NODES. A query on
+  another grid is judged by its values linearly interpolated onto those nodes, never by its own samples: a
+  finer grid samples peaks the training nodes straddled, so its raw range grows with resolution although the
+  function is the same. The judged function is the training-grid view of the query -- no margin is added, and
+  a function whose values at the training nodes leave the box is OUT_OF_DOMAIN at every resolution.
+  ``chunk`` evaluates the full-batch loss that many samples at a time with activation checkpointing (as
+  :class:`~learn_lab.deep.field.FieldModel`): the gradient is the full batch's, peak memory ``chunk x width``.
 """
 
 from __future__ import annotations
@@ -19,6 +27,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 from torch import nn
+from torch.utils.checkpoint import checkpoint as recomputed
 
 from learn_lab.deep.fit import Checkpoint, Schedule, minimise
 from learn_lab.deep.networks import MLP
@@ -181,6 +190,15 @@ class _FNONet(nn.Module):
         return _pointwise(self.head, h)
 
 
+def _onto(x: np.ndarray, grid: Sequence[int]) -> np.ndarray:
+    """``x (n, c, *axes)`` on a uniform grid of the unit domain, linearly interpolated onto the nodes ``grid``."""
+    for axis, size in enumerate(grid, start=2):
+        if x.shape[axis] != size:
+            nodes = np.linspace(0.0, 1.0, x.shape[axis])
+            x = np.apply_along_axis(lambda f: np.interp(np.linspace(0.0, 1.0, size), nodes, f), axis, x)
+    return x
+
+
 def _require_modes_fit(modes: Sequence[int], grid: Sequence[int]) -> None:
     short = any(n < 2 * m for n, m in zip(grid[:-1], modes[:-1], strict=True)) or grid[-1] // 2 + 1 < modes[-1]
     if short:
@@ -195,8 +213,11 @@ class FNO:
     schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=2000, learning_rate=3e-3))
     runtime: Runtime = field(default_factory=lambda: Runtime(dtype='float32'))
     margin: float = 0.0
+    chunk: int | None = 32
 
     def __post_init__(self) -> None:
+        if self.chunk is not None and (isinstance(self.chunk, bool) or self.chunk < 1):
+            refuse(f'a chunk is a sample count >= 1 (or None for one pass), got {self.chunk!r}')
         if len(self.modes) not in {1, 2} or min(self.modes) < 1:
             refuse(f'an FNO keeps >= 1 mode on each of 1 or 2 axes, got modes={self.modes}')
 
@@ -215,13 +236,24 @@ class FNO:
         net = net.to(rt.torch_device, rt.torch_dtype)
         xt, yt = rt.tensor(sx.forward(x)), rt.tensor(sy.forward(y))
 
+        chunk = self.chunk
+
+        def squared(xc: torch.Tensor, yc: torch.Tensor) -> torch.Tensor:
+            return ((net(xc) - yc) ** 2).sum()
+
         def loss() -> torch.Tensor:
-            return ((net(xt) - yt) ** 2).mean()
+            if chunk is None or chunk >= len(xt):
+                return squared(xt, yt) / yt.numel()
+            parts = (
+                recomputed(squared, xt[i : i + chunk], yt[i : i + chunk], use_reentrant=False)
+                for i in range(0, len(xt), chunk)
+            )
+            return torch.stack(list(parts)).sum() / yt.numel()
 
         history = minimise(
             net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, yt]
         )
-        envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
+        envelope = ChannelEnvelope.of(x, margin=self.margin)
         return FittedFNO(
             net=net.eval(), modes=self.modes, runtime=rt, envelope=envelope, inputs=sx, outputs=sy, history=history
         )
@@ -242,7 +274,9 @@ class FittedFNO:
         x = np.asarray(x, float)
         if x.ndim != 2 + len(self.modes):
             refuse(f'an FNO query of shape {x.shape} is invalid: it takes (n, c, *{len(self.modes)} grid axes)')
-        x = self.envelope.require(x, 'an FNO query')
+        if x.shape[1] != self.envelope.channels:
+            refuse(f'an FNO query of shape {x.shape} is invalid: it takes {self.envelope.channels} input channels')
         _require_modes_fit(self.modes, x.shape[2:])
+        self.envelope.require(_onto(x, self.envelope.shape), 'an FNO query (at the training nodes)')
         with torch.no_grad():
             return self.outputs.back(numpy(self.net(self.runtime.tensor(self.inputs.forward(x)))))

@@ -12,7 +12,9 @@ The consumer owns the runtime; learn-lab exports and offers :func:`learn_lab.equ
   inputs. Whether that precision is ADMITTED is not decided here: judge it per model with ``equivalence``.
 - :func:`manifest` returns a directory's verified manifest; one changed byte is refused.
 
-A family whose graph does not export cleanly is refused by name (:data:`EXPORTABLE` lists those that do).
+A family whose graph does not export cleanly is refused by name (:data:`EXPORTABLE` lists those that do). ONNX
+holds no complex tensor, so an FNO's ``torch.fft`` layers are exported as their exact real-arithmetic twin on the
+one static grid: the kept-mode DFT and its inverse are fixed cosine/sine matrices (:class:`_StaticSpectral`).
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - the extra is the one re
 
 from learn_lab.artifact import canonical, family_of, sha256
 from learn_lab.deep.artifact import schema
+from learn_lab.deep.operator import SpectralConv
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
 
@@ -74,6 +77,71 @@ def _grid(fitted: object) -> nn.Module:
     return _Raw(net, fitted.inputs, fitted.outputs, len(fitted.envelope.shape))
 
 
+class _StaticSpectral(nn.Module):
+    """:class:`~learn_lab.deep.operator.SpectralConv` on the fixed grid *sizes* in real arithmetic, for ONNX.
+
+    The truncated ``rfftn`` is a linear map onto the kept modes: on the last axis ``x @ (cos, -sin)`` onto
+    ``0..m-1``; on each earlier axis a complex DFT onto ``0..m-1`` then ``n-m..n-1`` (the block order of the
+    layer's corners). The inverse sums the same modes back, the last axis weighting each one-sided bin by 2 except
+    DC and an even grid's Nyquist, whose imaginary part ``irfft`` drops -- as the sine term vanishes there.
+    """
+
+    def __init__(self, layer: SpectralConv, sizes: tuple[int, ...]) -> None:
+        super().__init__()
+        self.register_buffer('real', layer.real.detach().clone())
+        self.register_buffer('imag', layer.imag.detach().clone())
+        *front, (n, m) = zip(sizes, layer.modes, strict=True)
+        self.front = len(front)
+        k = np.arange(m)
+        angle = 2 * np.pi * np.outer(np.arange(n), k) / n  # (n, m)
+        weight = np.where((k == 0) | (2 * k == n), 1.0, 2.0) / n
+        self._buffer('last_cos', np.cos(angle))
+        self._buffer('last_sin', np.sin(angle))
+        self._buffer('back_cos', (np.cos(angle) * weight).T)
+        self._buffer('back_sin', (np.sin(angle) * weight).T)
+        for i, (n, m) in enumerate(front):
+            kept = np.r_[np.arange(m), np.arange(n - m, n)]
+            angle = 2 * np.pi * np.outer(np.arange(n), kept) / n  # (n, 2m)
+            self._buffer(f'cos{i}', np.cos(angle))
+            self._buffer(f'sin{i}', np.sin(angle))
+
+    def _buffer(self, name: str, value: np.ndarray) -> None:
+        self.register_buffer(name, torch.as_tensor(value, dtype=torch.float32))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        re, im = x @ self.last_cos, -(x @ self.last_sin)
+        for i in range(self.front):  # forward DFT: (re + i im)(cos - i sin)
+            c, s, axis = getattr(self, f'cos{i}'), getattr(self, f'sin{i}'), 2 + i
+            re, im = _along(re, c, axis) + _along(im, s, axis), _along(im, c, axis) - _along(re, s, axis)
+        re, im = _mix(re, self.real) - _mix(im, self.imag), _mix(re, self.imag) + _mix(im, self.real)
+        for i in range(self.front):  # inverse DFT: (re + i im)(cos + i sin) / n
+            c, s, axis = getattr(self, f'cos{i}').T, getattr(self, f'sin{i}').T, 2 + i
+            n = c.shape[1]
+            re, im = (
+                (_along(re, c, axis) - _along(im, s, axis)) / n,
+                (_along(im, c, axis) + _along(re, s, axis)) / n,
+            )
+        return re @ self.back_cos - im @ self.back_sin
+
+
+def _mix(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    return torch.einsum('bi...,io...->bo...', x, weight)
+
+
+def _along(x: torch.Tensor, matrix: torch.Tensor, axis: int) -> torch.Tensor:
+    """*matrix* (rows: the axis's points, columns: its new points) applied along *axis* of *x*."""
+    last = x.ndim - 1  # non-negative, as ONNX Transpose needs
+    return (x.movedim(axis, last) @ matrix).movedim(last, axis)
+
+
+def _fno(fitted: object) -> nn.Module:
+    """The FNO as a grid family, each spectral layer its real twin on the training grid (the one static shape)."""
+    raw = _grid(fitted)
+    sizes = tuple(fitted.envelope.shape)
+    raw.net.spectral = nn.ModuleList(_StaticSpectral(layer, sizes) for layer in raw.net.spectral)
+    return raw
+
+
 def _float32_copy(net: nn.Module) -> nn.Module:
     with torch.random.fork_rng(devices=[]):
         copy = type(net)(**net.arguments)
@@ -82,7 +150,7 @@ def _float32_copy(net: nn.Module) -> nn.Module:
 
 
 #: The families whose graph exports cleanly, by artifact name, and how their raw-in/raw-out graph is built.
-EXPORTABLE: Final[dict[str, Callable[[object], nn.Module]]] = {'field_model': _grid}
+EXPORTABLE: Final[dict[str, Callable[[object], nn.Module]]] = {'field_model': _grid, 'fno': _fno}
 
 
 def to_onnx(fitted: object, path: str | Path, *, example: np.ndarray) -> Path:

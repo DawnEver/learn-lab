@@ -3,8 +3,8 @@ revision = 5
 requires-python = ">=3.13, <3.15"
 resolution-markers = [
     "(python_full_version >= '3.14' and sys_platform == 'linux') or (python_full_version >= '3.14' and sys_platform == 'win32')",
-    "(python_full_version < '3.14' and sys_platform == 'linux') or (python_full_version < '3.14' and sys_platform == 'win32')",
     "python_full_version >= '3.14' and sys_platform != 'linux' and sys_platform != 'win32'",
+    "(python_full_version < '3.14' and sys_platform == 'linux') or (python_full_version < '3.14' and sys_platform == 'win32')",
     "python_full_version < '3.14' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 
@@ -461,8 +461,8 @@ wheels = [
 
 [[package]]
 name = "lab-commons"
-version = "0.3.1.dev1443+gc14a1b2a9"
-source = { git = "https://github.com/DawnEver/lab-commons.git#c14a1b2a98e5175296ffcb3db90e654e2ec1e170" }
+version = "0.3.1.dev1447+g438951e3b"
+source = { git = "https://github.com/DawnEver/lab-commons.git#438951e3b46a5131c993b45a49bad044c651cfa9" }
 
 [package.optional-dependencies]
 io = [

@@ -19,10 +19,12 @@ from learn_lab.models.response.co_kriging import CoKriging
 from learn_lab.models.response.gaussian_process import GaussianProcess
 from learn_lab.models.response.gradient_enhanced import GradientEnhancedKriging
 from learn_lab.models.response.kernel import KERNEL_FAMILIES
+from learn_lab.models.response.loss_law import LossLawResidual
 from learn_lab.models.response.multi_output import MultiOutputKriging
 from learn_lab.models.response.neighbours import NEIGHBOUR_WEIGHTS, NearestNeighbours
 from learn_lab.models.response.neural import ACTIVATIONS, MultilayerPerceptron
 from learn_lab.models.response.polynomial import Polynomial
+from learn_lab.models.response.power_law import PowerLaw
 from learn_lab.models.response.radial_basis import RADIAL_KERNELS, RadialBasis
 from learn_lab.models.response.tree import SPLITTERS, Forest, RegressionTree
 from learn_lab.space import Choice, Family, Integer, Real, Space
@@ -77,6 +79,10 @@ SURROGATES: Final = {
         }),
     ),
     'chaos_expansion': Family(ChaosExpansion, Space({'degree': Integer(1, 6)})),
+    # Nothing to tune: the exponents are fitted, and pinning one is physics, not a search dimension.
+    'power_law': Family(PowerLaw, Space({})),
+    # The law's exponents are textbook or fitted; the residual's base is a declaration tuned on its own row.
+    'loss_law_residual': Family(LossLawResidual, Space({'fit_exponents': Choice((False, True))})),
     'bagging': Family(Bagging, Space({'n_members': Integer(2, 50), 'max_samples': Real(0.1, 1.0)})),
 }
 

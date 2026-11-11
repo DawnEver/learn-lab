@@ -116,8 +116,12 @@ def test_a_space_is_a_frozen_mapping_that_says_what_it_holds():
         space['n'] = Integer(1, 2)
 
 
+#: Families with nothing to search: every setting is fitted or is physics the caller pins.
+UNTUNED = {'power_law'}
+
+
 def test_every_response_family_declares_a_space_its_constructor_accepts():
     for name, family in SURROGATES.items():
-        assert len(family.space), name
+        assert bool(len(family.space)) is (name not in UNTUNED), name
         family.build(**family.space.lowest())  # the corner of the space is a valid declaration
         assert isinstance(objective(name, X, quadratic(X)), Objective)

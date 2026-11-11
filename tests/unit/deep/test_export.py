@@ -13,6 +13,7 @@ import torch
 
 pytest.importorskip('openvino', reason='export needs the [openvino] extra')
 
+import nncf
 import openvino as ov
 
 from learn_lab.deep import export
@@ -142,3 +143,25 @@ def test_a_device_openvino_does_not_list_raises_by_name_and_the_dgpu_is_never_th
     with pytest.raises(LookupError, match='no GPU device'):
         _openvino.resolve(['CPU', 'GPU.0'], {'GPU.0': 'discrete'}, 'GPU')
     assert _openvino.resolve(['GPU.0', 'GPU.1'], {'GPU.0': 'discrete', 'GPU.1': 'integrated'}, 'GPU') == 'GPU.1'
+
+
+def test_int8_calibrates_asymmetric_activations(exported, queries, monkeypatch, tmp_path):
+    """MEASURED 2026-11-11 (Windows, this fixture): symmetric activations (nncf's default PERFORMANCE preset) make
+    int8 0.0072 worse than f32 on the planted truth; MIXED (asymmetric activations, for signed inputs and a squared
+    output) 0.0040 -- the margin under the 0.02 bar that other hosts' int8 kernels had overrun.
+    Planted control: the call's preset is read, so the default preset would fail here.
+    """
+    seen = {}
+    real = nncf.quantize
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(nncf, 'quantize', spy)
+    copy_dir = tmp_path / 'unet'
+    copy_dir.mkdir()
+    for name in ('model.onnx', 'manifest.json'):
+        (copy_dir / name).write_bytes((exported / name).read_bytes())
+    export.quantize(copy_dir, queries, precision='int8')
+    assert seen.get('preset') == nncf.QuantizationPreset.MIXED, seen

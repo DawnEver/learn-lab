@@ -167,7 +167,8 @@ class SpectralConv(nn.Module):
 
 
 def _pointwise(layer: nn.Module, x: torch.Tensor) -> torch.Tensor:
-    return layer(x.movedim(1, -1)).movedim(-1, 1)
+    last = x.ndim - 1  # a non-negative axis: ONNX export writes a negative one into Transpose's perm verbatim
+    return layer(x.movedim(1, last)).movedim(last, 1)
 
 
 class _FNONet(nn.Module):
@@ -180,7 +181,8 @@ class _FNONet(nn.Module):
         self.head = MLP([width, 2 * width, c_out], activation='gelu')
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        axes = (torch.linspace(0.0, 1.0, n, dtype=x.dtype, device=x.device) for n in x.shape[2:])
+        # arange cast to x's dtype, not linspace(dtype=): ONNX export types a linspace double regardless.
+        axes = (torch.arange(n, device=x.device).to(x.dtype) / max(n - 1, 1) for n in x.shape[2:])
         coords = torch.stack(torch.meshgrid(*axes, indexing='ij')).expand(x.shape[0], -1, *x.shape[2:])
         h = _pointwise(self.lift, torch.cat([x, coords], dim=1))
         for i, (spectral, mix) in enumerate(zip(self.spectral, self.mix, strict=True)):

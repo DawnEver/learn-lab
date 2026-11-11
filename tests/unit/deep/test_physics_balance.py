@@ -79,3 +79,40 @@ def test_a_balance_out_of_range_an_unknown_reference_or_a_checkpoint_is_refused(
         PhysicsInformedField(schedule=Schedule(adam_steps=1), balance=ANNEAL).fit(
             Poisson(), checkpoint=Checkpoint(tmp_path, every=1)
         )
+
+
+@dataclass(frozen=True)
+class Satisfied(Poisson):
+    """Poisson plus a condition the field meets almost for free: its gradient is ~1e-6 of the PDE's."""
+
+    def residuals(self, field, points, parameters):
+        terms = dict(super().residuals(field, points, parameters))
+        terms['free'] = Term(1e-6 * field(points['boundary'])[:, 0], scale=1.0)
+        return terms
+
+
+def test_the_anchored_balance_holds_its_reference_at_one_where_the_normalised_one_starves_it():
+    schedule = Schedule(adam_steps=60, learning_rate=2e-3)
+    anchored = PhysicsInformedField(
+        hidden=(8, 8), schedule=schedule, balance=Balance('anchored_gradient', 'pde', alpha=1.0, cap=50.0)
+    ).fit(Satisfied())
+    assert anchored.weights['pde'] == 1.0
+    assert all(w <= 50.0 for w in anchored.weights.values()), anchored.weights
+    # Planted control: the normalised rule pushes the satisfied term up and the reference toward zero.
+    normalised = PhysicsInformedField(
+        hidden=(8, 8), schedule=schedule, balance=Balance('normalised_gradient', 'pde', alpha=1.0)
+    ).fit(Satisfied())
+    assert normalised.weights['pde'] < 0.1, normalised.weights
+
+
+def test_the_anchored_balance_still_fits_the_under_fitted_boundary():
+    fixed = PhysicsInformedField(hidden=(16, 16), schedule=SHORT).fit(Stiff())
+    anchored = PhysicsInformedField(
+        hidden=(16, 16), schedule=SHORT, balance=Balance('anchored_gradient', 'pde', cap=1e4)
+    ).fit(Stiff())
+    assert _boundary_error(anchored) < 0.3 * _boundary_error(fixed), anchored.weights
+
+
+def test_an_anchored_cap_below_one_is_refused():
+    with pytest.raises(Refused, match='cap'):
+        Balance('anchored_gradient', 'pde', cap=0.5)

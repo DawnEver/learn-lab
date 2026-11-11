@@ -49,7 +49,7 @@ only where a side condition is demonstrably under-fitted at fixed weights (the p
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 import numpy as np
@@ -61,7 +61,16 @@ from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
 from learn_lab.validity import BoxEnvelope
 
-__all__ = ['Balance', 'FittedField', 'PhysicsInformedField', 'ResidualProvider', 'Term', 'derivative']
+__all__ = [
+    'Balance',
+    'Continuation',
+    'FittedField',
+    'PhysicsInformedField',
+    'Resample',
+    'ResidualProvider',
+    'Term',
+    'derivative',
+]
 
 Field = Callable[[torch.Tensor], torch.Tensor]
 
@@ -82,20 +91,26 @@ class Term:
 
 
 #: The balance rules: ``fixed``; ``gradient_norm`` (max/mean, unbounded); ``normalised_gradient`` (mean/mean
-#: targets scaled to sum to the term count, so every weight stays in [0, N] and no term can be starved).
-RULES = ('fixed', 'gradient_norm', 'normalised_gradient')
+#: targets scaled to sum to the term count, so every weight stays in [0, N] -- but a condition the field already meets
+#: has a tiny gradient and a huge target, and the rescale then starves the REFERENCE: measured, motronics steel bar,
+#: pde 9.3e-5 against neumann 2.86); ``anchored_gradient`` (mean/mean, the reference held at 1, every other weight
+#: clipped to [1 / cap, cap], so neither the reference nor any term can be starved or run away).
+RULES = ('fixed', 'gradient_norm', 'normalised_gradient', 'anchored_gradient')
 
 
 @dataclass(frozen=True, slots=True)
 class Balance:
-    """How the dimensionless terms are weighted: ``fixed`` (all 1) or ``gradient_norm`` against ``reference``."""
+    """How the dimensionless terms are weighted: ``fixed`` (all 1) or a gradient rule against ``reference``."""
 
     rule: str = 'fixed'
     reference: str = ''
     alpha: float = 0.1
     every: int = 10
+    cap: float = 100.0  # anchored_gradient: the largest ratio of any weight to the reference's 1
 
     def __post_init__(self) -> None:
+        if not self.cap >= 1.0:
+            refuse(f'a balance cap is >= 1 (a ratio to the reference weight), got {self.cap}')
         if self.rule not in RULES:
             refuse(f'a balance rule is one of {RULES}, got {self.rule!r}')
         if self.rule != 'fixed' and not self.reference:
@@ -104,6 +119,41 @@ class Balance:
             refuse(f'a balance alpha is in (0, 1], got {self.alpha}')
         if self.every < 1:
             refuse(f'a balance updates every >= 1 steps, got {self.every}')
+
+
+@dataclass(frozen=True, slots=True)
+class Continuation:
+    """Move the provider parameter ``parameter`` from ``start`` to its nominal value over the first ``steps`` Adam
+    steps, linearly, then hold it there: a homotopy from an easier problem (e.g. a saturation scale stretching a
+    nonlinear law towards its linear start) into the one asked. A continued parameter is never identified.
+    """
+
+    parameter: str
+    start: float
+    steps: int
+
+    def __post_init__(self) -> None:
+        if self.steps < 1:
+            refuse(f'a continuation moves its parameter over >= 1 steps, got {self.steps}')
+
+
+@dataclass(frozen=True, slots=True)
+class Resample:
+    """Residual-based adaptive refinement (RAR, Lu et al. 2021): every ``every`` Adam steps, draw a fresh set of the
+    provider's collocation points (its own sampler under the next seed) and ADD, to each condition named in
+    ``conditions``, the ``add`` candidates where that condition's dimensionless residual is largest. A condition
+    names a point set whose residual term carries the same name (e.g. ``'pde:steel'``).
+    """
+
+    conditions: tuple[str, ...]
+    every: int = 500
+    add: int = 100
+
+    def __post_init__(self) -> None:
+        if not self.conditions:
+            refuse('a resample names the conditions it refines')
+        if self.every < 1 or self.add < 1:
+            refuse(f'a resample adds >= 1 points every >= 1 steps, got add={self.add} every={self.every}')
 
 
 class ResidualProvider(Protocol):
@@ -147,6 +197,8 @@ class PhysicsInformedField:
     schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=3000, learning_rate=1e-3, lbfgs_steps=500))
     runtime: Runtime = field(default_factory=Runtime)
     balance: Balance = field(default_factory=Balance)
+    continuation: Sequence[Continuation] = ()
+    resample: Resample | None = None
 
     def fit(
         self,
@@ -184,11 +236,28 @@ class PhysicsInformedField:
         balancing = self.balance.rule != 'fixed'
         if balancing and checkpoint is not None:
             refuse('a balanced fit cannot be checkpointed: its weights are training state the checkpoint omits')
+        if (self.continuation or self.resample is not None) and checkpoint is not None:
+            refuse('a continued or resampled fit cannot be checkpointed: its schedule is training state it omits')
+        for c in self.continuation:
+            if c.parameter not in params:
+                refuse(f'continuation names {c.parameter!r}; the provider declares {sorted(params)}')
+            if c.parameter in identify:
+                refuse(f'{c.parameter!r} is identified; a continued parameter follows the schedule, not the fit')
+        nominal = {c.parameter: float(params[c.parameter]) for c in self.continuation}
+        if self.resample is not None:
+            missing = set(self.resample.conditions) - set(points)
+            if missing:
+                refuse(f'resample names {sorted(missing)}; the provider samples {sorted(points)}')
         weights: dict[str, float] = {}
         updates: list[tuple[int, dict[str, float]]] = []
         calls = [0]
 
         def loss() -> torch.Tensor:
+            step, calls[0] = calls[0], calls[0] + 1
+            if step < self.schedule.adam_steps:
+                self._continue(step, params, nominal)
+                if self.resample is not None and step > 0 and step % self.resample.every == 0:
+                    self._refine(provider, field_at, points, params, step // self.resample.every)
             terms = {name: term.loss() for name, term in provider.residuals(field_at, points, params).items()}
             for name, xt, ut, mask, scale in data:
                 terms[f'observed:{name}'] = Term((provider.observe(name, field_at, xt) - ut)[mask], scale).loss()
@@ -196,7 +265,6 @@ class PhysicsInformedField:
                 if balancing and self.balance.reference not in terms:
                     refuse(f'the balance reference {self.balance.reference!r} is not a condition: {sorted(terms)}')
                 weights.update(dict.fromkeys(terms, 1.0))
-            step, calls[0] = calls[0], calls[0] + 1
             if balancing and step < self.schedule.adam_steps and step % self.balance.every == 0:
                 self._rebalance(terms, list(net.parameters()), weights)
                 updates.append((step, dict(weights)))
@@ -222,6 +290,25 @@ class PhysicsInformedField:
             weight_history=updates,
         )
 
+    def _continue(self, step: int, params: dict[str, torch.Tensor], nominal: Mapping[str, float]) -> None:
+        """Set every continued parameter to its value at Adam *step*: ``start`` -> nominal, linear, then held."""
+        with torch.no_grad():
+            for c in self.continuation:
+                t = min(1.0, step / c.steps)
+                params[c.parameter].fill_((1.0 - t) * c.start + t * nominal[c.parameter])
+
+    def _refine(self, provider: ResidualProvider, field_at: Field, points: dict, params: Mapping, round_: int) -> None:
+        """Add to each resampled condition the fresh candidates where its residual is largest (round *round_*)."""
+        rt = self.runtime
+        fresh = provider.collocation(replace(rt, seed=rt.seed + round_))
+        candidates = {name: fresh[name].detach().requires_grad_(True) for name in self.resample.conditions}
+        terms = provider.residuals(field_at, {**points, **candidates}, params)
+        for name in self.resample.conditions:
+            if name not in terms:
+                refuse(f'resample names {name!r}, which no residual term carries: {sorted(terms)}')
+            worst = torch.topk((terms[name].residual / terms[name].scale).detach().abs(), self.resample.add).indices
+            points[name] = torch.cat([points[name].detach(), candidates[name].detach()[worst]]).requires_grad_(True)
+
     def _rebalance(self, terms: Mapping[str, torch.Tensor], theta: list[torch.Tensor], weights: dict) -> None:
         """One learning-rate-annealing update of *weights* from the terms' gradients over the network *theta*."""
 
@@ -239,6 +326,14 @@ class PhysicsInformedField:
             scale = len(targets) / sum(targets.values())
             for name, target in targets.items():
                 weights[name] = (1.0 - b.alpha) * weights[name] + b.alpha * target * scale
+            return
+        if b.rule == 'anchored_gradient':
+            ref = float(grads(terms[b.reference]).mean())
+            for name, value in terms.items():
+                mean = float(grads(value).mean()) if name != b.reference else 0.0
+                if mean > 0.0:
+                    target = min(b.cap, max(1.0 / b.cap, ref / mean))
+                    weights[name] = (1.0 - b.alpha) * weights[name] + b.alpha * target
             return
         peak = float(grads(terms[b.reference]).max())
         for name, value in terms.items():

@@ -15,7 +15,6 @@ def test_the_repo_runs_the_family_pr_lifecycle() -> None:
         'ci.yml',
         'continue.yml',
         'merge-tick.yml',
-        'review-again.yml',
         'review-prepare.yml',
     }
 

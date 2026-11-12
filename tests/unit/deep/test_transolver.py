@@ -2,22 +2,36 @@
 
 The planted operator: ``-lap u = f`` on the unit square, ``u = 0`` on its boundary, ``f`` a sum of the sine modes
 ``sin(k pi x) sin(l pi y)``, ``k, l in 1..3``, so ``u`` is exact: each mode divided by ``(k^2 + l^2) pi^2``. The
-input is ``f`` at scattered points, the output ``u`` at the same points. Fit on point clouds of :data:`FIT_POINTS`
-points; judge held-out sources on DIFFERENT, larger clouds of :data:`QUERY_POINTS` points. Every fit is CPU
-float64 (pinned: CUDA gave different numbers than the Linux forge).
+input is ``f`` at scattered points, the output ``u`` at the same points, each point weighted by its Voronoi cell
+area (the ``measure``). Fit on 192 jittered-grid clouds of :data:`FIT_POINTS` points (one jittered point per cell
+of an 11 x 11 grid, plus the corners; a different cloud per sample); judge 24 held-out sources on DIFFERENT,
+larger, uniformly random clouds of :data:`QUERY_POINTS` points. Every fit is CPU float64 (pinned: CUDA gave
+different numbers than the Linux forge).
 
 The statistic is the mean over held-out samples of the per-sample relative L2 error ``||u_hat - u|| / ||u||``
-over the sample's points (unitless). Measured 2026-11-12 (runtime seed 0, 192 per-sample 128-point clouds):
-Transolver 0.197 at 1500 Adam steps (lr 3e-3); 0.187 / 0.162 at 3000 steps (lr 3e-3 / 1e-3), train 0.05-0.06:
-a generalisation gap, not under-fitting; ``reference=6`` 0.166, width 64 + 64 slices 0.163. The existing
-TransformerOperator (softmax, width 32, heads 4, layers 2, 1500 steps, ONE shared training cloud, judged per
-test cloud) 0.329 / 0.325 (seeds 0, 1). The accuracy test is a strict xfail with that residual until the fit
-is made robust (more samples on smaller clouds is the open experiment); the bar is not loosened.
+over the sample's points (unitless). Measured 2026-11-12, this configuration (:data:`FIT`): runtime seed 0 0.0361,
+seed 1 0.0324 (train 0.031 both). What closed the gap, each measured:
+
+- A slice token is a MEAN over its points: on a random cloud that is Monte-Carlo quadrature. Projecting ``f`` on
+  the modes that way leaves 0.17 relative error at 512 random points (0.33 at 128); weighting by Voronoi area
+  leaves 0.015 (0.11 at 128). Unweighted, the Transolver measured 0.16-0.20 held-out (seeds 0, 1; 1500-6000
+  steps, widths 32-64, slices 16-64, ``reference=6``), right at that floor. With the area ``measure``: 0.074 /
+  0.075 (1500 steps, cosine), the unweighted twin 0.183 / 0.161.
+- The remaining 0.065-0.075 did not move with more random training clouds (576: 0.068 / 0.069), larger ones
+  (256 points: 0.063 / 0.073), ``reference=8`` (0.107), Ada-Temp + Gumbel (0.071 / 0.067), a larger net (width 64,
+  8 heads, 32 slices, 4 layers: 0.073) or 6000 steps (train 0.034, held-out 0.073), and was flat in the QUERY size
+  (0.074 at 512, 0.075 at 2048): a learned-operator error, not resolution. Training inputs carried 128-point
+  random-cloud quadrature noise (errors in the variables); jittered training clouds remove it: 1500 steps 0.062 /
+  0.073 (under-trained, train equal), 4500 steps cosine 0.036 / 0.032.
+- The existing TransformerOperator (softmax, width 32, heads 4, layers 2, 1500 steps; one shared random 128-point
+  training cloud, as it takes one point set per call; judged per test cloud) measured 0.329 / 0.325 (seeds 0, 1).
+  Not asserted: the setups differ.
 """
 
 import numpy as np
 import pytest
 import torch
+from scipy.spatial import cKDTree
 
 from learn_lab.deep.fit import Schedule, minimise
 from learn_lab.deep.networks import MLP
@@ -27,17 +41,28 @@ from learn_lab.errors import Refused
 
 CPU64 = Runtime(device='cpu')
 MODES = 3
-FIT_POINTS, QUERY_POINTS = 128, 512
-#: Mean held-out relative L2 (unitless). Measured 0.16-0.20 (see the module docstring): a strict xfail.
+GRID = 11
+FIT_POINTS, QUERY_POINTS = GRID * GRID + 4, 512
+#: Mean held-out relative L2 (unitless). Measured 0.0361 / 0.0324 (seeds 0, 1); the pointwise control misses it.
 BAR = 0.05
-FIT = Schedule(adam_steps=1500, learning_rate=3e-3)
+FIT = Schedule(adam_steps=4500, learning_rate=3e-3, decay='cosine')
 FEW = Schedule(adam_steps=3, learning_rate=1e-2)
+#: The few-step fits see 8 sources; a margin (fraction of the value box) lets the held-out ones in.
+WIDE = 1.0
 
 
 def _cloud(count: int, seed: int) -> np.ndarray:
     """``count`` scattered points of the unit square, its four corners first (every cloud spans the same box)."""
     corners = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
     return np.concatenate([corners, np.random.default_rng(seed).uniform(0.0, 1.0, (count - 4, 2))])
+
+
+def _jittered(seed: int) -> np.ndarray:
+    """One uniformly jittered point in each cell of a ``GRID x GRID`` grid of the unit square, the corners first."""
+    g = np.arange(GRID)
+    cells = np.stack(np.meshgrid(g, g), axis=-1).reshape(-1, 2)
+    corners = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    return np.concatenate([corners, (cells + np.random.default_rng(seed).uniform(0.0, 1.0, cells.shape)) / GRID])
 
 
 def _basis(points: np.ndarray) -> np.ndarray:
@@ -66,10 +91,20 @@ def _relative(a: np.ndarray, b: np.ndarray) -> float:
     )
 
 
-TRAIN_POINTS = np.stack([_cloud(FIT_POINTS, 100 + i) for i in range(192)])  # a different cloud per sample
+def _areas(points: np.ndarray) -> np.ndarray:
+    """Each point's Voronoi cell area in the unit square (m^2 per unit square), counted on a 250 x 250 grid."""
+    g = (np.arange(250) + 0.5) / 250
+    grid = np.stack(np.meshgrid(g, g), axis=-1).reshape(-1, 2)
+    nearest = cKDTree(points).query(grid)[1]
+    return np.bincount(nearest, minlength=len(points)) / len(grid)
+
+
+TRAIN_POINTS = np.stack([_jittered(100 + i) for i in range(192)])  # a different cloud per sample
 F_TRAIN, U_TRAIN = _pairs(192, TRAIN_POINTS, 1)
 TEST_POINTS = np.stack([_cloud(QUERY_POINTS, 900 + i) for i in range(24)])
 F_TEST, U_TEST = _pairs(24, TEST_POINTS, 2)
+A_TRAIN = np.stack([_areas(p) for p in TRAIN_POINTS])
+A_TEST = np.stack([_areas(p) for p in TEST_POINTS])
 
 
 def _transolver(**kw) -> Transolver:
@@ -78,7 +113,7 @@ def _transolver(**kw) -> Transolver:
 
 @pytest.fixture(scope='module')
 def fitted():
-    return _transolver().fit(F_TRAIN, TRAIN_POINTS, U_TRAIN)
+    return _transolver(chunk=None).fit(F_TRAIN, TRAIN_POINTS, U_TRAIN, measure=A_TRAIN)
 
 
 def _pointwise_control() -> float:
@@ -99,27 +134,28 @@ def _pointwise_control() -> float:
     return _relative(guess, U_TEST)
 
 
-@pytest.mark.xfail(strict=True, reason='measured held-out relative L2 0.16-0.20 against the bar 0.05')
 def test_a_transolver_learns_the_poisson_operator_on_other_larger_clouds_and_a_pointwise_net_cannot(fitted):
-    error = _relative(fitted.predict(F_TEST, TEST_POINTS), U_TEST)
+    error = _relative(fitted.predict(F_TEST, TEST_POINTS, measure=A_TEST), U_TEST)
     assert error < BAR, error
     assert _pointwise_control() > BAR
     # PLANTED CONTROL: the same network told the wrong positions (shuffled) misses: position is read.
     shuffled = TEST_POINTS[:, np.random.default_rng(3).permutation(QUERY_POINTS)]
-    assert _relative(fitted.predict(F_TEST, shuffled), U_TEST) > BAR
+    assert _relative(fitted.predict(F_TEST, shuffled, measure=A_TEST), U_TEST) > BAR
 
 
 def test_one_shared_cloud_answers_like_the_same_cloud_given_per_sample(fitted):
-    shared = TEST_POINTS[0]
-    one = fitted.predict(F_TEST[:3, :, :], np.broadcast_to(shared, (3, *shared.shape)))
+    shared, area = TEST_POINTS[0], A_TEST[0]
     f, _ = _pairs(3, shared, 2)
-    np.testing.assert_allclose(fitted.predict(f, shared), fitted.predict(f, np.stack([shared] * 3)), rtol=0, atol=1e-12)
+    one = fitted.predict(f, shared, measure=area)
+    np.testing.assert_allclose(
+        one, fitted.predict(f, np.stack([shared] * 3), measure=np.stack([area] * 3)), rtol=0, atol=1e-12
+    )
     assert one.shape == (3, 1, QUERY_POINTS)
 
 
 @pytest.mark.parametrize('options', [{}, {'adaptive_temperature': True}, {'reference': 4}])
 def test_the_output_is_permutation_equivariant_in_the_points(options):
-    f = _transolver(schedule=FEW, **options).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8])
+    f = _transolver(schedule=FEW, margin=WIDE, **options).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8])
     order = np.random.default_rng(4).permutation(QUERY_POINTS)
     shuffled = f.predict(F_TEST[:2][..., order], TEST_POINTS[:2][:, order])
     np.testing.assert_allclose(shuffled, f.predict(F_TEST[:2], TEST_POINTS[:2])[..., order], rtol=0, atol=1e-12)
@@ -127,12 +163,14 @@ def test_the_output_is_permutation_equivariant_in_the_points(options):
     assert not np.allclose(f.predict(F_TEST[:2][..., order], TEST_POINTS[:2]), shuffled)
 
 
-def _attention_records(f, points):
-    """The slice weights and the token-attention scores each Physics-Attention built, read by forward hooks."""
+def _attention_records(f, points=None, query=None):
+    """The slice weights, token-attention scores and slice tokens each Physics-Attention built, read by hooks."""
     seen = []
     hooks = [m.register_forward_hook(lambda m, _i, _o: seen.append(m.last)) for m in f.net.attentions()]
     try:
-        f.predict(F_TEST[:2, :, : points.shape[1]], points)
+        f.predict(query[0], query[1], measure=query[2]) if query else f.predict(
+            F_TEST[:2, :, : points.shape[1]], points
+        )
     finally:
         for h in hooks:
             h.remove()
@@ -140,16 +178,39 @@ def _attention_records(f, points):
 
 
 def test_slice_weights_sum_to_one_per_point_and_the_attention_is_slices_by_slices_at_any_point_count():
-    f = _transolver(schedule=FEW, slices=8).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8])
+    f = _transolver(schedule=FEW, margin=WIDE, slices=8).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8])
     for count in (QUERY_POINTS // 4, QUERY_POINTS):
-        for weights, scores in _attention_records(f, TEST_POINTS[:2, :count]):
+        for weights, scores, _ in _attention_records(f, TEST_POINTS[:2, :count]):
             assert weights.shape == (2, 4, count, 8)  # (samples, heads, points, slices)
             np.testing.assert_allclose(weights.sum(-1).numpy(), 1.0, rtol=0, atol=1e-12)
             assert scores.shape == (2, 4, 8, 8)  # M x M, never N x N: linear in the points
 
 
+def test_a_measured_slice_token_is_a_quadrature_the_same_at_n_and_4n_points():
+    """The same source sampled on random clouds of 512 and 2048 points: the first layer's slice tokens agree to the
+    quadrature error, and area weights shrink it. PLANTED CONTROL: the unweighted mean (a uniform measure) is
+    Monte-Carlo quadrature and disagrees more; neither is a sum (a sum would grow 4x with the points).
+    """
+    f = _transolver(schedule=FEW, margin=WIDE).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8], measure=A_TRAIN[:8])
+    clouds = [_cloud(n, 77) for n in (QUERY_POINTS, 4 * QUERY_POINTS)]
+    sources = [_pairs(1, c, 5)[0] for c in clouds]
+
+    def tokens(weighting):
+        return [
+            _attention_records(f, query=(s, c[None], weighting(c)[None]))[0][2]
+            for s, c in zip(sources, clouds, strict=True)
+        ]
+
+    def gap(pair):
+        return float((pair[0] - pair[1]).norm() / pair[1].norm())
+
+    weighted, uniform = gap(tokens(_areas)), gap(tokens(lambda c: np.ones(len(c))))
+    assert weighted < 0.5 * uniform, (weighted, uniform)
+    assert uniform < 0.5  # a mean, not a sum
+
+
 def test_gumbel_slices_are_random_in_training_and_deterministic_in_prediction():
-    f = _transolver(schedule=FEW, gumbel=True).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8])
+    f = _transolver(schedule=FEW, margin=WIDE, gumbel=True).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8])
     q = (F_TEST[:2], TEST_POINTS[:2])
     assert np.array_equal(f.predict(*q), f.predict(*q))
     f.net.train()
@@ -162,7 +223,7 @@ def test_gumbel_slices_are_random_in_training_and_deterministic_in_prediction():
 
 
 def test_a_stranger_is_refused():
-    f = _transolver(schedule=FEW).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8])
+    f = _transolver(schedule=FEW, margin=WIDE).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8])
     f.predict(F_TEST[:1], TEST_POINTS[:1])  # PLANTED CONTROL: in domain, it answers
     with pytest.raises(Refused, match='out_of_domain'):
         f.predict(F_TEST[:1] + 500.0, TEST_POINTS[:1])
@@ -170,6 +231,14 @@ def test_a_stranger_is_refused():
         f.predict(F_TEST[:1], TEST_POINTS[:1] + 2.0)
     with pytest.raises(Refused, match='invalid'):
         f.predict(F_TEST[:1], TEST_POINTS[:1, :-1])
+    with pytest.raises(Refused, match='point measure'):
+        f.predict(F_TEST[:1], TEST_POINTS[:1], measure=A_TEST[:1])  # fitted without one
+    g = _transolver(schedule=FEW, margin=WIDE).fit(F_TRAIN[:8], TRAIN_POINTS[:8], U_TRAIN[:8], measure=A_TRAIN[:8])
+    g.predict(F_TEST[:1], TEST_POINTS[:1], measure=A_TEST[:1])  # PLANTED CONTROL: with its measure, it answers
+    with pytest.raises(Refused, match='point measure'):
+        g.predict(F_TEST[:1], TEST_POINTS[:1])
+    with pytest.raises(Refused, match='point measure'):
+        g.predict(F_TEST[:1], TEST_POINTS[:1], measure=-A_TEST[:1])
     with pytest.raises(Refused, match='heads'):
         Transolver(width=10, heads=4)
     with pytest.raises(Refused, match='slices'):

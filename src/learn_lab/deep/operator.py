@@ -491,10 +491,13 @@ class _PhysicsAttention(nn.Module):
 
     Per head, ``w = softmax(Linear(x_i) / tau)`` over the slices (``(p, M)``, each row sums to 1); the token
     ``z_j = sum_i w_ij v_i / sum_i w_ij``; ``z' = softmax(q k^T / sqrt(C_head)) v`` among the M tokens; the
-    point's output ``sum_j w_ij z'_j``. Cost O(p M C + M^2 C): linear in the points. ``tau`` is a learnable
+    point's output ``sum_j w_ij z'_j``. Cost O(p M C + M^2 C): linear in the points. With a point ``measure``
+    ``a_i`` (quadrature weights, e.g. cell areas) the token is ``sum_i a_i w_ij v_i / sum_i a_i w_ij``: a
+    quadrature of the field over each slice instead of a mean over its points, so a non-uniform cloud does not
+    bias it. ``tau`` is a learnable
     per-head temperature; ``adaptive_temperature`` adds a per-point ``Linear(x_i)`` to it and ``gumbel`` adds
     Gumbel noise to the slice logits while training (Transolver++'s Ada-Temp and Rep-Slice). ``last`` keeps the
-    slice weights and token scores of the latest forward (detached) for inspection.
+    slice weights, token scores and tokens of the latest forward (detached) for inspection.
     """
 
     def __init__(
@@ -511,9 +514,9 @@ class _PhysicsAttention(nn.Module):
         self.local = nn.Linear(head, 1) if adaptive_temperature else None
         self.qkv = nn.Linear(head, 3 * head, bias=False)
         self.out = nn.Linear(width, width)
-        self.last: tuple[torch.Tensor, torch.Tensor] | None = None
+        self.last: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
 
-    def forward(self, h: torch.Tensor) -> torch.Tensor:
+    def forward(self, h: torch.Tensor, measure: torch.Tensor | None = None) -> torch.Tensor:
         n, p, w = h.shape
         v = self.features(h).reshape(n, p, self.heads, -1).transpose(1, 2)  # (n, H, p, C)
         mid = self.mid(h).reshape(n, p, self.heads, -1).transpose(1, 2)
@@ -524,11 +527,12 @@ class _PhysicsAttention(nn.Module):
             u = torch.rand_like(logits).clamp(1e-12, 1.0 - 1e-12)
             logits = logits - torch.log(-torch.log(u))
         weights = torch.softmax(logits / tau.clamp_min(1e-2), dim=-1)  # (n, H, p, M)
-        tokens = torch.einsum('nhpm,nhpc->nhmc', weights, v) / (weights.sum(2)[..., None] + 1e-5)
+        pooled = weights if measure is None else weights * measure[:, None, :, None]
+        tokens = torch.einsum('nhpm,nhpc->nhmc', pooled, v) / (pooled.sum(2)[..., None] + 1e-5)
         q, k, t = self.qkv(tokens).chunk(3, dim=-1)
         scores = torch.softmax(q @ k.transpose(-1, -2) / q.shape[-1] ** 0.5, dim=-1)  # (n, H, M, M)
         mixed = torch.einsum('nhpm,nhmc->nhpc', weights, scores @ t)
-        self.last = (weights.detach(), scores.detach())
+        self.last = (weights.detach(), scores.detach(), tokens.detach())
         return self.out(mixed.transpose(1, 2).reshape(n, p, w))
 
 
@@ -538,8 +542,8 @@ class _TransolverBlock(nn.Module):
         self.attend, self.norm_attend = attention, nn.LayerNorm(width)
         self.mlp, self.norm_mlp = MLP([width, mlp_ratio * width, width], activation='gelu'), nn.LayerNorm(width)
 
-    def forward(self, h: torch.Tensor) -> torch.Tensor:
-        h = h + self.attend(self.norm_attend(h))
+    def forward(self, h: torch.Tensor, measure: torch.Tensor | None = None) -> torch.Tensor:
+        h = h + self.attend(self.norm_attend(h), measure)
         return h + self.mlp(self.norm_mlp(h))
 
 
@@ -599,15 +603,15 @@ class _TransolverNet(nn.Module):
     def attentions(self) -> list[_PhysicsAttention]:
         return [block.attend for block in self.blocks]
 
-    def forward(self, x: torch.Tensor, coords: torch.Tensor) -> torch.Tensor:
-        """``x (n, c_in, p)``, ``coords (p, d)`` or ``(n, p, d)`` -> ``(n, c_out, p)``."""
+    def forward(self, x: torch.Tensor, coords: torch.Tensor, measure: torch.Tensor | None = None) -> torch.Tensor:
+        """``x (n, c_in, p)`` at ``coords (p, d)`` or ``(n, p, d)``, ``measure`` None or ``(n, p)`` -> ``(n, c_out, p)``."""
         z = (2.0 * (coords - self.lower) / self.span - 1.0).expand(x.shape[0], -1, -1)
         parts = [x.transpose(1, 2), z]
         if len(self.nodes):
             parts.append(torch.cdist(z, self.nodes.expand(x.shape[0], -1, -1)))
         h = self.lift(torch.cat(parts, dim=-1))
         for block in self.blocks:
-            h = block(h)
+            h = block(h, measure)
         return self.head(self.norm(h)).transpose(1, 2)
 
 
@@ -616,6 +620,18 @@ def _point_sets(x: np.ndarray, coords: np.ndarray, what: str) -> None:
     own = x.ndim == 3 and coords.ndim == 3 and coords.shape[:2] == (x.shape[0], x.shape[2])
     if not (shared or own):
         refuse(f'{what} of shape {x.shape} is invalid at points {coords.shape}: (n, c_in, p) at (p, d) or (n, p, d)')
+
+
+def _measure(measure: np.ndarray | None, x: np.ndarray, what: str) -> np.ndarray | None:
+    """Point quadrature weights ``(p,)`` or ``(n, p)``, >= 0 with a positive sum, as ``(n, p)`` scaled to mean 1."""
+    if measure is None:
+        return None
+    a = require_finite(np.asarray(measure, float), what)
+    n, p = x.shape[0], x.shape[2]
+    if a.shape not in {(p,), (n, p)} or (a < 0).any() or not (a.sum(-1) > 0).all():
+        refuse(f'{what} of shape {a.shape} is invalid: (p,) or (n, p) weights >= 0 for x {x.shape}')
+    a = np.broadcast_to(a, (n, p))
+    return a * p / a.sum(-1, keepdims=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -629,7 +645,9 @@ class Transolver:
     the learnable slice temperature's start; ``adaptive_temperature`` and ``gumbel`` switch on Transolver++'s
     per-point temperature and Gumbel slice reparameterisation (noise in training only; prediction is
     deterministic). Points are shared ``(p, d)`` or per sample ``(n, p, d)``, and their number may differ
-    between fit and predict. A query's points are refused outside the training box; its inputs outside the
+    between fit and predict. An optional point ``measure`` (quadrature weights, ``(p,)`` or ``(n, p)``; given at
+    fit, then required at predict) makes each slice token a quadrature rather than a point mean: on a scattered
+    cloud the mean is Monte-Carlo quadrature, whose O(p^-1/2) error is a floor no training removes. A query's points are refused outside the training box; its inputs outside the
     per-channel value box.
     """
 
@@ -658,7 +676,13 @@ class Transolver:
             refuse(f'a unified-position reference grid has >= 2 nodes per axis, got {self.reference}')
 
     def fit(
-        self, x: np.ndarray, coords: np.ndarray, y: np.ndarray, *, checkpoint: Checkpoint | None = None
+        self,
+        x: np.ndarray,
+        coords: np.ndarray,
+        y: np.ndarray,
+        *,
+        measure: np.ndarray | None = None,
+        checkpoint: Checkpoint | None = None,
     ) -> FittedTransolver:
         """``x (n, c_in, p)`` at ``coords (p, d)`` or ``(n, p, d)`` -> ``y (n, c_out, p)`` at the same points."""
         x = require_finite(np.asarray(x, float), 'the input functions')
@@ -686,29 +710,48 @@ class Transolver:
             lower=box.lower,
             upper=box.upper,
         ).to(rt.torch_device, rt.torch_dtype)
+        a = _measure(measure, x, 'the point measure')
         xt, ct, yt = rt.tensor(sx.forward(x)), rt.tensor(c), rt.tensor(sy.forward(y))
+        at = None if a is None else rt.tensor(a)
         chunk, own = self.chunk, c.ndim == 3
 
-        def squared(xc: torch.Tensor, cc: torch.Tensor, yc: torch.Tensor) -> torch.Tensor:
-            return ((net(xc, cc) - yc) ** 2).sum()
+        def squared(xc, cc, yc, ac) -> torch.Tensor:
+            return ((net(xc, cc, ac) - yc) ** 2).sum()
 
         def loss() -> torch.Tensor:
             if chunk is None or chunk >= len(xt):
-                return squared(xt, ct, yt) / yt.numel()
+                return squared(xt, ct, yt, at) / yt.numel()
             parts = (
                 recomputed(
-                    squared, xt[i : i + chunk], ct[i : i + chunk] if own else ct, yt[i : i + chunk], use_reentrant=False
+                    squared,
+                    xt[i : i + chunk],
+                    ct[i : i + chunk] if own else ct,
+                    yt[i : i + chunk],
+                    None if at is None else at[i : i + chunk],
+                    use_reentrant=False,
                 )
                 for i in range(0, len(xt), chunk)
             )
             return torch.stack(list(parts)).sum() / yt.numel()
 
         history = minimise(
-            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, ct, yt]
+            net.parameters(),
+            loss,
+            self.schedule,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[xt, ct, yt] if at is None else [xt, ct, yt, at],
         )
         envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
         return FittedTransolver(
-            net=net.eval(), runtime=rt, envelope=envelope, points=box, inputs=sx, outputs=sy, history=history
+            net=net.eval(),
+            runtime=rt,
+            envelope=envelope,
+            points=box,
+            inputs=sx,
+            outputs=sy,
+            history=history,
+            measured=a is not None,
         )
 
 
@@ -721,16 +764,22 @@ class FittedTransolver:
     inputs: Standardiser
     outputs: Standardiser
     history: list[float]
+    measured: bool = False
 
-    def predict(self, x: np.ndarray, coords: np.ndarray) -> np.ndarray:
+    def predict(self, x: np.ndarray, coords: np.ndarray, *, measure: np.ndarray | None = None) -> np.ndarray:
         """``(n, c_out, p)``: each input function's image at its points ``coords (p, d)`` or ``(n, p, d)``."""
         x = self.envelope.require(np.asarray(x, float), 'a Transolver input function')
         c = np.asarray(coords, float)
         _point_sets(x, c, 'a Transolver query')
         self.points.require(c.reshape(-1, c.shape[-1]), 'a Transolver point')
+        if (measure is not None) != self.measured:
+            trained = 'with' if self.measured else 'without'
+            refuse(f'a Transolver query is invalid: this fit was trained {trained} a point measure')
+        a = _measure(measure, x, 'the point measure')
         rt = self.runtime
         with torch.no_grad():
-            return self.outputs.back(numpy(self.net(rt.tensor(self.inputs.forward(x)), rt.tensor(c))))
+            out = self.net(rt.tensor(self.inputs.forward(x)), rt.tensor(c), None if a is None else rt.tensor(a))
+        return self.outputs.back(numpy(out))
 
 
 class _GraphOperatorNet(nn.Module):

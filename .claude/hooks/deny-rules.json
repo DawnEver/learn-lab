@@ -150,7 +150,7 @@
     "name": "HPC-THROUGH-THE-DOOR",
     "pattern": "(?:(?:ssh|scp|sftp|rsync)\\b[^\\n;&|]*?[\\s@][\\w-]*[Ll][Oo][Gg][Ii][Nn][\\w-]*(?:\\.[\\w.-]+)?(?=[\\s:/\"\\x27]|$)|ssh\\b[^\\n]*?\\b(?:sbatch|srun|salloc|scancel)\\b|(?:sbatch|srun|salloc|scancel)\\b)",
     "matches": "command",
-    "reason": "HPC-THROUGH-THE-DOOR: an agent on an HPC login host or Slurm opens connections nobody budgets; a poll loop took the cluster's ssh down (2026-11-06).\nDoors ({python} -m dev_lab.dev.<door>): on an account `sshhold open <user>@<host> --hours N --code <code>`, `sshhold run <dest> '<cmd>'`; deploy `hpcaccount deploy-fleet|forget|deploy`; verify: push, `forge queue|run show <sha>`; batch `-m lab_commons.hpc submit|gather -c <job>`.\ndetails: docs-src/dev/refusals.md#hpc-through-the-door (lab-commons)"
+    "reason": "HPC-THROUGH-THE-DOOR: an agent on an HPC login host or Slurm opens connections nobody budgets; a poll loop took the cluster's ssh down (2026-11-06).\nDoors ({python} -m dev_lab.dev.<door>): TOTP host `sshhold open|run --code` (key-only: no code); deploy `hpcaccount deploy*|forget`; verify: push, `forge queue|run show <sha>`; batch `lab_commons.hpc plan|submit|status|gather|retry|run`; clean `lab_commons.hpc clean`.\ndetails: docs-src/dev/refusals.md#hpc-through-the-door (lab-commons)"
   },
   {
     "name": "REMOTE-WRITE-THROUGH-A-DOOR",

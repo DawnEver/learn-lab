@@ -4,6 +4,9 @@ One column per region (``u_left``, ``u_right``); continuity ``u_left = u_right``
 essential :class:`Term` s, the flux balance ``k_left u_left' = k_right u_right'`` is the energy's own stationarity.
 The exact piecewise solution is quadratic on each side (:func:`truth`). ``quadrature`` picks the rule: ``'monte_carlo'``
 (uniform draws, ``measure * mean``) or ``'gauss'`` (tensor Gauss-Legendre per region, the interface a cell boundary).
+``essential`` picks how the ends and continuity hold: ``'penalty'`` (the :class:`Term` s above) or ``'hard'`` (the
+ansatz ``u_s = x (1 - x) (T + (x - 1/2) C_s)`` over ``latent`` raw columns ``T, C_left, C_right``: zero at both ends,
+and the trace ``T`` shared by both columns so continuity is exact).
 """
 
 from dataclasses import dataclass, field
@@ -39,6 +42,8 @@ class Jump:
     quadrature: str = 'monte_carlo'
     points: int = 256  # Monte Carlo draws per region, or Gauss points per region (order * cells)
     order: int = 16
+    essential: str = 'penalty'  # or 'hard'
+    latent: int = 3
     domain: BoxEnvelope = field(default_factory=lambda: BoxEnvelope(np.array([0.0]), np.array([1.0])))
     outputs: int = 2
     parameters: dict = field(default_factory=lambda: {'k_left': K_LEFT, 'k_right': K_RIGHT})
@@ -50,6 +55,10 @@ class Jump:
     def owns(self, name, points):
         left = points[:, 0] <= INTERFACE
         return np.stack([left, ~left], axis=1)
+
+    def ansatz(self, x, raw):
+        d = x[:, :1] * (1.0 - x[:, :1])
+        return d * (raw[:, :1] + (x[:, :1] - INTERFACE) * raw[:, 1:])
 
     def collocation(self, runtime):
         fixed = {
@@ -78,10 +87,12 @@ class Jump:
                 return Energy(density, weights=points[f'w_{name}'].detach(), scale=SOURCE)
             return Energy(density, measure=0.5, scale=SOURCE)
 
+        parts = {'left': part(0, 'left', 'k_left'), 'right': part(1, 'right', 'k_right')}
+        if self.essential == 'hard':
+            return parts
         ends, at = field(points['ends']), field(points['interface'])
         return {
-            'left': part(0, 'left', 'k_left'),
-            'right': part(1, 'right', 'k_right'),
+            **parts,
             'ends': Term(torch.stack([ends[0, 0], ends[1, 1]]), scale=1.0),
             'continuity': Term(at[:, 0] - at[:, 1], scale=1.0),
         }

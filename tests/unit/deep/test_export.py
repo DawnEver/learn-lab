@@ -186,11 +186,17 @@ def test_a_device_openvino_does_not_list_raises_by_name_and_the_dgpu_is_never_th
     assert _openvino.resolve(['GPU.0', 'GPU.1'], {'GPU.0': 'discrete', 'GPU.1': 'integrated'}, 'GPU') == 'GPU.1'
 
 
-def test_int8_calibrates_asymmetric_activations(exported, queries, monkeypatch, tmp_path):
+def test_int8_calibrates_asymmetric_activations_on_7_bit_weights_every_cpu_runs_alike(
+    exported, queries, monkeypatch, tmp_path
+):
     """MEASURED 2026-11-11 (Windows, this fixture): symmetric activations (nncf's default PERFORMANCE preset) make
     int8 0.0072 worse than f32 on the planted truth; MIXED (asymmetric activations, for signed inputs and a squared
     output) 0.0040 -- the margin under the 0.02 bar that other hosts' int8 kernels had overrun.
-    Planted control: the call's preset is read, so the default preset would fail here.
+    Weights are 7-bit in EVERY layer (overflow fix ENABLE): on a CPU without VNNI the int8 dot product
+    (``vpmaddubsw``) saturates its int16 pairs at full 8-bit range, and nncf's default fixes the first layer only, so
+    the FNO's DFT layers answered differently by runner ISA -- the same tree passed and was refused on the forge.
+    7-bit weights cannot saturate, so every ISA computes the same int8 graph.
+    Planted control: the call's preset and overflow fix are read, so nncf's defaults would fail here.
     """
     seen = {}
     real = nncf.quantize
@@ -206,3 +212,4 @@ def test_int8_calibrates_asymmetric_activations(exported, queries, monkeypatch, 
         (copy_dir / name).write_bytes((exported / name).read_bytes())
     export.quantize(copy_dir, queries, precision='int8')
     assert seen.get('preset') == nncf.QuantizationPreset.MIXED, seen
+    assert seen['advanced_parameters'].overflow_fix == nncf.OverflowFix.ENABLE, seen

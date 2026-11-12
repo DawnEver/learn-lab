@@ -13,6 +13,7 @@ from learn_lab.deep.fit import Checkpoint
 from learn_lab.deep.registry import DEEP
 from learn_lab.errors import Refused
 from learn_lab.registry import family
+from learn_lab.representation import intervals, mesh_graph
 from learn_lab.tuning import objective
 
 RNG = np.random.default_rng(0)
@@ -31,6 +32,7 @@ def test_every_deep_family_resolves_through_the_registry_with_a_space():
         'deeponet',
         'fno',
         'transformer_operator',
+        'graph_operator',
         'gnn',
         'neural_ode',
         'monotone_law',
@@ -86,6 +88,10 @@ def test_operator_graph_and_sequence_families_score_on_small_data():
     coords = np.sort(RNG.uniform(0, 1, 5))[:, None]
     transformer = objective('transformer_operator', seq, -seq, k=2, fixed={'coords': coords, 'margin': 10.0})
     assert math.isfinite(transformer({'heads': 2, 'head_width': 2, 'layers': 1, **FAST}))
+    line = np.linspace(0, 1, 5)
+    graph = mesh_graph(line[:, None], intervals(line), radius=2.0)
+    gno = objective('graph_operator', seq, -seq, k=2, fixed={'graph': graph, 'margin': 10.0})
+    assert math.isfinite(gno({'width': 2, 'layers': 1, 'kernel_width': 4, **FAST}))
     edges = np.array([[0, 1, 2], [1, 2, 0]])
     nodes = RNG.standard_normal((6, 3, 2))
     g = objective('gnn', nodes, nodes[..., :1], k=2, fixed={'edges': edges, 'margin': 10.0})

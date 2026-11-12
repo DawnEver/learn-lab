@@ -2,6 +2,10 @@
 
 * :func:`folds` -- k test folds partitioning ``0..n-1``: contiguous (the first ``n % k`` one point
   larger) without a seed, a seeded permutation of the same sizes with one.
+* :func:`kfold` -- the ``(train, test)`` split of each of those folds; :func:`region` -- the split holding out
+  exactly the rows inside a declared box of the input domain (a design region the fit never sees).
+* :func:`split_scores` -- per split, the model fitted on its train rows and scored on its test rows (held out)
+  and on its train rows (in sample): an overfit model shows the gap.
 * :func:`cross_validate` -- every point predicted by the model fitted on the other folds.
 * :func:`score` -- one of :data:`SCORES` against the MEASURED values (first argument), averaged
   uniformly over the output columns: ``r2``, ``mse``, ``rmse`` (the column RMSEs averaged),
@@ -31,14 +35,21 @@ __all__ = [
     'COVERAGE_LEVELS',
     'SCORES',
     'Calibration',
+    'FoldScore',
     'ScoredFit',
     'box_predictions',
     'calibration',
     'cross_validate',
     'folds',
+    'kfold',
+    'region',
     'score',
     'scored_fit',
+    'split_scores',
 ]
+
+#: ``(train, test)`` row indices.
+Split = tuple[np.ndarray, np.ndarray]
 
 
 def _r2(measured: np.ndarray, predicted: np.ndarray) -> float:
@@ -90,6 +101,65 @@ def folds(n: int, k: int, *, seed: int | None = None) -> tuple[np.ndarray, ...]:
     return tuple(order[edges[i] : edges[i + 1]] for i in range(k))
 
 
+def kfold(n: int, k: int, *, seed: int | None = None) -> tuple[Split, ...]:
+    """The ``(train, test)`` split of each of :func:`folds` ``(n, k, seed=seed)``; the tests partition ``0..n-1``."""
+    everything = np.arange(n)
+    return tuple((np.setdiff1d(everything, test), test) for test in folds(n, k, seed=seed))
+
+
+def region(x: object, lower: object, upper: object) -> Split:
+    """Hold out exactly the rows of *x* inside the closed box ``[lower, upper]``; train on every other row."""
+    x = _matrix(x)
+    lo, hi = (
+        np.broadcast_to(np.asarray(lower, float), x.shape[1:]),
+        np.broadcast_to(np.asarray(upper, float), x.shape[1:]),
+    )
+    if np.any(lo > hi):
+        refuse(f'a held-out region runs lower <= upper per input, got {lo} .. {hi}')
+    inside = np.all((x >= lo) & (x <= hi), axis=1)
+    if inside.all() or not inside.any():
+        refuse(f'a held-out region must hold some rows and leave some: it holds {int(inside.sum())} of {len(x)}')
+    return np.flatnonzero(~inside), np.flatnonzero(inside)
+
+
+@dataclass(frozen=True, slots=True)
+class FoldScore:
+    """One split: its rows, the score on its held-out rows and on the rows it was fitted on."""
+
+    train: np.ndarray
+    test: np.ndarray
+    held_out: float
+    in_sample: float
+
+
+def split_scores(
+    surrogate: Surrogate,
+    x: object,
+    y: object,
+    splits: tuple[Split, ...] | list[Split],
+    *,
+    metric: str = 'rmse',
+    domain: BoxEnvelope | None = None,
+) -> tuple[FoldScore, ...]:
+    """Per split, *surrogate* fitted on its train rows and scored by *metric* held out and in sample.
+
+    Every split is fitted in ONE envelope -- *domain*, else the box all rows span -- so a held-out region at the
+    edge of the data is scored, never refused as out of its fold's domain.
+    """
+    if metric not in _SCORERS:
+        refuse(f'a score is one of {list(SCORES)}, got {metric!r}')
+    x, y, envelope = training_data(x, y, domain)
+    scores = []
+    for train, test in splits:
+        if len(train) == 0 or len(test) == 0 or len(np.intersect1d(train, test)):
+            refuse('a split trains and tests on disjoint, non-empty row sets')
+        fitted = surrogate.fit(x[train], y[train], domain=envelope)
+        held_out = score(metric, y[test], fitted.predict(x[test]).mean)
+        in_sample = score(metric, y[train], fitted.predict(x[train]).mean)
+        scores.append(FoldScore(train, test, held_out, in_sample))
+    return tuple(scores)
+
+
 def cross_validate(
     surrogate: Surrogate,
     x: object,
@@ -108,9 +178,7 @@ def cross_validate(
     want = 'variance' in surrogate.gives
     mean = np.empty_like(y)
     var = np.empty_like(y) if want else None
-    everything = np.arange(len(x))
-    for test in folds(len(x), k, seed=seed):
-        train = np.setdiff1d(everything, test)
+    for train, test in kfold(len(x), k, seed=seed):
         p = surrogate.fit(x[train], y[train], domain=envelope).predict(x[test], variance=want)
         mean[test] = p.mean
         if want:

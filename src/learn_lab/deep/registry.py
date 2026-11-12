@@ -7,7 +7,8 @@ it along the samples. The n-th fit of one build checkpoints under ``member-<n>``
 (Adam) and ``learning_rate``; a network of uniform layers is ``width`` x ``depth``. Data a family needs
 beyond ``(x, y)`` is a fixed setting: DeepONet's shared query ``points``, a graph's ``edges`` (one topology
 for every sample), a neural ODE's sample times ``t`` (``x`` and ``y`` both the trajectories; a trajectory is
-predicted from its start). The physics-informed field fits a residual, not data, so it has no data objective.
+predicted from its start), a graph operator's ``graph`` (one point set for every sample). The physics-informed
+field fits a residual, and the learned preconditioner a matrix norm, not data: neither has a data objective.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from learn_lab.deep.field import FieldModel
 from learn_lab.deep.fit import Checkpoint, Schedule
 from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.deep.hysteresis import PlayHysteresis
-from learn_lab.deep.operator import FNO, DeepONet, TransformerOperator
+from learn_lab.deep.operator import FNO, DeepONet, GraphOperator, TransformerOperator
 from learn_lab.deep.surrogate import DeepEnsemble
 from learn_lab.errors import refuse
 from learn_lab.protocol import Give, Prediction
@@ -128,6 +129,19 @@ def _transformer_operator(
     return _Rows(fit, shapes, checkpoint)
 
 
+def _graph_operator(
+    *, shapes, checkpoint, graph, width=16, layers=2, kernel_width=32, steps=2000, learning_rate=3e-3, **declared
+):
+    schedule = _schedule(steps, learning_rate)
+    model = GraphOperator(width=width, layers=layers, kernel_width=kernel_width, schedule=schedule, **declared)
+
+    def fit(x, y, c, _domain):
+        fitted = model.fit(x, graph, y, checkpoint=c)
+        return lambda q: fitted.predict(q, graph)
+
+    return _Rows(fit, shapes, checkpoint)
+
+
 def _gnn(
     *, shapes, checkpoint, edges, edge_features=None, hidden=64, rounds=6, steps=3000, learning_rate=2e-3, **declared
 ):
@@ -180,6 +194,9 @@ DEEP: Final = {
     'fno': Family(_fno, _space(modes=Integer(1, 64), width=Integer(2, 256), layers=_DEPTH), shaped=True),
     'transformer_operator': Family(
         _transformer_operator, _space(heads=Integer(1, 8), head_width=Integer(2, 64), layers=_DEPTH), shaped=True
+    ),
+    'graph_operator': Family(
+        _graph_operator, _space(width=Integer(2, 128), layers=_DEPTH, kernel_width=_WIDTH), shaped=True
     ),
     'gnn': Family(_gnn, _space(hidden=_WIDTH, rounds=Integer(1, 16)), shaped=True),
     'neural_ode': Family(_neural_ode, _space(width=_WIDTH, depth=_DEPTH, horizon=Integer(1, 100)), shaped=True),

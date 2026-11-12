@@ -16,6 +16,10 @@
   a function whose values at the training nodes leave the box is OUT_OF_DOMAIN at every resolution.
   ``chunk`` evaluates the full-batch loss that many samples at a time with activation checkpointing (as
   :class:`~learn_lab.deep.field.FieldModel`): the gradient is the full batch's, peak memory ``chunk x width``.
+- :class:`TransformerOperator` -- self-attention over irregular points.
+- :class:`GraphOperator` -- kernel-integral message passing over a :class:`~learn_lab.representation.PointGraph`
+  (mesh nodes, see :func:`~learn_lab.representation.mesh_graph`); discretisation-invariant: fit on one point
+  set, evaluate on another.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
+from learn_lab.representation import PointGraph
 from learn_lab.validity import BoxEnvelope, ChannelEnvelope
 
 __all__ = [
@@ -41,7 +46,9 @@ __all__ = [
     'DeepONet',
     'FittedDeepONet',
     'FittedFNO',
+    'FittedGraphOperator',
     'FittedTransformerOperator',
+    'GraphOperator',
     'SpectralConv',
     'TransformerOperator',
 ]
@@ -473,3 +480,139 @@ class FittedTransformerOperator:
         rt = self.runtime
         with torch.no_grad():
             return self.outputs.back(numpy(self.net(rt.tensor(self.inputs.forward(x)), rt.tensor(c))))
+
+
+class _GraphOperatorNet(nn.Module):
+    def __init__(
+        self, c_in: int, c_out: int, *, dimension: int, width: int, layers: int, kernel_width: int, lower, upper
+    ) -> None:
+        super().__init__()
+        self.arguments = {
+            'c_in': c_in,
+            'c_out': c_out,
+            'dimension': dimension,
+            'width': width,
+            'layers': layers,
+            'kernel_width': kernel_width,
+            'lower': lower,
+            'upper': upper,
+        }
+        self.width = width
+        self.lift = MLP([c_in + dimension, width, width], activation='gelu')
+        self.kernels = nn.ModuleList(
+            MLP([3 * dimension + 1, kernel_width, kernel_width, width * width], activation='gelu')
+            for _ in range(layers)
+        )
+        self.local = nn.ModuleList(nn.Linear(width, width) for _ in range(layers))
+        self.project = MLP([width, width, c_out], activation='gelu')
+        span = np.where(upper > lower, upper - lower, 1.0)
+        self.register_buffer('lower', torch.as_tensor(lower, dtype=torch.float64))
+        self.register_buffer('span', torch.as_tensor(span, dtype=torch.float64))
+
+    def forward(
+        self, x: torch.Tensor, points: torch.Tensor, edges: torch.Tensor, weights: torch.Tensor
+    ) -> torch.Tensor:
+        """``x (n, c_in, N)`` on ``points (N, d)``, ``edges (2, E)``, quadrature ``weights (E,)`` -> ``(n, c_out, N)``."""
+        source, target = edges
+        z = 2.0 * (points - self.lower) / self.span - 1.0
+        offset = z[source] - z[target]
+        geometry = torch.cat([z[target], z[source], offset, offset.norm(dim=1, keepdim=True)], dim=1)
+        h = self.lift(torch.cat([x.transpose(1, 2), z.expand(x.shape[0], -1, -1)], dim=-1))
+        for i, (kernel, local) in enumerate(zip(self.kernels, self.local, strict=True)):
+            k = kernel(geometry).reshape(-1, self.width, self.width) * weights[:, None, None]
+            message = torch.einsum('eij,nej->nei', k, h[:, source])
+            h = local(h) + torch.zeros_like(h).index_add_(1, target, message)
+            if i < len(self.kernels) - 1:
+                h = nn.functional.gelu(h)
+        return self.project(h).transpose(1, 2)
+
+
+@dataclass(frozen=True, slots=True)
+class GraphOperator:
+    """A graph neural operator: kernel-integral layers over a :class:`~learn_lab.representation.PointGraph`.
+
+    Each layer is ``h_i <- W h_i + sum_j weight_ij K(x_i, x_j) h_j`` with ``K`` a ``width x width`` matrix from
+    an MLP of the two (box-normalised) positions and their offset; the sum is the graph's quadrature of the
+    kernel integral, so the trained weights hold on ANY point set of the domain: fit on one mesh, evaluate on
+    another (a finer one included). A query's points are refused outside the training points' box and its
+    input values outside the per-channel value box.
+    """
+
+    width: int = 16
+    layers: int = 2
+    kernel_width: int = 32
+    schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=2000, learning_rate=3e-3))
+    runtime: Runtime = field(default_factory=lambda: Runtime(dtype='float32'))
+    margin: float = 0.0
+
+    def __post_init__(self) -> None:
+        if min(self.width, self.layers, self.kernel_width) < 1:
+            refuse(f'a graph operator has width, layers and kernel_width >= 1, got {self}')
+
+    def fit(
+        self, x: np.ndarray, graph: PointGraph, y: np.ndarray, *, checkpoint: Checkpoint | None = None
+    ) -> FittedGraphOperator:
+        """``x (n, c_in, N)`` on the ``N`` points of *graph* -> ``y (n, c_out, N)`` on the same points."""
+        graph = graph.require_valid('the training graph')
+        x = require_finite(np.asarray(x, float), 'the input functions')
+        y = require_finite(np.asarray(y, float), 'the output functions')
+        nodes = len(graph.points)
+        if x.ndim != 3 or y.ndim != 3 or x.shape[0] != y.shape[0] or x.shape[2] != nodes or y.shape[2] != nodes:
+            refuse(
+                f'a graph operator is fitted on x (n, c_in, N), y (n, c_out, N) with N = {nodes}; '
+                f'got {x.shape}, {y.shape}'
+            )
+        rt = self.runtime
+        rt.seeded()
+        sx, sy = Standardiser.of(x), Standardiser.of(y)
+        box = BoxEnvelope.of(graph.points, margin=self.margin)
+        net = _GraphOperatorNet(
+            x.shape[1],
+            y.shape[1],
+            dimension=graph.points.shape[1],
+            width=self.width,
+            layers=self.layers,
+            kernel_width=self.kernel_width,
+            lower=box.lower,
+            upper=box.upper,
+        ).to(rt.torch_device, rt.torch_dtype)
+        xt, yt = rt.tensor(sx.forward(x)), rt.tensor(sy.forward(y))
+        structure = _graph_tensors(rt, graph)
+
+        def loss() -> torch.Tensor:
+            return ((net(xt, *structure) - yt) ** 2).mean()
+
+        history = minimise(
+            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, yt, *structure]
+        )
+        envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
+        return FittedGraphOperator(
+            net=net.eval(), runtime=rt, envelope=envelope, points=box, inputs=sx, outputs=sy, history=history
+        )
+
+
+def _graph_tensors(rt: Runtime, graph: PointGraph) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    edges = torch.as_tensor(np.asarray(graph.edges, np.int64), device=rt.torch_device)
+    return rt.tensor(graph.points), edges, rt.tensor(graph.weights)
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class FittedGraphOperator:
+    net: _GraphOperatorNet
+    runtime: Runtime
+    envelope: ChannelEnvelope
+    points: BoxEnvelope
+    inputs: Standardiser
+    outputs: Standardiser
+    history: list[float]
+
+    def predict(self, x: np.ndarray, graph: PointGraph) -> np.ndarray:
+        """``(n, c_out, N)``: each input function's image on the ``N`` points of *graph* (any point set)."""
+        graph = graph.require_valid('a graph operator query graph')
+        x = self.envelope.require(np.asarray(x, float), 'a graph operator input function')
+        self.points.require(graph.points, 'a graph operator point')
+        if x.ndim != 3 or x.shape[2] != len(graph.points):
+            refuse(f'a graph operator query of shape {x.shape} is invalid on {len(graph.points)} points: (n, c_in, N)')
+        rt = self.runtime
+        with torch.no_grad():
+            return self.outputs.back(numpy(self.net(rt.tensor(self.inputs.forward(x)), *_graph_tensors(rt, graph))))

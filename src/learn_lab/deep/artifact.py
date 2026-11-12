@@ -21,7 +21,8 @@ from learn_lab.deep.field import UNet
 from learn_lab.deep.graph import MessagePassing
 from learn_lab.deep.hysteresis import PlayBank
 from learn_lab.deep.networks import MLP, MonotoneScalar
-from learn_lab.deep.operator import _DeepONetNet, _FNONet, _TransformerNet
+from learn_lab.deep.operator import _DeepONetNet, _FNONet, _GraphOperatorNet, _TransformerNet
+from learn_lab.deep.preconditioner import _PreconditionerNet
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import refuse
 
@@ -37,6 +38,8 @@ MODULES: Final[dict[str, type[nn.Module]]] = {
     'TransformerNet': _TransformerNet,
     'MessagePassing': MessagePassing,
     'PlayBank': PlayBank,
+    'GraphOperatorNet': _GraphOperatorNet,
+    'PreconditionerNet': _PreconditionerNet,
 }
 
 
@@ -139,6 +142,14 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
             'edges': None if f.edge_envelope is None else _channels(f.edge_envelope),
         },
         'outputs': _channels_out(f.outputs, 'node channels'),
+    },
+    'graph_operator': lambda f: {
+        'inputs': {'functions': _channels(f.envelope), 'points': _box(f.points)},
+        'outputs': _channels_out(f.outputs, 'channels per graph node'),
+    },
+    'learned_preconditioner': lambda f: {
+        'inputs': {'kind': 'spd matrix', 'nodes': _channels(f.node_envelope), 'entries': _channels(f.edge_envelope)},
+        'outputs': {'kind': 'preconditioner'},
     },
     'neural_ode': lambda f: {
         'inputs': _box(f.envelope),

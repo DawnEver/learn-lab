@@ -99,6 +99,8 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
     ),
     'graph_model': ('learn_lab.deep.graph:GraphModel', 'learn_lab.deep.graph:FittedGraphModel'),
     'neural_ode': ('learn_lab.deep.dynamics:NeuralODE', 'learn_lab.deep.dynamics:FittedDynamics'),
+    'diffusion_field': ('learn_lab.deep.diffusion:DiffusionField', 'learn_lab.deep.diffusion:FittedDiffusionField'),
+    'pde_net': ('learn_lab.deep.pdenet:PDENet', 'learn_lab.deep.pdenet:FittedPDENet'),
 }
 
 

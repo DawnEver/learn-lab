@@ -35,6 +35,8 @@ def test_every_deep_family_resolves_through_the_registry_with_a_space():
         'neural_ode',
         'monotone_law',
         'play_hysteresis',
+        'diffusion_field',
+        'pde_net',
     }
     assert set(DEEP) == expected
     for name in expected:

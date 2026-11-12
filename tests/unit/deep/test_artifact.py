@@ -14,6 +14,7 @@ import torch
 
 from learn_lab import artifact
 from learn_lab.deep.constitutive import MonotoneLaw
+from learn_lab.deep.diffusion import DiffusionField
 from learn_lab.deep.dynamics import NeuralODE
 from learn_lab.deep.field import FieldModel
 from learn_lab.deep.fit import Schedule
@@ -21,6 +22,7 @@ from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.deep.hysteresis import PlayHysteresis
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.operator import FNO, DeepONet, TransformerOperator
+from learn_lab.deep.pdenet import PDENet
 from learn_lab.deep.physics import PhysicsInformedField
 from learn_lab.deep.runtime import Runtime
 from learn_lab.deep.surrogate import DeepEnsemble
@@ -139,6 +141,18 @@ CASES = {
             f.integrate(np.array([[0.5, 0.5], [0.2, 0.6]]), np.array([0.0, 1e-3, 2e-3])),
         ],
         lambda f: f.rate(np.array([[3.0, 0.0]])),
+    ),
+    'diffusion_field': (
+        DiffusionField(width=4, levels=1, noise_steps=5, schedule=FEW, runtime=CPU64),
+        lambda m: m.fit(X[:6], GRID),
+        lambda f: [f.sample(X[:2], 2, seed=3), *f.moments(X[:1], 3)],
+        lambda f: f.sample(np.array([[1.5, 0.0]]), 1),
+    ),
+    'pde_net': (
+        PDENet(refit_steps=2, schedule=FEW, runtime=CPU64),
+        lambda m: m.fit(GRID[:, 0, 0], GRID[:, 0, 1], dt=1e-3, dx=0.1),
+        lambda f: [f.rate(GRID[:2, 0, 0]), f.advance(GRID[:2, 0, 0], 1e-3), f.stencils()],
+        lambda f: f.rate(GRID[:1, 0, 0] + 5.0),
     ),
 }
 

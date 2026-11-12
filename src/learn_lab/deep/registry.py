@@ -7,7 +7,9 @@ it along the samples. The n-th fit of one build checkpoints under ``member-<n>``
 (Adam) and ``learning_rate``; a network of uniform layers is ``width`` x ``depth``. Data a family needs
 beyond ``(x, y)`` is a fixed setting: DeepONet's shared query ``points``, a graph's ``edges`` (one topology
 for every sample), a neural ODE's sample times ``t`` (``x`` and ``y`` both the trajectories; a trajectory is
-predicted from its start). The physics-informed field fits a residual, not data, so it has no data objective.
+predicted from its start); a diffusion field's ``count``
+samples per condition (its prediction is their mean); a PDE-Net's ``dt`` and ``dx`` (``x`` the snapshots, ``y``
+them one ``dt`` later; its prediction is one step). The physics-informed field fits a residual, not data, so it has no data objective.
 """
 
 from __future__ import annotations
@@ -19,12 +21,14 @@ from typing import Final
 import numpy as np
 
 from learn_lab.deep.constitutive import MonotoneLaw
+from learn_lab.deep.diffusion import DiffusionField
 from learn_lab.deep.dynamics import NeuralODE
 from learn_lab.deep.field import FieldModel
 from learn_lab.deep.fit import Checkpoint, Schedule
 from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.deep.hysteresis import PlayHysteresis
 from learn_lab.deep.operator import FNO, DeepONet, TransformerOperator
+from learn_lab.deep.pdenet import PDENet
 from learn_lab.deep.surrogate import DeepEnsemble
 from learn_lab.errors import refuse
 from learn_lab.protocol import Give, Prediction
@@ -168,6 +172,26 @@ def _play_hysteresis(*, shapes, checkpoint, plays=16, hidden=16, steps=1500, lea
     return _Rows(fit, shapes, checkpoint)
 
 
+def _diffusion_field(*, shapes, checkpoint, count=64, width=16, levels=1, steps=3000, learning_rate=2e-3, **declared):
+    model = DiffusionField(width=width, levels=levels, schedule=_schedule(steps, learning_rate), **declared)
+
+    def fit(x, y, c, _domain):
+        fitted = model.fit(x, y, checkpoint=c)
+        return lambda conditions: fitted.moments(conditions, count)[0]
+
+    return _Rows(fit, shapes, checkpoint)
+
+
+def _pde_net(*, shapes, checkpoint, dt, dx, steps=2000, learning_rate=1e-2, **declared):
+    model = PDENet(schedule=_schedule(steps, learning_rate), **declared)
+
+    def fit(x, y, c, _domain):
+        fitted = model.fit(x, y, dt=dt, dx=dx, checkpoint=c)
+        return lambda u: fitted.advance(u, dt)
+
+    return _Rows(fit, shapes, checkpoint)
+
+
 def _space(**dimensions: Integer | Real) -> Space:
     return Space({**dimensions, 'steps': _STEPS, 'learning_rate': _RATE})
 
@@ -185,4 +209,12 @@ DEEP: Final = {
     'neural_ode': Family(_neural_ode, _space(width=_WIDTH, depth=_DEPTH, horizon=Integer(1, 100)), shaped=True),
     'monotone_law': Family(_monotone_law, _space(hidden=Integer(1, 256), polish=Integer(0, 2000)), shaped=True),
     'play_hysteresis': Family(_play_hysteresis, _space(plays=Integer(1, 128), hidden=Integer(1, 256)), shaped=True),
+    'diffusion_field': Family(
+        _diffusion_field,
+        _space(width=Integer(2, 128), levels=Integer(1, 5), noise_steps=Integer(10, 1000)),
+        shaped=True,
+    ),
+    'pde_net': Family(
+        _pde_net, _space(sparsity=Real(1e-6, 1e-1, log=True), threshold=Real(1e-4, 1.0, log=True)), shaped=True
+    ),
 }

@@ -207,8 +207,14 @@ def quantize(
         batches = list(calibration.reshape(-1, *shape))
         # MIXED: asymmetric activations. The fields are signed and their outputs skewed, so a symmetric range
         # spends half its codes on values that never occur (measured: 0.0072 -> 0.0040 worse than f32).
+        # ENABLE: 7-bit weights in every layer. Without VNNI the int8 dot product saturates its int16 pairs at full
+        # 8-bit range and nncf's default fixes the first layer only, so the int8 graph answered by runner ISA.
         model = nncf.quantize(
-            model, nncf.Dataset(batches), subset_size=len(batches), preset=nncf.QuantizationPreset.MIXED
+            model,
+            nncf.Dataset(batches),
+            subset_size=len(batches),
+            preset=nncf.QuantizationPreset.MIXED,
+            advanced_parameters=nncf.AdvancedQuantizationParameters(overflow_fix=nncf.OverflowFix.ENABLE),
         )
     target.mkdir()
     ov.save_model(model, target / IR[0], compress_to_fp16=precision == 'f16')

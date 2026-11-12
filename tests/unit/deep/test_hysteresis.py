@@ -250,10 +250,10 @@ def test_the_stop_form_plateaus_on_a_preisach_inverse_and_the_inverted_shaped_ba
     """
     for plays in (8, 16):
         _, worst, loop_error = _reach(plays=plays)
-        assert worst > DB_BAR, (plays, worst, loop_error)  # T; measured
+        assert worst > DB_BAR, (plays, worst, loop_error)  # T; measured 1.17 (8), 0.73 (16); loop error 212, 137
     model, worst, loop_error = _reach(shaped=True, inverted=True)
-    assert worst < DB_BAR, (worst, loop_error)  # T; measured
-    assert loop_error < LOOP_BAR, (worst, loop_error)  # J/m^3; measured
+    assert worst < DB_BAR, (worst, loop_error)  # T; measured 4.3e-3 (inverted unshaped: 1.5e-2)
+    assert loop_error < LOOP_BAR, (worst, loop_error)  # J/m^3; measured 2.2 (inverted unshaped: 4.9)
     cycle = _preisach(H_DRIVE)[32:]
     cycle[-1] = cycle[0]
     assert dissipation(model.step, model.initial_state(), cycle, input_is='displacement') > 0  # J/m^3

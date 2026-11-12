@@ -24,7 +24,7 @@ from learn_lab.deep.field import FieldModel
 from learn_lab.deep.fit import Checkpoint, Schedule
 from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.deep.hysteresis import PlayHysteresis
-from learn_lab.deep.operator import FNO, DeepONet
+from learn_lab.deep.operator import FNO, DeepONet, TransformerOperator
 from learn_lab.deep.surrogate import DeepEnsemble
 from learn_lab.errors import refuse
 from learn_lab.protocol import Give, Prediction
@@ -115,6 +115,19 @@ def _fno(*, shapes, checkpoint, modes=12, width=32, layers=4, steps=2000, learni
     return _Rows(lambda x, y, c, _domain: model.fit(x, y, checkpoint=c).predict, shapes, checkpoint)
 
 
+def _transformer_operator(
+    *, shapes, checkpoint, coords, heads=4, head_width=8, layers=2, steps=2000, learning_rate=3e-3, **declared
+):
+    schedule = _schedule(steps, learning_rate)
+    model = TransformerOperator(width=heads * head_width, heads=heads, layers=layers, schedule=schedule, **declared)
+
+    def fit(x, y, c, _domain):
+        fitted = model.fit(x, coords, y, checkpoint=c)
+        return lambda q: fitted.predict(q, coords)
+
+    return _Rows(fit, shapes, checkpoint)
+
+
 def _gnn(
     *, shapes, checkpoint, edges, edge_features=None, hidden=64, rounds=6, steps=3000, learning_rate=2e-3, **declared
 ):
@@ -165,6 +178,9 @@ DEEP: Final = {
     'unet': Family(_unet, _space(width=Integer(2, 128), levels=Integer(1, 5)), shaped=True),
     'deeponet': Family(_deeponet, _space(width=_WIDTH, depth=_DEPTH, basis=Integer(2, 256)), shaped=True),
     'fno': Family(_fno, _space(modes=Integer(1, 64), width=Integer(2, 256), layers=_DEPTH), shaped=True),
+    'transformer_operator': Family(
+        _transformer_operator, _space(heads=Integer(1, 8), head_width=Integer(2, 64), layers=_DEPTH), shaped=True
+    ),
     'gnn': Family(_gnn, _space(hidden=_WIDTH, rounds=Integer(1, 16)), shaped=True),
     'neural_ode': Family(_neural_ode, _space(width=_WIDTH, depth=_DEPTH, horizon=Integer(1, 100)), shaped=True),
     'monotone_law': Family(_monotone_law, _space(hidden=Integer(1, 256), polish=Integer(0, 2000)), shaped=True),

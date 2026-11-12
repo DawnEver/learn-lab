@@ -25,7 +25,17 @@ def _fields(n):
 
 
 def test_every_deep_family_resolves_through_the_registry_with_a_space():
-    expected = {'deep_ensemble', 'unet', 'deeponet', 'fno', 'gnn', 'neural_ode', 'monotone_law', 'play_hysteresis'}
+    expected = {
+        'deep_ensemble',
+        'unet',
+        'deeponet',
+        'fno',
+        'transformer_operator',
+        'gnn',
+        'neural_ode',
+        'monotone_law',
+        'play_hysteresis',
+    }
     assert set(DEEP) == expected
     for name in expected:
         assert family(name) is DEEP[name]
@@ -72,6 +82,10 @@ def test_operator_graph_and_sequence_families_score_on_small_data():
     assert math.isfinite(
         objective('fno', x, y, k=2, fixed={'margin': 10.0})({'modes': 2, 'width': 4, 'layers': 1, **FAST})
     )
+    seq = RNG.standard_normal((6, 1, 5))
+    coords = np.sort(RNG.uniform(0, 1, 5))[:, None]
+    transformer = objective('transformer_operator', seq, -seq, k=2, fixed={'coords': coords, 'margin': 10.0})
+    assert math.isfinite(transformer({'heads': 2, 'head_width': 2, 'layers': 1, **FAST}))
     edges = np.array([[0, 1, 2], [1, 2, 0]])
     nodes = RNG.standard_normal((6, 3, 2))
     g = objective('gnn', nodes, nodes[..., :1], k=2, fixed={'edges': edges, 'margin': 10.0})

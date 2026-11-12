@@ -15,14 +15,17 @@ from learn_lab.errors import Refused
 N, A, S = 8, 1.0, 0.3  # grid side; mean amplitude and noise amplitude, T
 MEAN_BAR = 0.06  # T: RMS over the grid of (sample mean - closed-form mean)
 VARIANCE_BAR = 0.3  # relative error of the grid-averaged sample variance, dimensionless
-# Measured 2026-11-12 (CPU float64): mean 0.034 T; shuffled-condition control 0.437 T; variance error 0.48 (xfail).
+# The rate is cosine-annealed: at a constant 5e-3 the loss's fresh noise keeps the weights jittering, and the sample
+# mean of whichever snapshot the last step lands on read 0.027..0.405 T over steps 500..1000 and 0.041..0.057 T at
+# step 1000 across seeds 0..2 on Windows -- a knife edge the Linux forge fell off. Annealed, the same sweep reads
+# 0.008..0.036 T over steps 800..1000 and 0.012..0.030 T at step 1000 (variance error 0.40..0.45, still xfail).
 QUERY, COUNT = 0.8, 128
 CPU64 = Runtime(device='cpu', dtype='float64')
 MODEL = DiffusionField(
     width=8,
     levels=1,
     noise_steps=50,
-    schedule=Schedule(adam_steps=1000, learning_rate=5e-3),
+    schedule=Schedule(adam_steps=1000, learning_rate=5e-3, decay='cosine'),
     runtime=CPU64,
     chunk=None,
 )
@@ -60,7 +63,9 @@ def test_the_sample_mean_matches_the_closed_form(fitted):
     assert _rms(mean[0, 0] - QUERY * A * PHI) < MEAN_BAR
 
 
-@pytest.mark.xfail(strict=True, reason='sample variance off by 0.48 relative (bar 0.3): the small U-Net under-fits eps')
+@pytest.mark.xfail(
+    strict=True, reason='sample variance off by 0.40..0.45 relative (bar 0.3): the small U-Net under-fits eps'
+)
 def test_the_sample_variance_matches_the_closed_form(fitted):
     _, variance = fitted.moments(np.array([[QUERY]]), COUNT)
     assert abs(variance[0, 0].mean() / VARIANCE.mean() - 1) < VARIANCE_BAR

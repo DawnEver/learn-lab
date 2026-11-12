@@ -8,7 +8,8 @@ noise (posterior variance ``beta_t (1 - abar_{t-1}) / (1 - abar_t)``, exact for 
 samples; :meth:`~FittedDiffusionField.moments` their mean and variance per cell.
 
 The envelope is the conditions' box: a condition outside it is refused (OUT_OF_DOMAIN), another width is INVALID.
-Fields are standardised per channel. The loss draws fresh noise every step, so it is minimised by Adam only: an
+Fields are standardised per channel. The loss draws fresh noise every step, so it is minimised by Adam only, on a
+cosine-annealed rate by default (a constant rate leaves the weights jittering on that noise): an
 L-BFGS polish of a stochastic loss is refused. ``chunk`` bounds peak memory as in :mod:`learn_lab.deep.field`;
 ``levels`` halvings need ``H`` and ``W`` divisible by ``2**levels``.
 """
@@ -54,7 +55,7 @@ class DiffusionField:
     width: int = 16
     levels: int = 1
     noise_steps: int = 100
-    schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=3000, learning_rate=2e-3))
+    schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=3000, learning_rate=2e-3, decay='cosine'))
     runtime: Runtime = field(default_factory=lambda: Runtime(dtype='float32'))
     margin: float = 0.0
     chunk: int | None = 32

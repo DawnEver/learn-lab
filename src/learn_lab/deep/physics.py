@@ -50,10 +50,14 @@ provider's ``energy(field, points, parameters)`` instead of squaring its residua
 -- per region an :class:`Energy` density with the region's ``measure`` (its length/area/volume in coordinate units)
 and the energy's ``scale`` -- plus, as :class:`Term` s, the ESSENTIAL conditions the energy does not carry (a
 Dirichlet side); natural conditions and interface fluxes are the energy's own stationarity and are never stated.
-learn-lab owns the quadrature: each region's integral is ``measure * mean(density)`` over its points (Monte Carlo),
-redrawn from the provider's own sampler under a fresh seed every ``every`` Adam steps so the minimiser cannot fit
-one point set. An L-BFGS polish runs on the last draw and fits ITS quadrature error (measured, planted Poisson,
-1024 points: 7.5e-2 polished against 1.1e-2 Adam only), so a Ritz schedule is Adam only. An essential term enters as ``penalty * term.loss()``.
+The quadrature is the provider's choice, carried by each :class:`Energy`. MONTE CARLO (a ``measure``):
+``measure * mean(density)`` over the region's points, redrawn from the provider's own sampler under a fresh seed every
+``every`` Adam steps so the minimiser cannot fit one point set; an L-BFGS polish runs on the last draw and fits ITS
+quadrature error (measured, planted Poisson, 1024 points: 7.5e-2 polished against 1.1e-2 Adam only), so a Monte Carlo
+Ritz schedule is Adam only. DETERMINISTIC (``weights``, e.g. :func:`gauss_legendre` per region, a material interface
+a cell boundary): ``sum(weights * density)``, exact for polynomials to the rule's order, so the objective is the true
+energy to that order and an L-BFGS polish is sound (measured on the planted two-slab Poisson with a 1:4 jump in
+``tests/unit/deep/test_physics_ritz_quadrature.py``, whose bars quote the numbers). An essential term enters as ``penalty * term.loss()``.
 """
 
 from __future__ import annotations
@@ -82,6 +86,7 @@ __all__ = [
     'Ritz',
     'Term',
     'derivative',
+    'gauss_legendre',
 ]
 
 Field = Callable[[torch.Tensor], torch.Tensor]
@@ -104,22 +109,57 @@ class Term:
 
 @dataclass(frozen=True, slots=True)
 class Energy:
-    """An energy ``density`` at the points of one region, the region's ``measure`` and the energy ``scale`` (its
-    unit) that makes ``measure * mean(density) / scale`` dimensionless. An energy may be negative: it is not squared.
+    """An energy ``density`` at the points of one region and the energy ``scale`` (its unit) that makes the region's
+    integral dimensionless. The integral is EITHER Monte Carlo -- ``measure * mean(density)``, ``measure`` the
+    region's length/area/volume in coordinate units -- OR a deterministic quadrature -- ``sum(weights * density)``,
+    one weight per point (e.g. :func:`gauss_legendre`, whose weights sum to the measure). An energy may be negative.
     """
 
     density: torch.Tensor
-    measure: float
     scale: float
+    measure: float | None = None
+    weights: torch.Tensor | None = None
 
     def __post_init__(self) -> None:
-        if not self.measure > 0:
+        if (self.measure is None) == (self.weights is None):
+            refuse('an energy integrates by a measure or quadrature weights: give exactly one')
+        if self.measure is not None and not self.measure > 0:
             refuse(f'a region measure is > 0 in coordinate units, got {self.measure}')
+        if self.weights is not None and self.weights.shape != self.density.shape:
+            shapes = f'{tuple(self.weights.shape)} for {tuple(self.density.shape)}'
+            refuse(f'a quadrature carries one weight per point: {shapes}')
         if not self.scale > 0:
             refuse(f'an energy scale is > 0 in the energy unit, got {self.scale}')
 
     def loss(self) -> torch.Tensor:
-        return self.measure * self.density.mean() / self.scale
+        if self.weights is None:
+            return self.measure * self.density.mean() / self.scale
+        return (self.weights * self.density).sum() / self.scale
+
+
+def gauss_legendre(
+    lower: Sequence[float], upper: Sequence[float], order: int, runtime: Runtime, *, cells: int = 1
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """A composite tensor Gauss-Legendre rule on the box ``[lower, upper]``: ``cells`` equal cells per coordinate,
+    ``order`` points per cell per coordinate, exact for polynomials of degree ``2 order - 1`` per coordinate on each
+    cell. Returns points ``(n, dim)`` and weights ``(n,)`` summing to the box's measure; give each material region
+    its own box so an interface is a cell boundary, never inside one.
+    """
+    if order < 1 or cells < 1:
+        refuse(f'a Gauss-Legendre rule takes order >= 1 and cells >= 1, got order={order} cells={cells}')
+    lo, hi = np.asarray(lower, float), np.asarray(upper, float)
+    if lo.shape != hi.shape or lo.ndim != 1 or not (hi > lo).all():
+        refuse(f'a quadrature box has lower < upper per coordinate, got {lo} and {hi}')
+    node, weight = np.polynomial.legendre.leggauss(order)
+    axes, factors = [], []
+    for a, b in zip(lo, hi, strict=True):
+        edges = np.linspace(a, b, cells + 1)
+        half = 0.5 * (edges[1:] - edges[:-1])
+        axes.append(((edges[:-1] + half)[:, None] + half[:, None] * node).ravel())
+        factors.append((half[:, None] * weight).ravel())
+    points = np.stack([g.ravel() for g in np.meshgrid(*axes, indexing='ij')], axis=1)
+    weights = np.prod(np.stack([g.ravel() for g in np.meshgrid(*factors, indexing='ij')], axis=1), axis=1)
+    return runtime.tensor(points), runtime.tensor(weights)
 
 
 @dataclass(frozen=True, slots=True)

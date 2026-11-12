@@ -95,7 +95,7 @@ CPU64 = Runtime(device='cpu', dtype='float64')
 
 def _low_field_error(loss):
     x = np.concatenate([-DECADES[::-1], DECADES])
-    law = MonotoneLaw(loss=loss, schedule=POLISHED, runtime=CPU64).fit(x, _steel(x))
+    law = MonotoneLaw(loss=loss, input_warp='log', schedule=POLISHED, runtime=CPU64).fit(x, _steel(x))
     return np.max(np.abs(law.value(LOW) - _steel(LOW)) / _steel(LOW)), law
 
 
@@ -108,7 +108,11 @@ def test_a_relative_loss_holds_a_decades_spanning_law_within_one_percent_at_the_
     """``loss='relative'`` holds the low-field decade of a four-decade B(H) within 1 %.
 
     PLANTED CONTROL (deterministic): the same check refuses the fitted law with a 2 % error injected at the low end.
-    Measured 2026-11-12 (CPU float64): relative 0.26 %; plain MSE 2.3 % on Windows CPU but under 2 % and within
+    The input is log-warped (``input_warp='log'``): unwarped, the low decade sits at ``x / max|x|`` in
+    [1e-4, 1e-3] and where Adam stops decides the minimum L-BFGS polishes -- 0.21..1.76 % across Adam
+    2500..3500 steps and learning rate 2.7e-3..3.3e-3 on Windows CPU, over 1 % on the Linux forge; warped,
+    0.03..0.25 % over the same sweep.
+    Measured 2026-11-12 (CPU float64, unwarped): plain MSE 2.3 % on Windows CPU but under 2 % and within
     4x of the relative fit on the Linux forge. An MSE fit is odd and monotone, hence linear near H = 0, and learns
     that slope from the mid range, so its low-end miss is small and platform-dependent: it cannot be a control.
     """
@@ -117,9 +121,17 @@ def test_a_relative_loss_holds_a_decades_spanning_law_within_one_percent_at_the_
     assert _worst_low_field(lambda h: 1.02 * law.value(h)) > 0.01  # PLANTED: a 2 % low-end error is refused
     assert np.all(law.derivative(LOW) > 0)
     np.testing.assert_allclose(law.value(-LOW), -law.value(LOW), rtol=0, atol=1e-12)  # T: exact oddness
+    fd = (law.value(LOW * (1 + 1e-6)) - law.value(LOW * (1 - 1e-6))) / (2e-6 * LOW)
+    np.testing.assert_allclose(law.derivative(LOW), fd, rtol=1e-5, atol=0)  # T/(A/m): through the warp
 
 
 def test_mse_is_the_default_loss_and_an_unknown_loss_is_refused():
     assert MonotoneLaw().loss == 'mse'
     with pytest.raises(Refused, match='loss'):
         MonotoneLaw(loss='huber').fit(np.array([1.0, 2.0]), np.array([1.0, 2.0]))
+
+
+def test_linear_is_the_default_input_warp_and_an_unknown_warp_is_refused():
+    assert MonotoneLaw().input_warp == 'linear'
+    with pytest.raises(Refused, match='input_warp'):
+        MonotoneLaw(input_warp='sqrt').fit(np.array([1.0, 2.0]), np.array([1.0, 2.0]))

@@ -3,8 +3,8 @@ revision = 5
 requires-python = ">=3.13, <3.15"
 resolution-markers = [
     "(python_full_version >= '3.14' and sys_platform == 'linux') or (python_full_version >= '3.14' and sys_platform == 'win32')",
-    "(python_full_version < '3.14' and sys_platform == 'linux') or (python_full_version < '3.14' and sys_platform == 'win32')",
     "python_full_version >= '3.14' and sys_platform != 'linux' and sys_platform != 'win32'",
+    "(python_full_version < '3.14' and sys_platform == 'linux') or (python_full_version < '3.14' and sys_platform == 'win32')",
     "python_full_version < '3.14' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 
@@ -284,8 +284,8 @@ nvtx = [
 
 [[package]]
 name = "dev-lab"
-version = "0.0.1.dev2981+g8811bff7e"
-source = { git = "https://github.com/DawnEver/dev-lab.git?branch=integrate%2Fmain#8811bff7e78e066fe246c6276d02d0b542d05581" }
+version = "0.0.1.dev2985+g137824646"
+source = { git = "https://github.com/DawnEver/dev-lab.git?branch=integrate%2Fmain#1378246469078af6e0700d72658a27ccf31ef488" }
 dependencies = [
     { name = "cryptography" },
     { name = "lab-commons", extra = ["io", "paths", "structured", "units"] },
@@ -461,8 +461,8 @@ wheels = [
 
 [[package]]
 name = "lab-commons"
-version = "0.3.1.dev1452+gc2b2bff40"
-source = { git = "https://github.com/DawnEver/lab-commons.git#c2b2bff404df9ae9cac3fc2256a8658b1a6deb57" }
+version = "0.3.1.dev1456+g3b167f2bf"
+source = { git = "https://github.com/DawnEver/lab-commons.git#3b167f2bf13ed72dc2e142899aa28017ec54f617" }
 
 [package.optional-dependencies]
 io = [
@@ -756,7 +756,7 @@ wheels = [
 [[package]]
 name = "numerics-lab"
 version = "0.1.0"
-source = { git = "https://github.com/DawnEver/numerics-lab.git#bfce804d9d9943a14b72adea666701b69dfb716f" }
+source = { git = "https://github.com/DawnEver/numerics-lab.git#da256328535d38d558005e5e315de7bc5b257112" }
 dependencies = [
     { name = "numpy" },
     { name = "scipy" },

@@ -146,9 +146,13 @@ class PlayBank(nn.Module):
         self.raw_thresholds = nn.Parameter(torch.log(torch.expm1(start)))
         self.raw_weights = nn.Parameter(torch.full((plays,), float(np.log(np.expm1(1.0 / plays)))))
         self.raw_slope = nn.Parameter(torch.tensor(-2.0))
-        if shaped:  # each element's own odd monotone shape: w z + v tanh(s z / r), starting near linear
-            self.raw_shape_weights = nn.Parameter(torch.full((plays,), -3.0))
-            self.raw_shape_rates = nn.Parameter(torch.zeros(plays))
+        if shaped:
+            # Each element's own odd monotone shape w z + v tanh(s z), started ACTIVE: v as large as w, so the
+            # gradient in s is not scaled away, and knees spread over a decade and a half of rates, so every
+            # knee position along a branch has an element near it before training starts.
+            inverse_softplus = lambda v: torch.log(torch.expm1(v))  # noqa: E731
+            self.raw_shape_weights = nn.Parameter(torch.full((plays,), float(np.log(np.expm1(1.0 / plays)))))
+            self.raw_shape_rates = nn.Parameter(inverse_softplus(torch.logspace(0.0, 1.5, plays)))
         self.shaped = shaped
         self.monotone = MonotoneScalar(hidden, odd=odd)
 

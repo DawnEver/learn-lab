@@ -99,16 +99,22 @@ def _low_field_error(loss):
     return np.max(np.abs(law.value(LOW) - _steel(LOW)) / _steel(LOW)), law
 
 
-def test_a_relative_loss_fits_a_decades_spanning_law_uniformly_where_mse_misses_the_low_end():
-    mse, _ = _low_field_error('mse')
-    relative, law = _low_field_error('relative')
-    # PLANTED CONTROL, stated as the claim -- a COMPARISON, not an absolute miss. |B| spans 0.063 T at
-    # 10 A/m to 2.41 T at 1e5 A/m, so MSE weights a low-field residual (0.063 / 2.41)^2 ~ 1/1470 as much as
-    # a high-field one while the relative loss weights them alike. The absolute MSE miss is ~2 % and
-    # platform-dependent (2.3 % on Windows CPU, under 2 % on the Linux forge), so it cannot be the bar;
-    # MSE landing several times worse than the relative fit at the low end is what the weighting predicts.
-    assert mse > 4 * relative  # dimensionless ratio of low-field relative errors (measured ~9x)
-    assert relative < 0.01  # dimensionless: the relative loss holds the low end within 1 %
+def _worst_low_field(value) -> float:
+    """Max relative error of *value* over the held-out low-field decade (dimensionless)."""
+    return float(np.max(np.abs(value(LOW) - _steel(LOW)) / _steel(LOW)))
+
+
+def test_a_relative_loss_holds_a_decades_spanning_law_within_one_percent_at_the_low_end():
+    """``loss='relative'`` holds the low-field decade of a four-decade B(H) within 1 %.
+
+    PLANTED CONTROL (deterministic): the same check refuses the fitted law with a 2 % error injected at the low end.
+    Measured 2026-11-12 (CPU float64): relative 0.26 %; plain MSE 2.3 % on Windows CPU but under 2 % and within
+    4x of the relative fit on the Linux forge. An MSE fit is odd and monotone, hence linear near H = 0, and learns
+    that slope from the mid range, so its low-end miss is small and platform-dependent: it cannot be a control.
+    """
+    _, law = _low_field_error('relative')
+    assert _worst_low_field(law.value) < 0.01  # dimensionless: within 1 %
+    assert _worst_low_field(lambda h: 1.02 * law.value(h)) > 0.01  # PLANTED: a 2 % low-end error is refused
     assert np.all(law.derivative(LOW) > 0)
     np.testing.assert_allclose(law.value(-LOW), -law.value(LOW), rtol=0, atol=1e-12)  # T: exact oddness
 

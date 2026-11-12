@@ -54,8 +54,8 @@ The quadrature is the provider's choice, carried by each :class:`Energy`. MONTE 
 ``measure * mean(density)`` over the region's points, redrawn from the provider's own sampler under a fresh seed every
 ``every`` Adam steps so the minimiser cannot fit one point set; an L-BFGS polish runs on the last draw and fits ITS
 quadrature error (measured, planted Poisson, 1024 points: 7.5e-2 polished against 1.1e-2 Adam only), so a Monte Carlo
-Ritz schedule is Adam only. DETERMINISTIC (``weights``, e.g. :func:`gauss_legendre` per region, a material interface
-a cell boundary): ``sum(weights * density)``, exact for polynomials to the rule's order, so the objective is the true
+Ritz schedule is Adam only. DETERMINISTIC (``weights``, e.g. :func:`gauss_legendre` per box region or
+:func:`simplex_rule` per polygon region, a material interface a cell boundary): ``sum(weights * density)``, exact for polynomials to the rule's order, so the objective is the true
 energy to that order and an L-BFGS polish is sound (measured on the planted two-slab Poisson with a 1:4 jump in
 ``tests/unit/deep/test_physics_ritz_quadrature.py``, whose bars quote the numbers). An essential term enters as ``penalty * term.loss()``.
 
@@ -97,6 +97,7 @@ __all__ = [
     'Term',
     'derivative',
     'gauss_legendre',
+    'simplex_rule',
 ]
 
 Field = Callable[[torch.Tensor], torch.Tensor]
@@ -171,6 +172,78 @@ def gauss_legendre(
     points = np.stack([g.ravel() for g in np.meshgrid(*axes, indexing='ij')], axis=1)
     weights = np.prod(np.stack([g.ravel() for g in np.meshgrid(*factors, indexing='ij')], axis=1), axis=1)
     return runtime.tensor(points), runtime.tensor(weights)
+
+
+def _cross2(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
+    """Twice the signed area of the triangle ``a b c``: > 0 counter-clockwise."""
+    return float((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+
+
+def _ear_clip(v: np.ndarray) -> np.ndarray:
+    """The simple polygon ``v (k, 2)`` as ``(k - 2, 3, 2)`` counter-clockwise triangles."""
+    if v.ndim != 2 or v.shape[1] != 2 or len(v) < 3:
+        refuse(f'a polygon is (k >= 3, 2) vertices, got shape {v.shape}')
+    x, y = v[:, 0], v[:, 1]
+    area = 0.5 * float(x @ np.roll(y, -1) - y @ np.roll(x, -1))
+    if area == 0.0:
+        refuse(f'a polygon to integrate over has area, got {v.tolist()}')
+    pts = v if area > 0 else v[::-1]
+    tol = 1e-12 * float(np.max(np.ptp(pts, axis=0))) ** 2  # a flat corner is not an ear
+    idx = list(range(len(pts)))
+    out: list[np.ndarray] = []
+    while len(idx) > 3:
+        for k in range(len(idx)):
+            i, j, m = idx[k - 1], idx[k], idx[(k + 1) % len(idx)]
+            a, b, c = pts[i], pts[j], pts[m]
+            if _cross2(a, b, c) <= tol:
+                continue  # reflex or flat
+            others = (pts[n] for n in idx if n not in (i, j, m))
+            if any(_cross2(a, b, p) >= -tol and _cross2(b, c, p) >= -tol and _cross2(c, a, p) >= -tol for p in others):
+                continue  # another vertex inside or on it
+            out.append(np.stack([a, b, c]))
+            del idx[k]
+            break
+        else:
+            refuse(f'polygon {v.tolist()} is not simple: no ear to clip')
+    last = pts[idx]
+    if _cross2(*last) <= tol:
+        refuse(f'polygon {v.tolist()} is not simple: its last triangle is not counter-clockwise')
+    out.append(last)
+    return np.stack(out)
+
+
+def simplex_rule(
+    vertices: np.ndarray, order: int, runtime: Runtime, *, cells: int = 1
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """A quadrature on the simple polygon ``vertices (k, 2)`` (either orientation), exact for polynomials of TOTAL
+    degree ``2 order - 1``. The polygon is ear-clipped into triangles, each split into ``cells^2`` similar ones, each
+    carrying the collapsed (Duffy) Gauss-Legendre rule of ``order x (order + 1)`` points. Returns points ``(n, 2)``
+    strictly inside and positive weights ``(n,)`` summing to the area; a polygon region is to :func:`gauss_legendre`
+    what a box region is.
+    """
+    if order < 1 or cells < 1:
+        refuse(f'a simplex rule takes order >= 1 and cells >= 1, got order={order} cells={cells}')
+    triangles = _ear_clip(np.asarray(vertices, dtype=float))
+    gu, wu = np.polynomial.legendre.leggauss(order)
+    gv, wv = np.polynomial.legendre.leggauss(order + 1)
+    u, t1 = 0.5 * (gu + 1.0), 0.5 * (gv + 1.0)
+    uu, tt = np.meshgrid(u, t1, indexing='ij')
+    s, t = (uu * (1.0 - tt)).ravel(), tt.ravel()  # on the unit triangle
+    w_ref = (0.25 * wu[:, None] * wv[None, :] * (1.0 - t1)[None, :]).ravel()  # sums to 1/2
+    subs = []
+    for i in range(cells):
+        for j in range(cells - i):
+            subs.append(((i, j), (i + 1, j), (i, j + 1)))
+            if i + j < cells - 1:
+                subs.append(((i + 1, j), (i + 1, j + 1), (i, j + 1)))
+    points, weights = [], []
+    for a, b, c in triangles:
+        e1, e2 = (b - a) / cells, (c - a) / cells
+        for corners in subs:
+            p0, p1, p2 = (a + i * e1 + j * e2 for i, j in corners)
+            points.append(p0 + s[:, None] * (p1 - p0) + t[:, None] * (p2 - p0))
+            weights.append(_cross2(p0, p1, p2) * w_ref)
+    return runtime.tensor(np.concatenate(points)), runtime.tensor(np.concatenate(weights))
 
 
 @dataclass(frozen=True, slots=True)

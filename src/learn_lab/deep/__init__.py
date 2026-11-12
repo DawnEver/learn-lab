@@ -8,8 +8,11 @@ Every family keeps the numpy boundary: arrays in, arrays out. Tensors never cros
 - :mod:`~learn_lab.deep.field` -- grid -> grid (U-Net), enveloped by channel values and grid shape;
 - :mod:`~learn_lab.deep.diffusion` -- conditional field generation (DDPM over a U-Net): samples, their mean and
   variance, enveloped by the condition box;
-- :mod:`~learn_lab.deep.operator` -- function -> function: DeepONet, 1-D/2-D FNO, transformer (attention) operator on irregular points;
+- :mod:`~learn_lab.deep.operator` -- function -> function: DeepONet, 1-D/2-D FNO, transformer (attention) operator on
+  irregular points, graph neural operator on mesh nodes (discretisation-invariant);
 - :mod:`~learn_lab.deep.graph` -- node fields on numpy graph batches by message passing;
+- :mod:`~learn_lab.deep.preconditioner` -- a learned SPD preconditioner ``M(r) -> z`` (a correction to Jacobi) for
+  any Krylov solver;
 - :mod:`~learn_lab.deep.hysteresis` -- a play-bank hysteresis, a pure ``(state, x) -> (state, y)`` step, passive
   by construction in its DECLARED causality (effort- or displacement-driven);
 - :mod:`~learn_lab.deep.bridge` -- a classical numpy solve and its VJP as one torch op, checked by differences;

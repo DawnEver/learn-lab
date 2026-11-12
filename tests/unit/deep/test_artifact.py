@@ -21,12 +21,14 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.deep.hysteresis import PlayHysteresis
 from learn_lab.deep.networks import MLP
-from learn_lab.deep.operator import FNO, DeepONet, TransformerOperator
+from learn_lab.deep.operator import FNO, DeepONet, GraphOperator, TransformerOperator
 from learn_lab.deep.pdenet import PDENet
 from learn_lab.deep.physics import PhysicsInformedField
+from learn_lab.deep.preconditioner import LearnedPreconditioner
 from learn_lab.deep.runtime import Runtime
 from learn_lab.deep.surrogate import DeepEnsemble
 from learn_lab.errors import Refused
+from learn_lab.representation import mesh_graph
 
 from ._poisson import Poisson
 
@@ -65,6 +67,8 @@ def _graphs(seed: int) -> Graphs:
 
 
 GRAPHS = _graphs(0)
+LINE = mesh_graph(COORDS, radius=2.0)
+SPD = [np.diag(np.full(5, 2.0 + s)) - np.eye(5, k=1) - np.eye(5, k=-1) for s in (0.0, 0.5)]
 
 
 def _ensemble(f):
@@ -132,6 +136,18 @@ CASES = {
         lambda m: m.fit(GRAPHS, GRAPHS.nodes[:, :1] * 2),
         lambda f: [f.predict(GRAPHS)],
         lambda f: f.predict(Graphs(GRAPHS.nodes + 5.0, GRAPHS.edges, GRAPHS.edge_features, GRAPHS.offsets)),
+    ),
+    'graph_operator': (
+        GraphOperator(width=4, layers=2, kernel_width=4, schedule=FEW, runtime=CPU64),
+        lambda m: m.fit(GRID[:, :, 0], LINE, -GRID[:, :, 0]),
+        lambda f: [f.predict(GRID[:2, :, 0], LINE), f.predict(GRID[:2, :, 0, :5], mesh_graph(COORDS[:5], radius=2.0))],
+        lambda f: f.predict(GRID[:1, :, 0] + 5.0, LINE),
+    ),
+    'learned_preconditioner': (
+        LearnedPreconditioner(hidden=4, rounds=2, schedule=FEW, runtime=CPU64),
+        lambda m: m.fit(SPD),
+        lambda f: [f.for_matrix(SPD[1])(np.arange(5.0))],
+        lambda f: f.for_matrix(np.diag(np.full(5, 2.0)) - 1.9 * (np.eye(5, k=1) + np.eye(5, k=-1))),
     ),
     'neural_ode': (
         NeuralODE(hidden=(8,), horizon=3, schedule=FEW, runtime=CPU64),

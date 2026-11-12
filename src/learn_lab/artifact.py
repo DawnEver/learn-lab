@@ -101,6 +101,11 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
     'neural_ode': ('learn_lab.deep.dynamics:NeuralODE', 'learn_lab.deep.dynamics:FittedDynamics'),
     'diffusion_field': ('learn_lab.deep.diffusion:DiffusionField', 'learn_lab.deep.diffusion:FittedDiffusionField'),
     'pde_net': ('learn_lab.deep.pdenet:PDENet', 'learn_lab.deep.pdenet:FittedPDENet'),
+    'graph_operator': ('learn_lab.deep.operator:GraphOperator', 'learn_lab.deep.operator:FittedGraphOperator'),
+    'learned_preconditioner': (
+        'learn_lab.deep.preconditioner:LearnedPreconditioner',
+        'learn_lab.deep.preconditioner:FittedPreconditioner',
+    ),
 }
 
 

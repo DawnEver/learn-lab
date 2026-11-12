@@ -160,3 +160,44 @@ def test_a_family_refuses_a_checkpoint_of_other_training_data(tmp_path):
     law.fit(x, np.tanh(x), checkpoint=Checkpoint(tmp_path, every=1))
     with pytest.raises(Refused, match='another config'):
         law.fit(x, np.tanh(2 * x), checkpoint=Checkpoint(tmp_path, every=1))
+
+
+COSINE = Schedule(adam_steps=12, learning_rate=1e-2, decay='cosine')
+
+
+def test_a_cosine_schedule_anneals_adam_to_zero_and_a_constant_one_does_not(monkeypatch):
+    rates = []
+    adam_step = torch.optim.Adam.step
+
+    def spy(self, *args, **kwargs):
+        rates.append(self.param_groups[0]['lr'])
+        return adam_step(self, *args, **kwargs)
+
+    monkeypatch.setattr(torch.optim.Adam, 'step', spy)
+    net = MLP([2, 8, 1]).to(RT.torch_device, RT.torch_dtype)
+    x = torch.ones(4, 2, dtype=RT.torch_dtype)
+
+    def loss():
+        return (net(x) ** 2).mean()
+
+    minimise(net.parameters(), loss, COSINE)
+    expected = [1e-2 * (1 + np.cos(np.pi * k / 12)) / 2 for k in range(12)]
+    np.testing.assert_allclose(rates, expected, rtol=0, atol=1e-15)  # 1/step: the half-cosine from lr to ~0
+    rates.clear()
+    minimise(net.parameters(), loss, SCHEDULE)  # PLANTED CONTROL: the constant schedule keeps its rate
+    assert rates == [1e-2] * 12
+
+
+def test_a_cosine_fit_resumes_to_the_uninterrupted_weights(tmp_path):
+    whole, whole_history = _fit(schedule=COSINE)
+    with pytest.raises(Interrupted):
+        _fit(Checkpoint(tmp_path, every=5), stop_after=8, schedule=COSINE)
+    resumed, resumed_history = _fit(Checkpoint(tmp_path, every=5), schedule=COSINE)
+    for a, b in zip(whole.state_dict().values(), resumed.state_dict().values(), strict=True):
+        assert torch.equal(a, b)
+    assert resumed_history == whole_history
+
+
+def test_an_unknown_decay_is_refused():
+    with pytest.raises(Refused, match='decay'):
+        Schedule(decay='linear')

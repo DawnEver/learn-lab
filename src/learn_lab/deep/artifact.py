@@ -22,6 +22,7 @@ from learn_lab.deep.graph import MessagePassing
 from learn_lab.deep.hysteresis import PlayBank
 from learn_lab.deep.networks import MLP, MonotoneScalar
 from learn_lab.deep.operator import _DeepONetNet, _FNONet, _GraphOperatorNet, _TransformerNet
+from learn_lab.deep.pdenet import StencilResponse
 from learn_lab.deep.preconditioner import _PreconditionerNet
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import refuse
@@ -38,6 +39,7 @@ MODULES: Final[dict[str, type[nn.Module]]] = {
     'TransformerNet': _TransformerNet,
     'MessagePassing': MessagePassing,
     'PlayBank': PlayBank,
+    'StencilResponse': StencilResponse,
     'GraphOperatorNet': _GraphOperatorNet,
     'PreconditionerNet': _PreconditionerNet,
 }
@@ -154,6 +156,14 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'neural_ode': lambda f: {
         'inputs': _box(f.envelope),
         'outputs': {'kind': 'trajectory', 'width': f.envelope.width},
+    },
+    'diffusion_field': lambda f: {
+        'inputs': {**_box(f.envelope), 'kind': 'condition'},
+        'outputs': {'kind': 'field samples', 'channels': f.shape[0], 'grid': list(f.shape[1:])},
+    },
+    'pde_net': lambda f: {
+        'inputs': {**_box(f.envelope), 'kind': 'periodic 1-D field'},
+        'outputs': {'kind': 'rate per point', 'terms': list(f.net.names)},
     },
 }
 

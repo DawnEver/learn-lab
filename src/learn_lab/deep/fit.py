@@ -34,21 +34,37 @@ FORMAT = 'learn-lab fit checkpoint'
 VERSION = 1
 MANIFEST = 'checkpoint.json'
 WEIGHTS = 'weights.pt'
+DECAYS = ('constant', 'cosine')
 
 
 @dataclass(frozen=True, slots=True)
 class Schedule:
-    """``adam_steps`` at ``learning_rate``, then ``lbfgs_steps`` L-BFGS iterations (0 skips the polish)."""
+    """``adam_steps`` at ``learning_rate``, then ``lbfgs_steps`` L-BFGS iterations (0 skips the polish).
+
+    ``decay`` shapes Adam's rate over its steps: ``'constant'`` keeps it; ``'cosine'`` anneals it on a half
+    cosine from ``learning_rate`` at step 0 towards 0 at the last step. On a loss that draws fresh noise every
+    step, a constant rate leaves the weights jittering, so the fit is whatever snapshot the last step lands on;
+    annealing settles them. The rate is a function of the step alone, so a resumed fit takes the same steps.
+    """
 
     adam_steps: int = 2000
     learning_rate: float = 1e-3
     lbfgs_steps: int = 0
+    decay: str = 'constant'
 
     def __post_init__(self) -> None:
         if self.adam_steps < 0 or self.lbfgs_steps < 0 or self.adam_steps + self.lbfgs_steps == 0:
             refuse(f'a schedule takes at least one step, got adam={self.adam_steps} lbfgs={self.lbfgs_steps}')
         if not self.learning_rate > 0:
             refuse(f'a learning rate is > 0, got {self.learning_rate}')
+        if self.decay not in DECAYS:
+            refuse(f'a decay is one of {DECAYS}, got {self.decay!r}')
+
+    def rate(self, step: int) -> float:
+        """Adam's learning rate at 0-based *step*."""
+        if self.decay == 'cosine':
+            return self.learning_rate * (1 + math.cos(math.pi * step / self.adam_steps)) / 2
+        return self.learning_rate
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,7 +227,9 @@ def minimise(
         if checkpoint is not None and (len(history) % checkpoint.every == 0 or len(history) == end):
             _write(checkpoint, identity, _phase(len(history), schedule), parameters, optimizer, history)
 
-    for _ in range(len(history), schedule.adam_steps):
+    for step in range(len(history), schedule.adam_steps):
+        for group in adam.param_groups:
+            group['lr'] = schedule.rate(step)
         adam.zero_grad(set_to_none=True)
         value = loss()
         value.backward()

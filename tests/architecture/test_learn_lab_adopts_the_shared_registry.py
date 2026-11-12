@@ -75,6 +75,8 @@ _MECHANISMS: Final = {
             # wiring (pinned live by the same test) runs `dev_lab.dev.pushwatch` on PostToolUse.
             'RECURSIVE-DELETE',
             'PUSHED-HEAD-IS-WATCHED',
+            # The same wiring runs `dev_lab.dev.sessionprs` on PostToolUse and `pushstop` on Stop.
+            'SESSION-HEARS-ITS-PRS',
         ),
         (TestPath('tests/architecture/test_the_agent_guard_is_live.py'),),
     ),

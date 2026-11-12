@@ -17,6 +17,17 @@ conjugate: the work into the element is ``oint effort d(displacement)``.
   one is the INNER map ``G = F^-1`` of the other. So the displacement-driven inverse of any effort-driven law
   in the class is itself in the class, never approximated across it.
 
+That inverse closure holds for ONE outer map. A Preisach play model -- ``y = a x + sum_k f_k(p_k)``, each play
+with its own saturating shape, the class a steel's identified play model is -- is outside it: on a branch its
+slope ``a + sum_{moving} f_k'(p_k)`` depends on where each moving play sits, not on one aggregate, so no stop bank
+with a single ``G`` inverts it and more stops plateau rather than converge. Two options close that:
+
+- ``shaped``: each play (effort) or stop (displacement) passes through its own odd monotone shape
+  ``w z + v tanh(s z)`` -- the effort form then contains the Preisach play model;
+- ``inverted`` (displacement only): the model IS an effort bank, fitted on the histories read the other way, and
+  each step solves the effort step for the input displacement (bisection, then one Newton step that carries the
+  implicit tangent). Its loop is the effort bank's loop, so passivity carries over exactly.
+
 Using the effort construction with the displacement as input -- a lagging bank fed B and asked for H -- puts
 the ascending branch BELOW the descending one, so ``oint H dB < 0``: an active material. :func:`dissipation`
 measures the declared integral, so it says no to exactly that.
@@ -110,17 +121,35 @@ def dissipation(step: Step, state: np.ndarray, cycle: np.ndarray, *, input_is: C
 
 class PlayBank(nn.Module):
     """The operator on scaled input/output: ``F(a x + w . p(x))`` (effort), ``a u + w . (u - p(u))`` with
-    ``u = G(x)`` (displacement).
+    ``u = G(x)`` (displacement), or -- *inverted* -- the displacement-driven exact inverse of an effort bank.
     """
 
-    def __init__(self, plays: int, hidden: int, *, odd: bool, input_is: Causality) -> None:
+    def __init__(
+        self, plays: int, hidden: int, *, odd: bool, input_is: Causality, shaped: bool = False, inverted: bool = False
+    ) -> None:
         super().__init__()
-        self.arguments = {'plays': plays, 'hidden': hidden, 'odd': odd, 'input_is': _causality(input_is)}
+        self.arguments = {
+            'plays': plays,
+            'hidden': hidden,
+            'odd': odd,
+            'input_is': _causality(input_is),
+            'shaped': shaped,
+            'inverted': inverted,
+        }
+        if inverted and input_is != 'displacement':
+            refuse('an inverted play bank is the displacement-driven inverse of an effort bank: declare displacement')
         self.input_is = input_is
+        self.inverted = inverted
+        #: The construction the parameters define: the effort form drives its plays by the effort itself.
+        self.form: Causality = 'effort' if inverted else input_is
         start = torch.linspace(0.02, 1.0, plays)  # thresholds spread over the scaled input amplitude
         self.raw_thresholds = nn.Parameter(torch.log(torch.expm1(start)))
         self.raw_weights = nn.Parameter(torch.full((plays,), float(np.log(np.expm1(1.0 / plays)))))
         self.raw_slope = nn.Parameter(torch.tensor(-2.0))
+        if shaped:  # each element's own odd monotone shape: w z + v tanh(s z / r), starting near linear
+            self.raw_shape_weights = nn.Parameter(torch.full((plays,), -3.0))
+            self.raw_shape_rates = nn.Parameter(torch.zeros(plays))
+        self.shaped = shaped
         self.monotone = MonotoneScalar(hidden, odd=odd)
 
     @property
@@ -129,20 +158,68 @@ class PlayBank(nn.Module):
 
     def played(self, x: torch.Tensor) -> torch.Tensor:
         """What the plays are driven by: the input itself (effort), else ``G(x)`` (displacement)."""
-        return x if self.input_is == 'effort' else self.monotone(x)
+        return x if self.form == 'effort' else self.monotone(x)
+
+    def shape(self, z: torch.Tensor) -> torch.Tensor:
+        """Each element's contribution ``(..., K)``: ``w z`` (linear), ``w z + v tanh(s z)`` (shaped).
+
+        Odd and strictly increasing in ``z`` (``w, v, s >= 0``), so the order of a loop's branches -- and with it
+        passivity -- survives. ``z`` is a play output (effort) or a stop output ``u - p in [-r, r]``
+        (displacement), where ``s`` is per unit ``r`` so the knee lies inside that span.
+        """
+        sp = nn.functional.softplus
+        out = sp(self.raw_weights) * z
+        if self.shaped:
+            rate = sp(self.raw_shape_rates)
+            if self.form == 'displacement':
+                rate = rate / (self.thresholds + 1e-3)
+            out = out + sp(self.raw_shape_weights) * torch.tanh(rate * z)
+        return out
 
     def output_of(self, u: torch.Tensor, plays: torch.Tensor) -> torch.Tensor:
         """The output for played inputs ``u (...)`` and their play outputs ``plays (..., K)``."""
-        sp = nn.functional.softplus
-        a, w = sp(self.raw_slope), sp(self.raw_weights)
-        if self.input_is == 'effort':
-            return self.monotone(a * u + (w * plays).sum(-1))
-        return a * u + (w * (u.unsqueeze(-1) - plays)).sum(-1)
+        a = nn.functional.softplus(self.raw_slope)
+        if self.form == 'effort':
+            return self.monotone(a * u + self.shape(plays).sum(-1))
+        return a * u + self.shape(u.unsqueeze(-1) - plays).sum(-1)
 
     def forward(self, state: torch.Tensor, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.inverted:
+            return self._inverse(state, x)
         u = self.played(x)
         state = play(state, u, self.thresholds)
         return state, self.output_of(u, state)
+
+    def _effort_step(self, state: torch.Tensor, h: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        new = play(state, h, self.thresholds)
+        return new, self.output_of(h, new)
+
+    def _inverse(self, state: torch.Tensor, b: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """The effort ``h`` whose step from *state* reaches the displacement *b*, and the plays it leaves.
+
+        At fixed state the effort step is strictly increasing in ``h`` (slope ``>= a F' > 0``), so bisection on a
+        bracket grown until it holds *b* converges to the unique root; one Newton step on top, through autograd,
+        carries the implicit derivative ``dh/db = 1 / (db/dh)`` and polishes the value.
+        """
+        with torch.no_grad():
+            target, frozen = b.detach(), state.detach()
+            lo, hi = torch.full_like(target, -1.0), torch.full_like(target, 1.0)
+            for _ in range(60):  # grow: the root may lie past the trained effort span
+                below, above = self._effort_step(frozen, lo)[1] > target, self._effort_step(frozen, hi)[1] < target
+                if not (below.any() or above.any()):
+                    break
+                lo, hi = torch.where(below, 2 * lo, lo), torch.where(above, 2 * hi, hi)
+            for _ in range(80):
+                mid = 0.5 * (lo + hi)
+                high = self._effort_step(frozen, mid)[1] > target
+                lo, hi = torch.where(high, lo, mid), torch.where(high, mid, hi)
+            root = 0.5 * (lo + hi)
+        with torch.enable_grad():
+            trial = root.clone().requires_grad_(True)
+            reached = self._effort_step(frozen, trial)[1]
+            (slope,) = torch.autograd.grad(reached.sum(), trial)
+        h = root - (self._effort_step(frozen, root)[1] - b) / slope.detach()
+        return play(state, h.detach(), self.thresholds), h
 
     def histories(self, x: torch.Tensor) -> torch.Tensor:
         """The play outputs ``(m, T, K)`` along input histories ``x (m, T)`` from the demagnetised state.
@@ -185,6 +262,8 @@ class PlayHysteresis:
     plays: int = 16
     hidden: int = 16
     odd: bool = True
+    shaped: bool = False
+    inverted: bool = False
     schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=1500, learning_rate=1e-2))
     runtime: Runtime = field(default_factory=Runtime)
 
@@ -211,13 +290,16 @@ class PlayHysteresis:
         y_pad = np.stack([np.pad(y, (0, length - y.size), mode='edge') for y in ys]) / y_scale
         mask = rt.tensor(np.arange(length)[None, :] < np.array([x.size for x in xs])[:, None])
         x_t, y_t = rt.tensor(x_pad), rt.tensor(y_pad)
-        bank = PlayBank(self.plays, self.hidden, odd=self.odd, input_is=self.input_is).to(
-            rt.torch_device, rt.torch_dtype
-        )
+        bank = PlayBank(
+            self.plays, self.hidden, odd=self.odd, input_is=self.input_is, shaped=self.shaped, inverted=self.inverted
+        ).to(rt.torch_device, rt.torch_dtype)
+        # An inverted bank is an effort bank: fitted on the histories read the other way, its residual in the
+        # displacement -- the variable the declared input is.
+        driven, measured = (y_t, x_t) if self.inverted else (x_t, y_t)
 
         def loss() -> torch.Tensor:
-            u = bank.played(x_t)
-            return (((bank.output_of(u, bank.histories(u)) - y_t) ** 2) * mask).sum() / mask.sum()
+            u = bank.played(driven)
+            return (((bank.output_of(u, bank.histories(u)) - measured) ** 2) * mask).sum() / mask.sum()
 
         history = minimise(
             bank.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[x_t, y_t, mask]
@@ -245,8 +327,10 @@ class FittedHysteresis:
 
     @property
     def thresholds(self) -> np.ndarray:
-        """``r_k``, >= 0 by construction: in the input unit (effort), in the scaled ``G(x)`` (displacement)."""
-        scale = self.x_scale if self.input_is == 'effort' else 1.0
+        """``r_k``, >= 0 by construction: in the effort unit (effort; inverted), in the scaled ``G(x)`` (stop form)."""
+        scale = {'effort': self.x_scale, 'inverted': self.y_scale}.get(
+            'inverted' if self.bank.inverted else self.input_is, 1.0
+        )
         return numpy(self.bank.thresholds) * scale
 
     def initial_state(self, points: int = 1) -> np.ndarray:

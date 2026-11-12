@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import torch
 
+from learn_lab.deep.fit import Schedule
 from learn_lab.deep.hysteresis import PlayHysteresis, dissipation, play
 from learn_lab.errors import Refused
 
@@ -183,3 +184,84 @@ def test_an_input_beyond_the_trained_range_is_refused(case):
     with pytest.raises(Refused, match='out_of_domain'):
         model.step(model.initial_state(), np.array([1.5 * model.envelope.upper[0]]))
     assert np.all(model.thresholds >= 0)
+
+
+# A planted Preisach play model, the class motronics' PlayModel is: B = mu0 H + sum_k f_k(p_k), each play with
+# its OWN saturating shape f_k. Its inverse H(B) is outside the stop-bank class (one map G for every stop), so the
+# stop form plateaus on it however many plays it has; the inverted shaped bank contains it.
+MU0 = 4e-7 * np.pi  # T m/A
+ZETA = np.linspace(0.0, 150.0, 12)  # A/m
+B_K = np.exp(-(((ZETA - 70.0) / 50.0) ** 2))
+B_K *= 1.4 / B_K.sum()  # T
+H_K = 30.0 + 0.4 * ZETA  # A/m
+H_DRIVE = 400.0 * np.cos(2 * np.pi * np.arange(65) / 32)  # A/m: two periods, 32 steps each
+DB_BAR = 0.01  # T, worst |B error| along the H-driven trajectory
+LOOP_BAR = 10.0  # J/m^3, |learned - planted| loss per cycle
+
+
+def _preisach(h):
+    p, out = np.zeros_like(ZETA), []
+    for x in h:
+        p = np.clip(p, x - ZETA, x + ZETA)
+        out.append(MU0 * x + B_K @ np.tanh(p / H_K))
+    return np.array(out)
+
+
+def _driven_by_effort(model, h):
+    """The displacement a B-driven model reaches along the effort history *h*: a bracketed Newton per step."""
+    state, out, top, b = model.initial_state(), [], model.envelope.upper[0], np.zeros(1)
+    for target in h:
+        lo, hi = -top, top
+        for _ in range(60):
+            r = model.value(state, b)[0] - target
+            if abs(r) < 1e-9:  # A/m
+                break
+            lo, hi = (lo, b[0]) if r > 0 else (b[0], hi)
+            b = b - r / model.derivative(state, b)
+            if not lo < b[0] < hi:
+                b = np.array([(lo + hi) / 2])
+        state, _ = model.step(state, b)
+        out.append(b[0])
+    return np.array(out)
+
+
+def _loop(h, b):
+    return float(np.sum(0.5 * (h[1:] + h[:-1]) * np.diff(b)))  # J/m^3
+
+
+def _reach(plays=8, **construction):
+    b = _preisach(H_DRIVE)
+    model = PlayHysteresis(
+        input_is='displacement', plays=plays, hidden=8, schedule=Schedule(2000, 1e-2, lbfgs_steps=200), **construction
+    ).fit([b], [H_DRIVE])
+    learned = _driven_by_effort(model, H_DRIVE)
+    second = slice(32, None)  # the steady cycle
+    return (
+        model,
+        float(np.max(np.abs(learned - b))),
+        abs(_loop(H_DRIVE[second], learned[second]) - _loop(H_DRIVE[second], b[second])),
+    )
+
+
+def test_the_stop_form_plateaus_on_a_preisach_inverse_and_the_inverted_shaped_bank_reaches_it():
+    """PLANTED CONTROL first: the stop form (the old structure) misses the trajectory bar on the planted Preisach
+    loop -- so the bar can say no -- and doubling its plays does not close it (a reach limit, not capacity). The
+    inverted shaped bank meets both bars and is passive in the declared orientation.
+    """
+    for plays in (8, 16):
+        _, worst, loop_error = _reach(plays=plays)
+        assert worst > DB_BAR, (plays, worst, loop_error)  # T; measured
+    model, worst, loop_error = _reach(shaped=True, inverted=True)
+    assert worst < DB_BAR, (worst, loop_error)  # T; measured
+    assert loop_error < LOOP_BAR, (worst, loop_error)  # J/m^3; measured
+    cycle = _preisach(H_DRIVE)[32:]
+    cycle[-1] = cycle[0]
+    assert dissipation(model.step, model.initial_state(), cycle, input_is='displacement') > 0  # J/m^3
+    probe, state = np.array([0.4]), model.step(model.initial_state(), np.array([1.2]))[0]
+    fd = (model.value(state, probe + 1e-7) - model.value(state, probe - 1e-7)) / 2e-7
+    np.testing.assert_allclose(model.derivative(state, probe), fd, rtol=1e-5)  # A/m per T
+
+
+def test_an_inverted_bank_is_displacement_driven_only():
+    with pytest.raises(Refused, match='inverse of an effort bank'):
+        PlayHysteresis(input_is='effort', inverted=True).fit(TRAIN, [_truth(x) for x in TRAIN])

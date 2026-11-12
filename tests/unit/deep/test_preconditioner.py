@@ -110,7 +110,7 @@ def test_an_untrained_network_is_jacobi_and_gives_no_reduction() -> None:
     """PLANTED CONTROL: the zero-initialised heads make M = D^-1; one step at a vanishing rate stays there."""
     untrained = LearnedPreconditioner(
         hidden=16, rounds=3, schedule=Schedule(adam_steps=1, learning_rate=1e-300), runtime=CPU64, margin=0.5
-    ).fit(TRAIN[:2])
+    ).fit(TRAIN)
     a = HELD_OUT[0]
     r = np.random.default_rng(1).standard_normal(a.shape[0])
     assert np.allclose(untrained.for_matrix(a)(r), r / a.diagonal(), rtol=1e-14, atol=0.0)

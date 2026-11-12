@@ -68,6 +68,11 @@ distance to the interface) makes interface continuity exact. The provider owns t
 ``g``, and stops returning the terms its ansatz enforces; any :class:`Term` it still returns is penalised as before.
 The ansatz is provider code, so a hard-ansatz :class:`FittedField` evaluates in process and is not an artifact.
 Measured in ``tests/unit/deep/test_physics_ritz_hard.py``, whose bars quote the numbers.
+
+INPUT FEATURES. A provider with ``features(x) -> (n, m)`` gives the net that as its input instead of ``x`` mapped
+onto ``[-1, 1]``: periodic features (``cos``/``sin`` of a coordinate over its period) make every raw column periodic
+by construction, what an exactly periodic ansatz needs. Like the ansatz it is provider code: such a field evaluates in
+process.
 """
 
 from __future__ import annotations
@@ -102,6 +107,7 @@ __all__ = [
 
 Field = Callable[[torch.Tensor], torch.Tensor]
 Ansatz = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]  # (x, raw net columns) -> field
+Features = Callable[[torch.Tensor], torch.Tensor]  # (n, dim) coordinates -> (n, m) net input
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,12 +363,17 @@ def derivative(values: torch.Tensor, points: torch.Tensor) -> torch.Tensor:
     return torch.autograd.grad(values.sum(), points, create_graph=True)[0]
 
 
-def _field(net: MLP, runtime: Runtime, domain: BoxEnvelope, ansatz: Ansatz | None, x: torch.Tensor) -> torch.Tensor:
-    """The field at coordinates *x*: the net on *x* mapped from the *domain* box onto ``[-1, 1]``, through the
-    provider's hard *ansatz* when the fit has one.
+def _field(
+    net: MLP, runtime: Runtime, domain: BoxEnvelope, ansatz: Ansatz | None, features: Features | None, x: torch.Tensor
+) -> torch.Tensor:
+    """The field at coordinates *x*: the net on the provider's *features* of *x*, else on *x* mapped from the
+    *domain* box onto ``[-1, 1]``, through the provider's hard *ansatz* when the fit has one.
     """
-    lo, hi = runtime.tensor(domain.lower), runtime.tensor(domain.upper)
-    raw = net(2.0 * (x - lo) / (hi - lo) - 1.0)
+    if features is None:
+        lo, hi = runtime.tensor(domain.lower), runtime.tensor(domain.upper)
+        raw = net(2.0 * (x - lo) / (hi - lo) - 1.0)
+    else:
+        raw = net(features(x))
     return raw if ansatz is None else ansatz(x, raw)
 
 
@@ -401,6 +412,9 @@ class PhysicsInformedField:
             if not callable(getattr(provider, 'ansatz', None)) or not isinstance(latent, int) or latent < 1:
                 refuse(f'a hard-ansatz fit needs ansatz(x, raw) and latent >= 1; {type(provider).__name__} lacks them')
             ansatz = provider.ansatz
+        features = getattr(provider, 'features', None)
+        if features is not None:
+            dim = int(features(rt.tensor(provider.domain.lower[None, :])).shape[1])
         net = MLP(
             [dim, *self.hidden, provider.latent if self.ansatz else provider.outputs], input_scale=self.input_scale
         ).to(rt.torch_device, rt.torch_dtype)
@@ -412,7 +426,7 @@ class PhysicsInformedField:
         }
 
         def field_at(x: torch.Tensor) -> torch.Tensor:
-            return _field(net, rt, provider.domain, ansatz, x)
+            return _field(net, rt, provider.domain, ansatz, features, x)
 
         points = {name: p.detach().requires_grad_(True) for name, p in provider.collocation(rt).items()}
         data = [] if observations is None else [_observed(provider, rt, n, o) for n, o in observations.items()]
@@ -482,6 +496,7 @@ class PhysicsInformedField:
             weights=dict(weights),
             weight_history=updates,
             ansatz=ansatz,
+            features=features,
         )
 
     def _terms(self, provider, field_at: Field, points: dict, params: Mapping, step: int) -> dict[str, torch.Tensor]:
@@ -587,10 +602,11 @@ class FittedField:
     weights: Mapping[str, float]  # each condition's final balance weight (all 1 under a fixed balance)
     weight_history: list[tuple[int, dict[str, float]]]  # (Adam step, weights after it) per balance update
     ansatz: Ansatz | None = None  # the provider's hard ansatz the net's raw columns pass through, if any
+    features: Features | None = None  # the provider's net input in place of the normalised coordinates, if any
 
     def field_at(self, x: torch.Tensor) -> torch.Tensor:
         """The field at ``(n, dim)`` coordinates, differentiable."""
-        return _field(self.net, self.runtime, self.domain, self.ansatz, x)
+        return _field(self.net, self.runtime, self.domain, self.ansatz, self.features, x)
 
     def evaluate(self, x: np.ndarray) -> np.ndarray:
         x = self.domain.require(x, 'a field query')

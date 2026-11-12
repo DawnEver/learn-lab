@@ -10,7 +10,7 @@ different numbers than the Linux forge).
 
 The statistic is the mean over held-out samples of the per-sample relative L2 error ``||u_hat - u|| / ||u||``
 over the sample's points (unitless). Measured 2026-11-12, this configuration (:data:`FIT`): runtime seed 0 0.0361,
-seed 1 0.0324 (train 0.031 both). What closed the gap, each measured:
+seed 1 0.0324 (train 0.031 both); the pointwise-MLP control 0.601. What closed the gap, each measured:
 
 - A slice token is a MEAN over its points: on a random cloud that is Monte-Carlo quadrature. Projecting ``f`` on
   the modes that way leaves 0.17 relative error at 512 random points (0.33 at 128); weighting by Voronoi area
@@ -43,7 +43,7 @@ CPU64 = Runtime(device='cpu')
 MODES = 3
 GRID = 11
 FIT_POINTS, QUERY_POINTS = GRID * GRID + 4, 512
-#: Mean held-out relative L2 (unitless). Measured 0.0361 / 0.0324 (seeds 0, 1); the pointwise control misses it.
+#: Mean held-out relative L2 (unitless). Measured 0.0361 / 0.0324 (seeds 0, 1); the pointwise control 0.601.
 BAR = 0.05
 FIT = Schedule(adam_steps=4500, learning_rate=3e-3, decay='cosine')
 FEW = Schedule(adam_steps=3, learning_rate=1e-2)

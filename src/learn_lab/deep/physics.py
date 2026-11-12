@@ -44,6 +44,16 @@ assumes the side terms are under-fitted; when the unit scaling already satisfies
 and ``max / mean`` has no upper bound (the max of millions of entries is an extreme statistic besides), the
 weights only grow since nothing renormalises them, and the PDE term's share of the loss falls towards zero. Use it
 only where a side condition is demonstrably under-fitted at fixed weights (the planted stiff Poisson).
+
+DEEP RITZ (E & Yu 2018) is the same fit with another objective: given :class:`Ritz`, the field MINIMISES the
+provider's ``energy(field, points, parameters)`` instead of squaring its residuals. The provider states the physics
+-- per region an :class:`Energy` density with the region's ``measure`` (its length/area/volume in coordinate units)
+and the energy's ``scale`` -- plus, as :class:`Term` s, the ESSENTIAL conditions the energy does not carry (a
+Dirichlet side); natural conditions and interface fluxes are the energy's own stationarity and are never stated.
+learn-lab owns the quadrature: each region's integral is ``measure * mean(density)`` over its points (Monte Carlo),
+redrawn from the provider's own sampler under a fresh seed every ``every`` Adam steps so the minimiser cannot fit
+one point set. An L-BFGS polish runs on the last draw and fits ITS quadrature error (measured, planted Poisson,
+1024 points: 7.5e-2 polished against 1.1e-2 Adam only), so a Ritz schedule is Adam only. An essential term enters as ``penalty * term.loss()``.
 """
 
 from __future__ import annotations
@@ -64,10 +74,12 @@ from learn_lab.validity import BoxEnvelope
 __all__ = [
     'Balance',
     'Continuation',
+    'Energy',
     'FittedField',
     'PhysicsInformedField',
     'Resample',
     'ResidualProvider',
+    'Ritz',
     'Term',
     'derivative',
 ]
@@ -88,6 +100,42 @@ class Term:
 
     def loss(self) -> torch.Tensor:
         return ((self.residual / self.scale) ** 2).mean()
+
+
+@dataclass(frozen=True, slots=True)
+class Energy:
+    """An energy ``density`` at the points of one region, the region's ``measure`` and the energy ``scale`` (its
+    unit) that makes ``measure * mean(density) / scale`` dimensionless. An energy may be negative: it is not squared.
+    """
+
+    density: torch.Tensor
+    measure: float
+    scale: float
+
+    def __post_init__(self) -> None:
+        if not self.measure > 0:
+            refuse(f'a region measure is > 0 in coordinate units, got {self.measure}')
+        if not self.scale > 0:
+            refuse(f'an energy scale is > 0 in the energy unit, got {self.scale}')
+
+    def loss(self) -> torch.Tensor:
+        return self.measure * self.density.mean() / self.scale
+
+
+@dataclass(frozen=True, slots=True)
+class Ritz:
+    """Train on the provider's energy (deep Ritz): essential :class:`Term` s weighted by ``penalty``, the quadrature
+    points redrawn every ``every`` Adam steps (0: never).
+    """
+
+    penalty: float = 100.0
+    every: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.penalty > 0:
+            refuse(f'a Ritz penalty is a dimensionless weight > 0, got {self.penalty}')
+        if self.every < 0:
+            refuse(f'a Ritz redraw period is >= 0 Adam steps, got {self.every}')
 
 
 #: The balance rules: ``fixed``; ``gradient_norm`` (max/mean, unbounded); ``normalised_gradient`` (mean/mean
@@ -200,6 +248,7 @@ class PhysicsInformedField:
     continuation: Sequence[Continuation] = ()
     resample: Resample | None = None
     input_scale: bool = False  # a learned per-coordinate input factor (networks.InputScale) before the first layer
+    ritz: Ritz | None = None  # minimise the provider's energy (deep Ritz) instead of its squared residuals
 
     def fit(
         self,
@@ -237,6 +286,13 @@ class PhysicsInformedField:
             refuse('observations name no observable; give at least one')
 
         balancing = self.balance.rule != 'fixed'
+        if self.ritz is not None:
+            if not callable(getattr(provider, 'energy', None)):
+                refuse(f'a Ritz fit minimises an energy; {type(provider).__name__} declares no energy')
+            if balancing or self.resample is not None:
+                refuse('a Ritz fit takes a fixed balance and no residual refinement: an energy is not a residual')
+            if self.ritz.every and checkpoint is not None:
+                refuse('a redrawn Ritz fit cannot be checkpointed: its quadrature draw is training state it omits')
         if balancing and checkpoint is not None:
             refuse('a balanced fit cannot be checkpointed: its weights are training state the checkpoint omits')
         if (self.continuation or self.resample is not None) and checkpoint is not None:
@@ -261,7 +317,7 @@ class PhysicsInformedField:
                 self._continue(step, params, nominal)
                 if self.resample is not None and step > 0 and step % self.resample.every == 0:
                     self._refine(provider, field_at, points, params, step // self.resample.every)
-            terms = {name: term.loss() for name, term in provider.residuals(field_at, points, params).items()}
+            terms = self._terms(provider, field_at, points, params, step)
             for name, xt, ut, mask, scale in data:
                 terms[f'observed:{name}'] = Term((provider.observe(name, field_at, xt) - ut)[mask], scale).loss()
             if not weights:
@@ -292,6 +348,21 @@ class PhysicsInformedField:
             weights=dict(weights),
             weight_history=updates,
         )
+
+    def _terms(self, provider, field_at: Field, points: dict, params: Mapping, step: int) -> dict[str, torch.Tensor]:
+        """Each condition's dimensionless loss: the squared residuals, or under :class:`Ritz` the energies and the
+        penalised essential terms on the current quadrature draw.
+        """
+        if self.ritz is None:
+            return {name: term.loss() for name, term in provider.residuals(field_at, points, params).items()}
+        every = self.ritz.every
+        if every and 0 < step < self.schedule.adam_steps and step % every == 0:
+            fresh = provider.collocation(replace(self.runtime, seed=self.runtime.seed + step // every))
+            points.update({name: p.detach().requires_grad_(True) for name, p in fresh.items()})
+        return {
+            name: part.loss() if isinstance(part, Energy) else self.ritz.penalty * part.loss()
+            for name, part in provider.energy(field_at, points, params).items()
+        }
 
     def _continue(self, step: int, params: dict[str, torch.Tensor], nominal: Mapping[str, float]) -> None:
         """Set every continued parameter to its value at Adam *step*: ``start`` -> nominal, linear, then held."""

@@ -17,6 +17,8 @@
   ``chunk`` evaluates the full-batch loss that many samples at a time with activation checkpointing (as
   :class:`~learn_lab.deep.field.FieldModel`): the gradient is the full batch's, peak memory ``chunk x width``.
 - :class:`TransformerOperator` -- self-attention over irregular points.
+- :class:`Transolver` -- Physics-Attention: points grouped into learned slices, attention among the slices;
+  cost linear in the points, any point set (Wu et al., ICML 2024; Transolver++ switches).
 - :class:`GraphOperator` -- kernel-integral message passing over a :class:`~learn_lab.representation.PointGraph`
   (mesh nodes, see :func:`~learn_lab.representation.mesh_graph`); discretisation-invariant: fit on one point
   set, evaluate on another.
@@ -48,9 +50,11 @@ __all__ = [
     'FittedFNO',
     'FittedGraphOperator',
     'FittedTransformerOperator',
+    'FittedTransolver',
     'GraphOperator',
     'SpectralConv',
     'TransformerOperator',
+    'Transolver',
 ]
 
 
@@ -477,6 +481,253 @@ class FittedTransformerOperator:
         c = self.points.require(coords, 'a transformer operator point')
         if x.ndim != 3 or x.shape[2] != len(c):
             refuse(f'a transformer operator query of shape {x.shape} is invalid at {len(c)} points: (n, c_in, p)')
+        rt = self.runtime
+        with torch.no_grad():
+            return self.outputs.back(numpy(self.net(rt.tensor(self.inputs.forward(x)), rt.tensor(c))))
+
+
+class _PhysicsAttention(nn.Module):
+    """Physics-Attention: points -> ``slices`` learned soft groups per head -> attention among the slice tokens.
+
+    Per head, ``w = softmax(Linear(x_i) / tau)`` over the slices (``(p, M)``, each row sums to 1); the token
+    ``z_j = sum_i w_ij v_i / sum_i w_ij``; ``z' = softmax(q k^T / sqrt(C_head)) v`` among the M tokens; the
+    point's output ``sum_j w_ij z'_j``. Cost O(p M C + M^2 C): linear in the points. ``tau`` is a learnable
+    per-head temperature; ``adaptive_temperature`` adds a per-point ``Linear(x_i)`` to it and ``gumbel`` adds
+    Gumbel noise to the slice logits while training (Transolver++'s Ada-Temp and Rep-Slice). ``last`` keeps the
+    slice weights and token scores of the latest forward (detached) for inspection.
+    """
+
+    def __init__(
+        self, width: int, heads: int, slices: int, temperature: float, adaptive_temperature: bool, gumbel: bool
+    ) -> None:
+        super().__init__()
+        self.heads, self.gumbel = heads, gumbel
+        head = width // heads
+        self.features = nn.Linear(width, width)  # the values each point contributes to its slices
+        self.mid = nn.Linear(width, width)  # what the slice assignment reads
+        self.assign = nn.Linear(head, slices)
+        nn.init.orthogonal_(self.assign.weight)
+        self.temperature = nn.Parameter(torch.full((1, heads, 1, 1), float(temperature)))
+        self.local = nn.Linear(head, 1) if adaptive_temperature else None
+        self.qkv = nn.Linear(head, 3 * head, bias=False)
+        self.out = nn.Linear(width, width)
+        self.last: tuple[torch.Tensor, torch.Tensor] | None = None
+
+    def forward(self, h: torch.Tensor) -> torch.Tensor:
+        n, p, w = h.shape
+        v = self.features(h).reshape(n, p, self.heads, -1).transpose(1, 2)  # (n, H, p, C)
+        mid = self.mid(h).reshape(n, p, self.heads, -1).transpose(1, 2)
+        logits, tau = self.assign(mid), self.temperature
+        if self.local is not None:
+            tau = tau + self.local(mid)
+        if self.gumbel and self.training:
+            u = torch.rand_like(logits).clamp(1e-12, 1.0 - 1e-12)
+            logits = logits - torch.log(-torch.log(u))
+        weights = torch.softmax(logits / tau.clamp_min(1e-2), dim=-1)  # (n, H, p, M)
+        tokens = torch.einsum('nhpm,nhpc->nhmc', weights, v) / (weights.sum(2)[..., None] + 1e-5)
+        q, k, t = self.qkv(tokens).chunk(3, dim=-1)
+        scores = torch.softmax(q @ k.transpose(-1, -2) / q.shape[-1] ** 0.5, dim=-1)  # (n, H, M, M)
+        mixed = torch.einsum('nhpm,nhmc->nhpc', weights, scores @ t)
+        self.last = (weights.detach(), scores.detach())
+        return self.out(mixed.transpose(1, 2).reshape(n, p, w))
+
+
+class _TransolverBlock(nn.Module):
+    def __init__(self, width: int, mlp_ratio: int, attention: _PhysicsAttention) -> None:
+        super().__init__()
+        self.attend, self.norm_attend = attention, nn.LayerNorm(width)
+        self.mlp, self.norm_mlp = MLP([width, mlp_ratio * width, width], activation='gelu'), nn.LayerNorm(width)
+
+    def forward(self, h: torch.Tensor) -> torch.Tensor:
+        h = h + self.attend(self.norm_attend(h))
+        return h + self.mlp(self.norm_mlp(h))
+
+
+class _TransolverNet(nn.Module):
+    def __init__(
+        self,
+        c_in: int,
+        c_out: int,
+        *,
+        width: int,
+        heads: int,
+        layers: int,
+        slices: int,
+        mlp_ratio: int,
+        temperature: float,
+        adaptive_temperature: bool,
+        gumbel: bool,
+        reference: int | None,
+        lower,
+        upper,
+    ) -> None:
+        super().__init__()
+        self.arguments = {
+            'c_in': c_in,
+            'c_out': c_out,
+            'width': width,
+            'heads': heads,
+            'layers': layers,
+            'slices': slices,
+            'mlp_ratio': mlp_ratio,
+            'temperature': temperature,
+            'adaptive_temperature': adaptive_temperature,
+            'gumbel': gumbel,
+            'reference': reference,
+            'lower': lower,
+            'upper': upper,
+        }
+        d = len(lower)
+        span = np.where(upper > lower, upper - lower, 1.0)
+        self.register_buffer('lower', torch.as_tensor(lower, dtype=torch.float64))
+        self.register_buffer('span', torch.as_tensor(span, dtype=torch.float64))
+        nodes = np.zeros((0, d))
+        if reference is not None:  # the unified position: distances to a reference grid of the training box
+            axis = np.linspace(-1.0, 1.0, reference)
+            nodes = np.stack(np.meshgrid(*[axis] * d, indexing='ij'), axis=-1).reshape(-1, d)
+        self.register_buffer('nodes', torch.as_tensor(nodes, dtype=torch.float64))
+        self.lift = MLP([c_in + d + len(nodes), 2 * width, width], activation='gelu')
+        self.blocks = nn.ModuleList(
+            _TransolverBlock(
+                width, mlp_ratio, _PhysicsAttention(width, heads, slices, temperature, adaptive_temperature, gumbel)
+            )
+            for _ in range(layers)
+        )
+        self.norm = nn.LayerNorm(width)
+        self.head = MLP([width, width, c_out], activation='gelu')
+
+    def attentions(self) -> list[_PhysicsAttention]:
+        return [block.attend for block in self.blocks]
+
+    def forward(self, x: torch.Tensor, coords: torch.Tensor) -> torch.Tensor:
+        """``x (n, c_in, p)``, ``coords (p, d)`` or ``(n, p, d)`` -> ``(n, c_out, p)``."""
+        z = (2.0 * (coords - self.lower) / self.span - 1.0).expand(x.shape[0], -1, -1)
+        parts = [x.transpose(1, 2), z]
+        if len(self.nodes):
+            parts.append(torch.cdist(z, self.nodes.expand(x.shape[0], -1, -1)))
+        h = self.lift(torch.cat(parts, dim=-1))
+        for block in self.blocks:
+            h = block(h)
+        return self.head(self.norm(h)).transpose(1, 2)
+
+
+def _point_sets(x: np.ndarray, coords: np.ndarray, what: str) -> None:
+    shared = x.ndim == 3 and coords.ndim == 2 and x.shape[2] == len(coords)
+    own = x.ndim == 3 and coords.ndim == 3 and coords.shape[:2] == (x.shape[0], x.shape[2])
+    if not (shared or own):
+        refuse(f'{what} of shape {x.shape} is invalid at points {coords.shape}: (n, c_in, p) at (p, d) or (n, p, d)')
+
+
+@dataclass(frozen=True, slots=True)
+class Transolver:
+    """Transolver (Wu et al., ICML 2024): Physics-Attention over any point set, cost linear in the points.
+
+    A token is one point's input channels and box-normalised coordinates (plus, with ``reference=r``, its
+    distances to an ``r^d`` grid of the training box: the paper's unified position). Each of ``layers``
+    pre-norm blocks groups the points into ``slices`` learned soft slices per head, attends among the slice
+    tokens and scatters back (:class:`_PhysicsAttention`), then applies a ``mlp_ratio`` MLP. ``temperature`` is
+    the learnable slice temperature's start; ``adaptive_temperature`` and ``gumbel`` switch on Transolver++'s
+    per-point temperature and Gumbel slice reparameterisation (noise in training only; prediction is
+    deterministic). Points are shared ``(p, d)`` or per sample ``(n, p, d)``, and their number may differ
+    between fit and predict. A query's points are refused outside the training box; its inputs outside the
+    per-channel value box.
+    """
+
+    width: int = 64
+    heads: int = 4
+    layers: int = 4
+    slices: int = 32
+    mlp_ratio: int = 1
+    temperature: float = 0.5
+    adaptive_temperature: bool = False
+    gumbel: bool = False
+    reference: int | None = None
+    schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=2000, learning_rate=1e-3))
+    runtime: Runtime = field(default_factory=lambda: Runtime(dtype='float32'))
+    margin: float = 0.0
+    chunk: int | None = 32
+
+    def __post_init__(self) -> None:
+        if self.chunk is not None and (isinstance(self.chunk, bool) or self.chunk < 1):
+            refuse(f'a chunk is a sample count >= 1 (or None for one pass), got {self.chunk!r}')
+        if self.heads < 1 or self.layers < 1 or self.width % self.heads:
+            refuse(f'width {self.width} must split evenly into heads {self.heads} (>= 1), with layers >= 1')
+        if self.slices < 1 or self.mlp_ratio < 1 or not self.temperature > 0:
+            refuse(f'a Transolver has slices >= 1, mlp_ratio >= 1 and temperature > 0, got {self}')
+        if self.reference is not None and self.reference < 2:
+            refuse(f'a unified-position reference grid has >= 2 nodes per axis, got {self.reference}')
+
+    def fit(
+        self, x: np.ndarray, coords: np.ndarray, y: np.ndarray, *, checkpoint: Checkpoint | None = None
+    ) -> FittedTransolver:
+        """``x (n, c_in, p)`` at ``coords (p, d)`` or ``(n, p, d)`` -> ``y (n, c_out, p)`` at the same points."""
+        x = require_finite(np.asarray(x, float), 'the input functions')
+        c = require_finite(np.asarray(coords, float), 'the coordinates')
+        y = require_finite(np.asarray(y, float), 'the output functions')
+        _point_sets(x, c, 'a Transolver fit')
+        if y.ndim != 3 or y.shape[::2] != x.shape[::2]:
+            refuse(f'a Transolver is fitted on x (n, c_in, p) and y (n, c_out, p); got {x.shape}, {y.shape}')
+        rt = self.runtime
+        rt.seeded()
+        sx, sy = Standardiser.of(x), Standardiser.of(y)
+        box = BoxEnvelope.of(c.reshape(-1, c.shape[-1]), margin=self.margin)
+        net = _TransolverNet(
+            x.shape[1],
+            y.shape[1],
+            width=self.width,
+            heads=self.heads,
+            layers=self.layers,
+            slices=self.slices,
+            mlp_ratio=self.mlp_ratio,
+            temperature=self.temperature,
+            adaptive_temperature=self.adaptive_temperature,
+            gumbel=self.gumbel,
+            reference=self.reference,
+            lower=box.lower,
+            upper=box.upper,
+        ).to(rt.torch_device, rt.torch_dtype)
+        xt, ct, yt = rt.tensor(sx.forward(x)), rt.tensor(c), rt.tensor(sy.forward(y))
+        chunk, own = self.chunk, c.ndim == 3
+
+        def squared(xc: torch.Tensor, cc: torch.Tensor, yc: torch.Tensor) -> torch.Tensor:
+            return ((net(xc, cc) - yc) ** 2).sum()
+
+        def loss() -> torch.Tensor:
+            if chunk is None or chunk >= len(xt):
+                return squared(xt, ct, yt) / yt.numel()
+            parts = (
+                recomputed(
+                    squared, xt[i : i + chunk], ct[i : i + chunk] if own else ct, yt[i : i + chunk], use_reentrant=False
+                )
+                for i in range(0, len(xt), chunk)
+            )
+            return torch.stack(list(parts)).sum() / yt.numel()
+
+        history = minimise(
+            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, ct, yt]
+        )
+        envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
+        return FittedTransolver(
+            net=net.eval(), runtime=rt, envelope=envelope, points=box, inputs=sx, outputs=sy, history=history
+        )
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class FittedTransolver:
+    net: _TransolverNet
+    runtime: Runtime
+    envelope: ChannelEnvelope
+    points: BoxEnvelope
+    inputs: Standardiser
+    outputs: Standardiser
+    history: list[float]
+
+    def predict(self, x: np.ndarray, coords: np.ndarray) -> np.ndarray:
+        """``(n, c_out, p)``: each input function's image at its points ``coords (p, d)`` or ``(n, p, d)``."""
+        x = self.envelope.require(np.asarray(x, float), 'a Transolver input function')
+        c = np.asarray(coords, float)
+        _point_sets(x, c, 'a Transolver query')
+        self.points.require(c.reshape(-1, c.shape[-1]), 'a Transolver point')
         rt = self.runtime
         with torch.no_grad():
             return self.outputs.back(numpy(self.net(rt.tensor(self.inputs.forward(x)), rt.tensor(c))))

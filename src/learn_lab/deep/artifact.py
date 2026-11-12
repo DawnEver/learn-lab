@@ -21,7 +21,7 @@ from learn_lab.deep.field import UNet
 from learn_lab.deep.graph import MessagePassing
 from learn_lab.deep.hysteresis import PlayBank
 from learn_lab.deep.networks import MLP, MonotoneScalar
-from learn_lab.deep.operator import _DeepONetNet, _FNONet, _GraphOperatorNet, _TransformerNet
+from learn_lab.deep.operator import _DeepONetNet, _FNONet, _GraphOperatorNet, _TransformerNet, _TransolverNet
 from learn_lab.deep.preconditioner import _PreconditionerNet
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import refuse
@@ -36,6 +36,7 @@ MODULES: Final[dict[str, type[nn.Module]]] = {
     'DeepONetNet': _DeepONetNet,
     'FNONet': _FNONet,
     'TransformerNet': _TransformerNet,
+    'TransolverNet': _TransolverNet,
     'MessagePassing': MessagePassing,
     'PlayBank': PlayBank,
     'GraphOperatorNet': _GraphOperatorNet,
@@ -133,6 +134,10 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     },
     'fno': lambda f: {'inputs': _channels(f.envelope), 'outputs': _channels_out(f.outputs)},
     'transformer_operator': lambda f: {
+        'inputs': {'functions': _channels(f.envelope), 'points': _box(f.points)},
+        'outputs': _channels_out(f.outputs, 'channels per point'),
+    },
+    'transolver': lambda f: {
         'inputs': {'functions': _channels(f.envelope), 'points': _box(f.points)},
         'outputs': _channels_out(f.outputs, 'channels per point'),
     },

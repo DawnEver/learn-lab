@@ -20,7 +20,7 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.deep.hysteresis import PlayHysteresis
 from learn_lab.deep.networks import MLP
-from learn_lab.deep.operator import FNO, DeepONet, GraphOperator, TransformerOperator
+from learn_lab.deep.operator import FNO, DeepONet, GraphOperator, TransformerOperator, Transolver
 from learn_lab.deep.physics import PhysicsInformedField
 from learn_lab.deep.preconditioner import LearnedPreconditioner
 from learn_lab.deep.runtime import Runtime
@@ -125,6 +125,22 @@ CASES = {
     ),
     'transformer_operator': (
         TransformerOperator(width=4, heads=2, layers=2, kernel='linear', causal=True, schedule=FEW, runtime=CPU64),
+        lambda m: m.fit(GRID[:, :, 0], COORDS, -GRID[:, :, 0]),
+        lambda f: [f.predict(GRID[:2, :, 0], COORDS), f.predict(GRID[:2, :, 0, :5], COORDS[:5])],
+        lambda f: f.predict(GRID[:1, :, 0] + 5.0, COORDS),
+    ),
+    'transolver': (
+        Transolver(
+            width=4,
+            heads=2,
+            layers=2,
+            slices=3,
+            adaptive_temperature=True,
+            gumbel=True,
+            reference=3,
+            schedule=FEW,
+            runtime=CPU64,
+        ),
         lambda m: m.fit(GRID[:, :, 0], COORDS, -GRID[:, :, 0]),
         lambda f: [f.predict(GRID[:2, :, 0], COORDS), f.predict(GRID[:2, :, 0, :5], COORDS[:5])],
         lambda f: f.predict(GRID[:1, :, 0] + 5.0, COORDS),

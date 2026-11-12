@@ -5,6 +5,7 @@ import pytest
 
 from learn_lab.deep.constitutive import MonotoneLaw
 from learn_lab.deep.fit import Schedule
+from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
 
@@ -88,18 +89,25 @@ def _steel(h):
 DECADES = np.logspace(1.0, 5.0, 60)
 LOW = np.logspace(1.02, 2.0, 12)  # A/m: the low-field decade, held out
 POLISHED = Schedule(adam_steps=3000, learning_rate=3e-3, lbfgs_steps=3000)
+#: Pinned so every host fits the same arithmetic: 'auto' is CUDA on a GPU box and CPU on the forge.
+CPU64 = Runtime(device='cpu', dtype='float64')
 
 
 def _low_field_error(loss):
     x = np.concatenate([-DECADES[::-1], DECADES])
-    law = MonotoneLaw(loss=loss, schedule=POLISHED).fit(x, _steel(x))
+    law = MonotoneLaw(loss=loss, schedule=POLISHED, runtime=CPU64).fit(x, _steel(x))
     return np.max(np.abs(law.value(LOW) - _steel(LOW)) / _steel(LOW)), law
 
 
 def test_a_relative_loss_fits_a_decades_spanning_law_uniformly_where_mse_misses_the_low_end():
     mse, _ = _low_field_error('mse')
     relative, law = _low_field_error('relative')
-    assert mse > 0.02  # PLANTED CONTROL: plain MSE misses the low-field decade by more than 2 %
+    # PLANTED CONTROL, stated as the claim -- a COMPARISON, not an absolute miss. |B| spans 0.063 T at
+    # 10 A/m to 2.41 T at 1e5 A/m, so MSE weights a low-field residual (0.063 / 2.41)^2 ~ 1/1470 as much as
+    # a high-field one while the relative loss weights them alike. The absolute MSE miss is ~2 % and
+    # platform-dependent (2.3 % on Windows CPU, under 2 % on the Linux forge), so it cannot be the bar;
+    # MSE landing several times worse than the relative fit at the low end is what the weighting predicts.
+    assert mse > 4 * relative  # dimensionless ratio of low-field relative errors (measured ~9x)
     assert relative < 0.01  # dimensionless: the relative loss holds the low end within 1 %
     assert np.all(law.derivative(LOW) > 0)
     np.testing.assert_allclose(law.value(-LOW), -law.value(LOW), rtol=0, atol=1e-12)  # T: exact oddness

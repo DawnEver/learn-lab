@@ -58,6 +58,16 @@ Ritz schedule is Adam only. DETERMINISTIC (``weights``, e.g. :func:`gauss_legend
 a cell boundary): ``sum(weights * density)``, exact for polynomials to the rule's order, so the objective is the true
 energy to that order and an L-BFGS polish is sound (measured on the planted two-slab Poisson with a 1:4 jump in
 ``tests/unit/deep/test_physics_ritz_quadrature.py``, whose bars quote the numbers). An essential term enters as ``penalty * term.loss()``.
+
+A penalised essential condition biases the minimiser by O(1 / penalty) and stiffens it as the penalty grows, so no
+penalty is right. A HARD ANSATZ removes both: with ``ansatz=True`` the network's ``latent`` raw columns are not the
+field; the provider's ``ansatz(x, raw)`` maps them to the ``(n, outputs)`` field so that the essential conditions
+hold by construction -- ``g(x) + d(x) * N(x)``, ``d`` vanishing on the Dirichlet set and ``g`` lifting its data; for
+one column per region a SHARED TRACE (one raw column common to both regions plus per-region corrections times a
+distance to the interface) makes interface continuity exact. The provider owns the geometry, so it supplies ``d`` and
+``g``, and stops returning the terms its ansatz enforces; any :class:`Term` it still returns is penalised as before.
+The ansatz is provider code, so a hard-ansatz :class:`FittedField` evaluates in process and is not an artifact.
+Measured in ``tests/unit/deep/test_physics_ritz_hard.py``, whose bars quote the numbers.
 """
 
 from __future__ import annotations
@@ -90,6 +100,7 @@ __all__ = [
 ]
 
 Field = Callable[[torch.Tensor], torch.Tensor]
+Ansatz = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]  # (x, raw net columns) -> field
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,10 +284,13 @@ def derivative(values: torch.Tensor, points: torch.Tensor) -> torch.Tensor:
     return torch.autograd.grad(values.sum(), points, create_graph=True)[0]
 
 
-def _mapped(net: MLP, runtime: Runtime, domain: BoxEnvelope, x: torch.Tensor) -> torch.Tensor:
-    """The net at coordinates *x* mapped from the *domain* box onto ``[-1, 1]``."""
+def _field(net: MLP, runtime: Runtime, domain: BoxEnvelope, ansatz: Ansatz | None, x: torch.Tensor) -> torch.Tensor:
+    """The field at coordinates *x*: the net on *x* mapped from the *domain* box onto ``[-1, 1]``, through the
+    provider's hard *ansatz* when the fit has one.
+    """
     lo, hi = runtime.tensor(domain.lower), runtime.tensor(domain.upper)
-    return net(2.0 * (x - lo) / (hi - lo) - 1.0)
+    raw = net(2.0 * (x - lo) / (hi - lo) - 1.0)
+    return raw if ansatz is None else ansatz(x, raw)
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +303,7 @@ class PhysicsInformedField:
     resample: Resample | None = None
     input_scale: bool = False  # a learned per-coordinate input factor (networks.InputScale) before the first layer
     ritz: Ritz | None = None  # minimise the provider's energy (deep Ritz) instead of its squared residuals
+    ansatz: bool = False  # the field is provider.ansatz(x, net(x)): essential conditions hard, not penalised
 
     def fit(
         self,
@@ -307,9 +322,15 @@ class PhysicsInformedField:
         rt = self.runtime
         rt.seeded()
         dim = provider.domain.width
-        net = MLP([dim, *self.hidden, provider.outputs], input_scale=self.input_scale).to(
-            rt.torch_device, rt.torch_dtype
-        )
+        ansatz = None
+        if self.ansatz:
+            latent = getattr(provider, 'latent', None)
+            if not callable(getattr(provider, 'ansatz', None)) or not isinstance(latent, int) or latent < 1:
+                refuse(f'a hard-ansatz fit needs ansatz(x, raw) and latent >= 1; {type(provider).__name__} lacks them')
+            ansatz = provider.ansatz
+        net = MLP(
+            [dim, *self.hidden, provider.latent if self.ansatz else provider.outputs], input_scale=self.input_scale
+        ).to(rt.torch_device, rt.torch_dtype)
         params = {
             name: torch.tensor(
                 float(value), dtype=rt.torch_dtype, device=rt.torch_device, requires_grad=name in identify
@@ -318,7 +339,7 @@ class PhysicsInformedField:
         }
 
         def field_at(x: torch.Tensor) -> torch.Tensor:
-            return _mapped(net, rt, provider.domain, x)
+            return _field(net, rt, provider.domain, ansatz, x)
 
         points = {name: p.detach().requires_grad_(True) for name, p in provider.collocation(rt).items()}
         data = [] if observations is None else [_observed(provider, rt, n, o) for n, o in observations.items()]
@@ -387,6 +408,7 @@ class PhysicsInformedField:
             history=history,
             weights=dict(weights),
             weight_history=updates,
+            ansatz=ansatz,
         )
 
     def _terms(self, provider, field_at: Field, points: dict, params: Mapping, step: int) -> dict[str, torch.Tensor]:
@@ -491,10 +513,11 @@ class FittedField:
     history: list[float]
     weights: Mapping[str, float]  # each condition's final balance weight (all 1 under a fixed balance)
     weight_history: list[tuple[int, dict[str, float]]]  # (Adam step, weights after it) per balance update
+    ansatz: Ansatz | None = None  # the provider's hard ansatz the net's raw columns pass through, if any
 
     def field_at(self, x: torch.Tensor) -> torch.Tensor:
         """The field at ``(n, dim)`` coordinates, differentiable."""
-        return _mapped(self.net, self.runtime, self.domain, x)
+        return _field(self.net, self.runtime, self.domain, self.ansatz, x)
 
     def evaluate(self, x: np.ndarray) -> np.ndarray:
         x = self.domain.require(x, 'a field query')

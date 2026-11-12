@@ -20,7 +20,7 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.deep.hysteresis import PlayHysteresis
 from learn_lab.deep.networks import MLP
-from learn_lab.deep.operator import FNO, DeepONet
+from learn_lab.deep.operator import FNO, DeepONet, TransformerOperator
 from learn_lab.deep.physics import PhysicsInformedField
 from learn_lab.deep.runtime import Runtime
 from learn_lab.deep.surrogate import DeepEnsemble
@@ -49,6 +49,7 @@ RNG = np.random.default_rng(5)
 X = RNG.uniform(-1, 1, (32, 2))
 Y = np.column_stack([np.sin(2 * X[:, 0]), X[:, 0] * X[:, 1]])
 GRID = RNG.uniform(-1, 1, (6, 1, 8, 8))
+COORDS = np.sort(np.random.default_rng(6).uniform(0, 1, 8))[:, None]  # irregular points, (n, 1, 8) rows
 SENSORS, POINTS = RNG.uniform(-1, 1, (6, 5)), np.linspace(0, 1, 7)[:, None]
 T = np.linspace(0, 1, 12)
 TRAJECTORIES = np.stack([np.column_stack([np.cos(T + p), np.sin(T + p)]) for p in (0.0, 0.7, 1.4)])
@@ -117,6 +118,12 @@ CASES = {
         lambda m: m.fit(GRID, -GRID),
         lambda f: [f.predict(GRID[:2])],
         lambda f: f.predict(GRID[:1] + 5.0),
+    ),
+    'transformer_operator': (
+        TransformerOperator(width=4, heads=2, layers=2, kernel='linear', causal=True, schedule=FEW, runtime=CPU64),
+        lambda m: m.fit(GRID[:, :, 0], COORDS, -GRID[:, :, 0]),
+        lambda f: [f.predict(GRID[:2, :, 0], COORDS), f.predict(GRID[:2, :, 0, :5], COORDS[:5])],
+        lambda f: f.predict(GRID[:1, :, 0] + 5.0, COORDS),
     ),
     'graph_model': (
         GraphModel(hidden=8, rounds=2, schedule=FEW, runtime=CPU32),

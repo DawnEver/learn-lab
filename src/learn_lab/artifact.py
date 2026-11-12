@@ -93,6 +93,10 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
     'field_model': ('learn_lab.deep.field:FieldModel', 'learn_lab.deep.field:FittedFieldModel'),
     'deep_onet': ('learn_lab.deep.operator:DeepONet', 'learn_lab.deep.operator:FittedDeepONet'),
     'fno': ('learn_lab.deep.operator:FNO', 'learn_lab.deep.operator:FittedFNO'),
+    'transformer_operator': (
+        'learn_lab.deep.operator:TransformerOperator',
+        'learn_lab.deep.operator:FittedTransformerOperator',
+    ),
     'graph_model': ('learn_lab.deep.graph:GraphModel', 'learn_lab.deep.graph:FittedGraphModel'),
     'neural_ode': ('learn_lab.deep.dynamics:NeuralODE', 'learn_lab.deep.dynamics:FittedDynamics'),
 }

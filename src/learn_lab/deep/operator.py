@@ -36,7 +36,15 @@ from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
 from learn_lab.validity import BoxEnvelope, ChannelEnvelope
 
-__all__ = ['FNO', 'DeepONet', 'FittedDeepONet', 'FittedFNO', 'SpectralConv']
+__all__ = [
+    'FNO',
+    'DeepONet',
+    'FittedDeepONet',
+    'FittedFNO',
+    'FittedTransformerOperator',
+    'SpectralConv',
+    'TransformerOperator',
+]
 
 
 def _scalar(s: Standardiser, a: np.ndarray, *, back: bool = False) -> np.ndarray:
@@ -282,3 +290,186 @@ class FittedFNO:
         self.envelope.require(_onto(x, self.envelope.shape), 'an FNO query (at the training nodes)')
         with torch.no_grad():
             return self.outputs.back(numpy(self.net(self.runtime.tensor(self.inputs.forward(x)))))
+
+
+_KERNELS = ('softmax', 'linear')
+
+
+def _causal_rank(coords: torch.Tensor) -> torch.Tensor:
+    """Each point's place in time: the stable order of the first coordinate (ties keep the index order)."""
+    order = torch.argsort(coords[:, 0], stable=True)
+    return torch.empty_like(order).scatter_(0, order, torch.arange(order.numel(), device=order.device))
+
+
+class _Attention(nn.Module):
+    """Multi-head self-attention over the points; ``linear`` is the ``elu + 1`` kernel, memory O(p)."""
+
+    def __init__(self, width: int, heads: int, kernel: str, causal: bool) -> None:
+        super().__init__()
+        self.heads, self.kernel, self.causal = heads, kernel, causal
+        self.qkv = nn.Linear(width, 3 * width)
+        self.out = nn.Linear(width, width)
+
+    def forward(self, h: torch.Tensor, rank: torch.Tensor) -> torch.Tensor:
+        n, p, w = h.shape
+        q, k, v = (t.reshape(n, p, self.heads, -1).transpose(1, 2) for t in self.qkv(h).chunk(3, dim=-1))
+        if self.kernel == 'softmax':
+            mask = rank[None, :] <= rank[:, None] if self.causal else None  # [query, key]: key not after query
+            mixed = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask)
+        else:
+            q, k = nn.functional.elu(q) + 1.0, nn.functional.elu(k) + 1.0
+            if self.causal:  # prefix sums in time order, then back to the points' order
+                order = torch.argsort(rank)
+                q, k, v = q[:, :, order], k[:, :, order], v[:, :, order]
+                kv = torch.cumsum(k.unsqueeze(-1) * v.unsqueeze(-2), dim=2)
+                norm = torch.einsum('nhpd,nhpd->nhp', q, k.cumsum(2))
+                mixed = (torch.einsum('nhpd,nhpde->nhpe', q, kv) / norm[..., None])[:, :, rank]
+            else:
+                kv = torch.einsum('nhpd,nhpe->nhde', k, v)
+                norm = torch.einsum('nhpd,nhd->nhp', q, k.sum(2))
+                mixed = torch.einsum('nhpd,nhde->nhpe', q, kv) / norm[..., None]
+        return self.out(mixed.transpose(1, 2).reshape(n, p, w))
+
+
+class _Block(nn.Module):
+    def __init__(self, width: int, heads: int, kernel: str, causal: bool) -> None:
+        super().__init__()
+        self.attend, self.norm_attend = _Attention(width, heads, kernel, causal), nn.LayerNorm(width)
+        self.mlp, self.norm_mlp = MLP([width, 2 * width, width], activation='gelu'), nn.LayerNorm(width)
+
+    def forward(self, h: torch.Tensor, rank: torch.Tensor) -> torch.Tensor:
+        h = h + self.attend(self.norm_attend(h), rank)
+        return h + self.mlp(self.norm_mlp(h))
+
+
+class _TransformerNet(nn.Module):
+    def __init__(
+        self, c_in: int, c_out: int, *, width: int, heads: int, layers: int, kernel: str, causal: bool, lower, upper
+    ) -> None:
+        super().__init__()
+        self.arguments = {
+            'c_in': c_in,
+            'c_out': c_out,
+            'width': width,
+            'heads': heads,
+            'layers': layers,
+            'kernel': kernel,
+            'causal': causal,
+            'lower': lower,
+            'upper': upper,
+        }
+        self.lift = nn.Linear(c_in + len(lower), width)
+        self.blocks = nn.ModuleList(_Block(width, heads, kernel, causal) for _ in range(layers))
+        self.head = MLP([width, 2 * width, c_out], activation='gelu')
+        span = np.where(upper > lower, upper - lower, 1.0)
+        self.register_buffer('lower', torch.as_tensor(lower, dtype=torch.float64))
+        self.register_buffer('span', torch.as_tensor(span, dtype=torch.float64))
+
+    def forward(self, x: torch.Tensor, coords: torch.Tensor) -> torch.Tensor:
+        """``x (n, c_in, p)``, ``coords (p, d)`` -> ``(n, c_out, p)``."""
+        rank = _causal_rank(coords)
+        position = (2.0 * (coords - self.lower) / self.span - 1.0).expand(x.shape[0], -1, -1)
+        h = self.lift(torch.cat([x.transpose(1, 2), position], dim=-1))
+        for block in self.blocks:
+            h = block(h, rank)
+        return self.head(h).transpose(1, 2)
+
+
+@dataclass(frozen=True, slots=True)
+class TransformerOperator:
+    """Self-attention over irregular points: a token is one point's input channels and coordinates.
+
+    ``kernel='softmax'`` is exact attention (memory O(p^2) per head); ``'linear'`` is the ``elu + 1`` kernel
+    (memory O(p)). ``causal=True`` makes a history operator: a point attends only to points whose FIRST
+    coordinate is not later (ties ordered by index), so its output never reads the future. A query may use any
+    points inside the coordinates' training box; its inputs are refused outside the per-channel value box.
+    """
+
+    width: int = 32
+    heads: int = 4
+    layers: int = 2
+    kernel: str = 'softmax'
+    causal: bool = False
+    schedule: Schedule = field(default_factory=lambda: Schedule(adam_steps=2000, learning_rate=3e-3))
+    runtime: Runtime = field(default_factory=lambda: Runtime(dtype='float32'))
+    margin: float = 0.0
+    chunk: int | None = 32
+
+    def __post_init__(self) -> None:
+        if self.chunk is not None and (isinstance(self.chunk, bool) or self.chunk < 1):
+            refuse(f'a chunk is a sample count >= 1 (or None for one pass), got {self.chunk!r}')
+        if self.kernel not in _KERNELS:
+            refuse(f'a transformer operator kernel is one of {list(_KERNELS)}, got {self.kernel!r}')
+        if self.heads < 1 or self.layers < 1 or self.width % self.heads:
+            refuse(f'width {self.width} must split evenly into heads {self.heads} (>= 1), with layers >= 1')
+
+    def fit(
+        self, x: np.ndarray, coords: np.ndarray, y: np.ndarray, *, checkpoint: Checkpoint | None = None
+    ) -> FittedTransformerOperator:
+        """``x (n, c_in, p)`` at the points ``coords (p, d)`` -> ``y (n, c_out, p)`` at the same points."""
+        x = require_finite(np.asarray(x, float), 'the input functions')
+        c = require_finite(np.asarray(coords, float), 'the coordinates')
+        y = require_finite(np.asarray(y, float), 'the output functions')
+        if x.ndim != 3 or y.ndim != 3 or c.ndim != 2 or x.shape[::2] != y.shape[::2] or x.shape[2] != len(c):
+            refuse(
+                f'a transformer operator is fitted on x (n, c_in, p), coords (p, d), y (n, c_out, p); '
+                f'got {x.shape}, {c.shape}, {y.shape}'
+            )
+        rt = self.runtime
+        rt.seeded()
+        sx, sy = Standardiser.of(x), Standardiser.of(y)
+        box = BoxEnvelope.of(c, margin=self.margin)
+        net = _TransformerNet(
+            x.shape[1],
+            y.shape[1],
+            width=self.width,
+            heads=self.heads,
+            layers=self.layers,
+            kernel=self.kernel,
+            causal=self.causal,
+            lower=box.lower,
+            upper=box.upper,
+        ).to(rt.torch_device, rt.torch_dtype)
+        xt, ct, yt = rt.tensor(sx.forward(x)), rt.tensor(c), rt.tensor(sy.forward(y))
+        chunk = self.chunk
+
+        def squared(xc: torch.Tensor, yc: torch.Tensor) -> torch.Tensor:
+            return ((net(xc, ct) - yc) ** 2).sum()
+
+        def loss() -> torch.Tensor:
+            if chunk is None or chunk >= len(xt):
+                return squared(xt, yt) / yt.numel()
+            parts = (
+                recomputed(squared, xt[i : i + chunk], yt[i : i + chunk], use_reentrant=False)
+                for i in range(0, len(xt), chunk)
+            )
+            return torch.stack(list(parts)).sum() / yt.numel()
+
+        history = minimise(
+            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, ct, yt]
+        )
+        envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
+        return FittedTransformerOperator(
+            net=net.eval(), runtime=rt, envelope=envelope, points=box, inputs=sx, outputs=sy, history=history
+        )
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class FittedTransformerOperator:
+    net: _TransformerNet
+    runtime: Runtime
+    envelope: ChannelEnvelope
+    points: BoxEnvelope
+    inputs: Standardiser
+    outputs: Standardiser
+    history: list[float]
+
+    def predict(self, x: np.ndarray, coords: np.ndarray) -> np.ndarray:
+        """``(n, c_out, p)``: each input function's image at its ``p`` points ``coords (p, d)``."""
+        x = self.envelope.require(np.asarray(x, float), 'a transformer operator input function')
+        c = self.points.require(coords, 'a transformer operator point')
+        if x.ndim != 3 or x.shape[2] != len(c):
+            refuse(f'a transformer operator query of shape {x.shape} is invalid at {len(c)} points: (n, c_in, p)')
+        rt = self.runtime
+        with torch.no_grad():
+            return self.outputs.back(numpy(self.net(rt.tensor(self.inputs.forward(x)), rt.tensor(c))))

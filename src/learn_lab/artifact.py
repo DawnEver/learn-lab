@@ -97,6 +97,7 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
         'learn_lab.deep.operator:TransformerOperator',
         'learn_lab.deep.operator:FittedTransformerOperator',
     ),
+    'transolver': ('learn_lab.deep.operator:Transolver', 'learn_lab.deep.operator:FittedTransolver'),
     'graph_model': ('learn_lab.deep.graph:GraphModel', 'learn_lab.deep.graph:FittedGraphModel'),
     'neural_ode': ('learn_lab.deep.dynamics:NeuralODE', 'learn_lab.deep.dynamics:FittedDynamics'),
     'diffusion_field': ('learn_lab.deep.diffusion:DiffusionField', 'learn_lab.deep.diffusion:FittedDiffusionField'),

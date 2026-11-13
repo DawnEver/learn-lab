@@ -4,7 +4,7 @@
 ``eps`` in ``z_t = sqrt(abar_t) y + sqrt(1 - abar_t) eps`` at a uniformly drawn step ``t`` of a linear schedule of
 ``noise_steps`` steps (:func:`linear_betas`); the net sees the noisy field, the standardised condition as constant
 channels and ``t / T`` as one more. :meth:`FittedDiffusionField.sample` runs the ancestral sampler from pure
-noise (posterior variance ``beta_t (1 - abar_{t-1}) / (1 - abar_t)``, exact for a Gaussian field) and returns field
+noise (posterior variance ``beta_t (1 - abar_{t-1}) / (1 - abar_t)``, or ``beta_t`` on request) and returns field
 samples; :meth:`~FittedDiffusionField.moments` their mean and variance per cell.
 
 The envelope is the conditions' box: a condition outside it is refused (OUT_OF_DOMAIN), another width is INVALID.
@@ -17,6 +17,7 @@ L-BFGS polish of a stochastic loss is refused. ``chunk`` bounds peak memory as i
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal, get_args
 
 import numpy as np
 import torch
@@ -29,7 +30,10 @@ from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
 from learn_lab.validity import BoxEnvelope
 
-__all__ = ['DiffusionField', 'FittedDiffusionField', 'linear_betas']
+__all__ = ['SAMPLER_VARIANCES', 'DiffusionField', 'FittedDiffusionField', 'SamplerVariance', 'linear_betas']
+
+SamplerVariance = Literal['posterior', 'beta']
+SAMPLER_VARIANCES: tuple[str, ...] = get_args(SamplerVariance)
 
 
 def linear_betas(steps: int) -> np.ndarray:
@@ -136,11 +140,19 @@ class FittedDiffusionField:
     betas: np.ndarray
     history: list[float]
 
-    def sample(self, conditions: np.ndarray, count: int, *, seed: int = 0) -> np.ndarray:
-        """``(m, count, c, H, W)`` fields drawn for each in-domain condition; one *seed* gives the same draws."""
+    def sample(
+        self, conditions: np.ndarray, count: int, *, seed: int = 0, variance: SamplerVariance = 'posterior'
+    ) -> np.ndarray:
+        """``(m, count, c, H, W)`` fields drawn for each in-domain condition; one *seed* gives the same draws.
+
+        *variance* is the reverse step's noise: ``'posterior'`` ``beta_t (1 - abar_{t-1}) / (1 - abar_t)`` (exact when
+        the data is one point, the lower bound) or ``'beta'`` ``beta_t`` (exact when the data is N(0, I), the upper).
+        """
         c = self.envelope.require(conditions, 'a diffusion condition')
         if isinstance(count, bool) or count < 1:
             refuse(f'a sample count is >= 1, got {count!r}')
+        if variance not in SAMPLER_VARIANCES:
+            refuse(f'a sampler variance is one of {SAMPLER_VARIANCES}, got {variance!r}')
         rt = self.runtime
         generator = torch.Generator(device=rt.torch_device).manual_seed(seed)
         steps = len(self.betas)
@@ -156,12 +168,15 @@ class FittedDiffusionField:
                 z = (z - betas[step] / (1 - abar[step]).sqrt() * eps) / alphas[step].sqrt()
                 if step:
                     noise = torch.randn(z.shape, generator=generator, device=rt.torch_device, dtype=rt.torch_dtype)
-                    z = z + (betas[step] * (1 - abar[step - 1]) / (1 - abar[step])).sqrt() * noise
+                    shrink = 1 if variance == 'beta' else (1 - abar[step - 1]) / (1 - abar[step])
+                    z = z + (betas[step] * shrink).sqrt() * noise
         return self.outputs.back(numpy(z)).reshape(len(c), count, *self.shape)
 
-    def moments(self, conditions: np.ndarray, count: int, *, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+    def moments(
+        self, conditions: np.ndarray, count: int, *, seed: int = 0, variance: SamplerVariance = 'posterior'
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Per condition, the ``(c, H, W)`` mean and unbiased variance of *count* samples."""
         if isinstance(count, bool) or count < 2:
             refuse(f'a sample variance needs a count >= 2, got {count!r}')
-        draws = self.sample(conditions, count, seed=seed)
+        draws = self.sample(conditions, count, seed=seed, variance=variance)
         return draws.mean(1), draws.var(1, ddof=1)

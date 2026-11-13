@@ -13,6 +13,7 @@ from learn_lab.errors import Refused
 from learn_lab.models.response import (
     Bagging,
     ChaosExpansion,
+    CloughTocher,
     CoKriging,
     Ensemble,
     Forest,
@@ -55,6 +56,7 @@ FITS = {
     'forest': lambda d: Forest(n_trees=3).fit(X, Y, domain=d),
     'multilayer_perceptron': lambda d: MultilayerPerceptron((4,), max_iterations=20).fit(X, Y, domain=d),
     'chaos_expansion': lambda d: ChaosExpansion(degree=2).fit(X, Y, domain=d),
+    'clough_tocher': lambda d: CloughTocher().fit(X, Y, domain=d),
     'ensemble': lambda d: Ensemble((Polynomial(degree=1), NearestNeighbours(k=3)), k=3).fit(X, Y, domain=d),
     'bagging': lambda d: Bagging(Polynomial(degree=1), n_members=3, seed=1).fit(X, Y, domain=d),
 }
@@ -64,7 +66,11 @@ def test_the_table_covers_every_registered_surrogate() -> None:
     assert set(SURROGATES) <= set(FITS)
 
 
-@pytest.mark.parametrize('family', list(FITS))
+#: An interpolant is defined only inside the hull of its nodes: it refuses a declared domain (its own test).
+HULL_BOUND = {'clough_tocher'}
+
+
+@pytest.mark.parametrize('family', [f for f in FITS if f not in HULL_BOUND])
 def test_a_declared_domain_answers_a_candidate_outside_the_samples_span(family) -> None:
     fitted = FITS[family](CUBE)
     assert fitted.envelope is CUBE

@@ -34,6 +34,10 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.sessionprs"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.walls post-tool"
           }
         ]
       }
@@ -78,6 +82,14 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.devhost stop"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.walls stop"
+          }
+        ]
       }
     ],
     "SubagentStop": [
@@ -86,6 +98,14 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.handback"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.walls stop"
           }
         ]
       }
@@ -138,6 +158,25 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.hostalarm hook"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.hpcaccount.session bind"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/py.js\" -m dev_lab.dev.walls post-tool"
           }
         ]
       }

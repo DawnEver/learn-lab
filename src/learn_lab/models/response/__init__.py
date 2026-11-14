@@ -5,7 +5,8 @@ A model is a frozen declaration of its settings; ``fit`` returns a fitted model 
 and the latent variance ``(n, k)`` and mean gradient ``(n, k, d)`` when asked for and declared in ``gives``.
 
 * response surfaces -- :class:`Polynomial` (+ :class:`Ridge` / :class:`Lasso`), :class:`RadialBasis`,
-  :class:`ChaosExpansion`, :class:`PowerLaw` (a scaling law, fitted in log space),
+  :class:`ChaosExpansion`, :class:`CloughTocher` (a C1 interpolant inside its nodes' hull),
+  :class:`PowerLaw` (a scaling law, fitted in log space),
   :class:`LossLawResidual` (a loss scaling law as the mean, a learned residual on top);
 * Kriging -- :class:`GaussianProcess` (kernels in :mod:`~learn_lab.models.response.kernel`, maximum likelihood,
   closed-form leave-one-out), :class:`GradientEnhancedKriging`, :class:`MultiOutputKriging` (ICM),
@@ -21,6 +22,7 @@ scikit-learn is a TEST oracle only.
 
 from learn_lab.models.response.bagging import Bagging, FittedBagging
 from learn_lab.models.response.chaos import ChaosExpansion, FittedChaos, legendre_table
+from learn_lab.models.response.clough_tocher import CloughTocher, FittedCloughTocher
 from learn_lab.models.response.co_kriging import CoKriging, FittedCoKriging
 from learn_lab.models.response.ensemble import WEIGHTINGS, Ensemble, FittedEnsemble
 from learn_lab.models.response.gaussian_process import FittedGaussianProcess, GaussianProcess, log_likelihood
@@ -45,10 +47,12 @@ __all__ = [
     'WEIGHTINGS',
     'Bagging',
     'ChaosExpansion',
+    'CloughTocher',
     'CoKriging',
     'Ensemble',
     'FittedBagging',
     'FittedChaos',
+    'FittedCloughTocher',
     'FittedCoKriging',
     'FittedEnsemble',
     'FittedForest',

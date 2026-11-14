@@ -19,6 +19,7 @@ from learn_lab.errors import Refused
 from learn_lab.models.response import (
     Bagging,
     ChaosExpansion,
+    CloughTocher,
     CoKriging,
     Ensemble,
     Forest,
@@ -35,6 +36,7 @@ from learn_lab.models.response import (
     RegressionTree,
 )
 from learn_lab.registry import SURROGATES
+from learn_lab.validity import HullEnvelope
 
 RNG = np.random.default_rng(7)
 X = RNG.uniform(0, 1, (24, 2))
@@ -61,6 +63,11 @@ CASES = {
     'forest': (Forest(n_trees=4, seed=3), lambda m: m.fit(X, Y)),
     'multilayer_perceptron': (MultilayerPerceptron(hidden=(6,), max_iterations=40), lambda m: m.fit(X, Y)),
     'chaos_expansion': (ChaosExpansion(degree=2), lambda m: m.fit(X, Y)),
+    # The unit square's corners join the nodes so every QUERY lies inside the interpolant's hull.
+    'clough_tocher': (
+        CloughTocher(tolerance=1e-8),
+        lambda m: m.fit(np.vstack([X, [[0, 0], [0, 1], [1, 0], [1, 1]]]), np.vstack([Y, np.zeros((4, 2))])),
+    ),
     'ensemble': (Ensemble((Polynomial(degree=2), NearestNeighbours(k=3)), k=3), lambda m: m.fit(X, Y)),
     'bagging': (Bagging(GaussianProcess(restarts=0), n_members=3, seed=5), lambda m: m.fit(X, Y)),
 }
@@ -106,6 +113,17 @@ def test_a_reloaded_response_model_answers_bit_for_bit(family, tmp_path) -> None
     record = artifact.manifest(path)
     assert record['family'] == family
     envelope = {'lower': fitted.envelope.lower.tolist(), 'upper': fitted.envelope.upper.tolist()}
+    if isinstance(fitted.envelope, HullEnvelope):  # an interpolant's envelope is its nodes' hull, not a box
+        hull = fitted.envelope
+        envelope = {
+            'hull': {
+                'origin': hull.origin.tolist(),
+                'basis': hull.basis.tolist(),
+                'normals': hull.normals.tolist(),
+                'offsets': hull.offsets.tolist(),
+                'slack': hull.slack,
+            }
+        }
     assert record['schema']['inputs'] == {'kind': 'vector', 'width': 2, 'envelope': envelope}
     assert _same(loaded.envelope.lower, fitted.envelope.lower)
     assert _same(loaded.envelope.upper, fitted.envelope.upper)

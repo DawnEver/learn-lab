@@ -10,7 +10,8 @@ point, finite. A prediction is never an observation: whoever files it labels it 
 
 Every fit carries its ENVELOPE (a :class:`~learn_lab.validity.BoxEnvelope`): the ``domain`` the caller
 declares at fit -- the design space a search will query, which must hold every training point -- else the
-box the training points span. A query outside it is refused as OUT_OF_DOMAIN, never extrapolated; a caller
+box the training points span; an interpolant, defined only between its nodes, carries their
+:class:`~learn_lab.validity.HullEnvelope` instead and refuses a declared domain. A query outside it is refused as OUT_OF_DOMAIN, never extrapolated; a caller
 with a fallback asks ``fitted.envelope.classify`` first. :func:`training_data` makes it, :func:`query_points`
 holds every query to it: one rule, read by every response model.
 """
@@ -24,7 +25,7 @@ from typing import Protocol
 import numpy as np
 
 from learn_lab.errors import refuse, require_finite
-from learn_lab.validity import BoxEnvelope
+from learn_lab.validity import BoxEnvelope, HullEnvelope
 
 __all__ = ['Fitted', 'Give', 'Prediction', 'Surrogate', 'query_points', 'require_gives', 'training_data']
 
@@ -77,7 +78,7 @@ class Fitted(Protocol):
     def gives(self) -> frozenset[Give]: ...
 
     @property
-    def envelope(self) -> BoxEnvelope: ...
+    def envelope(self) -> BoxEnvelope | HullEnvelope: ...
 
     def predict(self, x: np.ndarray, *, variance: bool = False, gradient: bool = False) -> Prediction: ...
 
@@ -119,7 +120,7 @@ def training_data(
     return x, y, domain
 
 
-def query_points(x: object, envelope: BoxEnvelope) -> np.ndarray:
+def query_points(x: object, envelope: BoxEnvelope | HullEnvelope) -> np.ndarray:
     """``(m, d)`` finite query points inside the fit's *envelope*, or a refusal naming the first stranger."""
     x = np.asarray(x, dtype=float)
     d = envelope.width

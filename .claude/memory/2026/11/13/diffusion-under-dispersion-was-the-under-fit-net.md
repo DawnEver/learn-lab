@@ -1,4 +1,6 @@
 ---
+name: diffusion-under-dispersion-was-the-under-fit-net
+description: The diffusion field model's under-dispersed samples came from an under-fit noise net (width 8, 1000 steps), not the sampler; width 16 and 3000 steps bring the variance error under the 0.3 bar.
 created: 2026-11-13
 ---
 # Diffusion under-dispersion was the under-fit noise net, not the sampler

@@ -8,7 +8,7 @@
   },
   {
     "name": "SUBAGENT-NO-PUSH",
-    "pattern": "(?:git(?:\\.exe)?(?:\\s+-C\\s+\\S+)*\\s+push\\b|(?:sh\\s+)?\\S*with-retry\\.sh\\s+push\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab.dev\\.netverb\\b[^\\n]*\\spush\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.family\\s+(?:join)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.sshhold\\s+(?:open|run|credential|close|status)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.forge\\s+(?:pr\\s+create|pr\\s+ready|pr\\s+draft|pr\\s+close|pr\\s+continue|review\\s+carry|pr\\s+close\\-landed|pr\\s+close\\-superseded|pr\\s+breakglass|breakglass\\s+open|review\\s+takeover|review\\s+again|security\\s+release|cancel\\-stuck|sync)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.ops\\.consent\\s+(?:grant)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.integrate\\s+(?:promote)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.branchprune\\s+(?:delete)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.hpcaccount\\s+(?:deploy\\-fleet|forget|credential)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.opsserver(?![\\w.-])|gh(?:\\.exe)?\\s+workflow\\s+enable(?![\\w-])|gh(?:\\.exe)?\\s+workflow\\s+disable(?![\\w-])|git(?:\\.exe)?\\b[^\\n]*\\s--no-verify\\b|SKIP=|\\$env:SKIP\\s*=)",
+    "pattern": "(?:git(?:\\.exe)?(?:\\s+-C\\s+\\S+)*\\s+push\\b|(?:sh\\s+)?\\S*with-retry\\.sh\\s+push\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab.dev\\.netverb\\b[^\\n]*\\spush\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.family\\s+(?:join)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.sshhold\\s+(?:open|run|credential|close|status)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.forge\\s+(?:pr\\s+create|pr\\s+ready|pr\\s+draft|pr\\s+close|pr\\s+continue|review\\s+carry|pr\\s+close\\-landed|pr\\s+close\\-superseded|pr\\s+breakglass|breakglass\\s+open|review\\s+takeover|review\\s+again|security\\s+release|cancel\\-stuck)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.ops\\.consent\\s+(?:grant)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.integrate\\s+(?:promote)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.branchprune\\s+(?:delete|delete\\-tag)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.hpcaccount\\s+(?:deploy\\-fleet|forget|credential)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.opsserver(?![\\w.-])|gh(?:\\.exe)?\\s+workflow\\s+enable(?![\\w-])|gh(?:\\.exe)?\\s+workflow\\s+disable(?![\\w-])|git(?:\\.exe)?\\b[^\\n]*\\s--no-verify\\b|SKIP=|\\$env:SKIP\\s*=)",
     "matches": "command",
     "reason": "SUBAGENT-NO-PUSH: publishing is the main session`s, and a skipped hook publishes what nobody checked.\nCommit on your lane and hand the commit SHA back to the main session, which merges and pushes; measure the tests you touched: {python} -m dev_lab.dev.verify -- <paths>.\ndetails: docs-src/dev/refusals.md#subagent-no-push (lab-commons)",
     "scope": "subagent"
@@ -18,6 +18,12 @@
     "pattern": "(?:>|\\btee\\b|\\bcp\\b|\\bmv\\b|\\bmkdir\\b|\\btouch\\b|Set-Content|Out-File|Add-Content|New-Item|Copy-Item|Move-Item)[^\\n;&|]*[\\\\/]+state[\\\\/]+consent(?![^\\s\\\\/\"\\';&|])",
     "matches": "line",
     "reason": "CONSENT-CODE-FROM-THE-USER: a consent credential is written by the grant from a code the USER gave; a planted one forges the consent.\nWrite the request JSON under output/logs/<yy>/<mm>/<dd>/consent/, ask the user for the cluster code; once they approve, run `{python} -m dev_lab.ops.consent grant <request.json> --code <the code they gave>`.\ndetails: docs-src/dev/refusals.md#consent-code-from-the-user (lab-commons)"
+  },
+  {
+    "name": "COMMIT-HOOKS-RUN",
+    "pattern": "git(?:\\.exe)?(?:\\s+-[Cc]\\s*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*?\\s+-c\\s*[\"\\']?core\\.[Hh]ooks[Pp]ath=|git(?:\\.exe)?(?:\\s+-[Cc]\\s*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*?\\s+commit(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*?\\s+(?:--no-verify|-n)(?=\\s|$|[;&|)])",
+    "matches": "command",
+    "reason": "COMMIT-HOOKS-RUN: a skipped commit hook routes around the wall it raised, so its cause is met again by the next commit.\nCommit with the hooks: fix the cause the refusing hook names; a worktree with no venv: {python} -m dev_lab.dev.dep --bootstrap <worktree>.\ndetails: docs-src/dev/refusals.md#commit-hooks-run (lab-commons)"
   },
   {
     "name": "BARE-TEST-INVOCATION",
@@ -70,20 +76,20 @@
   },
   {
     "name": "PUSH-FORCE",
-    "pattern": "\\bpush\\b[^\\n]*\\s(?:--force\\b|--force-with-lease\\b|-f\\b|\\+\\S)",
-    "matches": "argument",
+    "pattern": "(?:\"?\\S*python[\\w.]*(?:\\.exe)?\"?\\s+-m\\s+dev_lab\\.dev\\.netverb(?:\\s+--)?\\s+)?(?:(?:\"[^\"]*[/\\\\])?\"?\\S*?\\bgit(?:\\.exe)?\"?(?:\\s+-[Cc]\\s+\\S+)*|(?:sh\\s+)?\\S*with-retry\\.sh)\\s+push\\b[^\\n]*\\s(?:--force\\b|--force-with-lease\\b|-f\\b|\\+\\S)",
+    "matches": "command",
     "reason": "PUSH-FORCE: rewriting a shared ref invalidates every verdict taken against the old tree; --force-with-lease included.\nLand the change FORWARD: git revert <sha> or a new commit on your own lane, then push without the force flag.\ndetails: docs-src/dev/refusals.md#push-force (lab-commons)"
   },
   {
     "name": "PUSH-REMOTE-DELETE",
-    "pattern": "\\bpush\\b[^\\n]*\\s(?:--delete\\b|-d\\b|--prune\\b|--mirror\\b|:\\S)",
-    "matches": "argument",
-    "reason": "PUSH-REMOTE-DELETE: a raw remote delete can lose commits held nowhere else.\n`{python} -m dev_lab.dev.branchprune delete <branch>` (LOSSLESS-DELETE).\ndetails: docs-src/dev/refusals.md#push-remote-delete (lab-commons)"
+    "pattern": "(?:\"?\\S*python[\\w.]*(?:\\.exe)?\"?\\s+-m\\s+dev_lab\\.dev\\.netverb(?:\\s+--)?\\s+)?(?:(?:\"[^\"]*[/\\\\])?\"?\\S*?\\bgit(?:\\.exe)?\"?(?:\\s+-[Cc]\\s+\\S+)*|(?:sh\\s+)?\\S*with-retry\\.sh)\\s+push\\b[^\\n]*\\s(?:--delete\\b|-d\\b|--prune\\b|--mirror\\b|:\\S)",
+    "matches": "command",
+    "reason": "PUSH-REMOTE-DELETE: a raw remote delete can lose commits held nowhere else.\na branch: `{python} -m dev_lab.dev.branchprune delete <branch>`; a tag: `{python} -m dev_lab.dev.branchprune delete-tag <tag> --approved \"<the user`s words>\"` (LOSSLESS-DELETE).\ndetails: docs-src/dev/refusals.md#push-remote-delete (lab-commons)"
   },
   {
     "name": "PUSH-NO-VERIFY",
-    "pattern": "\\bpush\\b[^\\n]*--no-verify\\b",
-    "matches": "argument",
+    "pattern": "(?:\"?\\S*python[\\w.]*(?:\\.exe)?\"?\\s+-m\\s+dev_lab\\.dev\\.netverb(?:\\s+--)?\\s+)?(?:(?:\"[^\"]*[/\\\\])?\"?\\S*?\\bgit(?:\\.exe)?\"?(?:\\s+-[Cc]\\s+\\S+)*|(?:sh\\s+)?\\S*with-retry\\.sh)\\s+push\\b[^\\n]*--no-verify\\b",
+    "matches": "command",
     "reason": "PUSH-NO-VERIFY: `--no-verify` skips the pre-push hooks (admission, the trunk proof), so the push publishes what no hook checked.\nPush without the flag (no hook runs a test; the forge produces the part after the push), and to check a change first measure what you touched: ./.venv/Scripts/python.exe -m dev_lab.dev.verify\ndetails: docs-src/dev/refusals.md#push-no-verify (lab-commons)"
   },
   {
@@ -126,7 +132,7 @@
     "name": "RECURSIVE-DELETE",
     "pattern": "(?:(?:[cC][mM][dD](?:\\.[eE][xX][eE])?\\s+/[cCkK]\\s+[\"']?|xargs(?:\\s+-\\S+)*\\s+|find\\b[^\\n;&|]*?\\s-exec(?:dir)?\\s+)?(?:[rR][eE][mM][oO][vV][eE]-[iI][tT][eE][mM]|[rR][mM][dD][iI][rR]|[eE][rR][aA][sS][eE]|[rR][mM]|[rR][iI]|[rR][dD]|[dD][eE][lL])(?:\\.exe)?(?=(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*?\\s+(?:-[fvidI]*[rR][fvidI]*|--recursive|-[rR](?:[eE](?:[cC](?:[uU](?:[rR](?:[sS][eE]?)?)?)?)?)?|/[sS])(?=\\s|$|:))(?!(?=(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*?\\s+(?![^\\s;&|()]*\\.\\.)[\"']?(?:/tmp/|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?[\\\\/]|%(?:TEMP|TMP)%[\\\\/]|\\$env:(?:TEMP|TMP)[\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP][\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?output[\\\\/])[^\\s\"'\\\\/;&|()][^\\s\"';&|()]*[\"']?(?=\\s|$))(?:\\s+(?:(?:-[^\\s\"';&|()]*|/[a-zA-Z])(?=\\s|$)|(?![^\\s;&|()]*\\.\\.)[\"']?(?:/tmp/|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?[\\\\/]|%(?:TEMP|TMP)%[\\\\/]|\\$env:(?:TEMP|TMP)[\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP][\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?output[\\\\/])[^\\s\"'\\\\/;&|()][^\\s\"';&|()]*[\"']?(?=\\s|$)))+\\s*[\"']?\\s*$)|git(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*\\s+worktree\\s+remove\\b|git(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*\\s+clean\\b(?=[^\\n;&|]*\\s(?:-[a-zA-Z]*[xXd][a-zA-Z]*|--directory)(?=\\s|$|[;&|]))(?![^\\n;&|]*\\s(?:-[a-zA-Z]*n[a-zA-Z]*|--dry-run)(?=\\s|$|[;&|]))|\\S*python[\\w.]*(?:\\.exe)?\\s+-c\\s+[^\\n]*?\\bshutil\\.rmtree\\b|(?:[^;\\n'\"]*;\\s*)*(?:shutil\\.)?rmtree\\s*\\()",
     "matches": "command",
-    "reason": "RECURSIVE-DELETE: a raw recursive delete judges deletability by hand; on 2026-10-27 one took a MAIN checkout.\nscratch/: <venv python> -m dev_lab.dev.scratch clear [--keep NAME ...] --yes. Landed worktrees, branches: <venv python> -m dev_lab.dev.branchset --apply. An UNLANDED lane the user approved dropping: <venv python> -m dev_lab.dev.branchset --discard <branch> --approved \"<their words>\". Anything else (never a worktree): ask the user; once approved, move it under output/ and delete it there. Temp, output/ not refused.\ndetails: docs-src/dev/refusals.md#recursive-delete (lab-commons)"
+    "reason": "RECURSIVE-DELETE: a raw recursive delete judges deletability by hand; on 2026-10-27 one took a MAIN checkout.\nscratch/: {python} -m dev_lab.dev.scratch clear --yes. Landed lanes: dev_lab.dev.branchset --apply; approved unlanded: dev_lab.dev.branchset --discard <branch> --approved \"<words>\". Else (never a worktree) ask the user. Temp, output/ not refused.\ndetails: docs-src/dev/refusals.md#recursive-delete (lab-commons)"
   },
   {
     "name": "REPORTS-LIVE-IN-MEMORY",
@@ -154,8 +160,8 @@
   },
   {
     "name": "REMOTE-WRITE-THROUGH-A-DOOR",
-    "pattern": "(?:ssh(?:\\s+(?:-[oplJiFLRDwWcmbeEQS]\\s*\\S+|-[46AaCfGgKkMNnqsTtVvXxYy]+))*\\s+\\S+\\s+[\\'\"]?(?:[^\\n\\'\"]*[;&|]\\s*)?(?:sudo|rm|mv|cp|tee|install|mkdir|rmdir|chmod|chown|ln|truncate|dd|kill|pkill|reboot|shutdown|crontab|systemctl\\s+(?:start|stop|restart|reload|enable|disable|daemon-reload|mask|edit)|apt(?:-get)?|dnf|yum|pip3?|uv|git\\s+(?:pull|push|checkout|switch|reset|merge|clone|fetch|clean|stash)|docker\\s+(?:run|rm|stop|start|restart|compose|pull|exec)|[\\w./-]*python[\\w.]*\\s+-m\\s+dev_lab\\.ops)\\b|(?:scp|rsync)\\b[^\\n;&|]*\\s\\S*[\\w.-]:\\S*\\s*$)",
+    "pattern": "(?:ssh(?:\\s+(?:-[oplJiFLRDwWcmbeEQS]\\s*\\S+|-[46AaCfGgKkMNnqsTtVvXxYy]+))*\\s+\\S+\\s+[\\'\"]?(?:[^\\n\\'\"]*[;&|]\\s*)?(?:sudo|rm|mv|cp|tee|install|mkdir|rmdir|chmod|chown|ln|truncate|dd|kill|pkill|reboot|shutdown|crontab|systemctl\\s+(?:start|stop|restart|reload|enable|disable|daemon-reload|mask|edit)|apt(?:-get)?|dnf|yum|pip3?|uv|git\\s+(?:pull|push|checkout|switch|reset|merge|clone|fetch|clean|stash)|docker\\s+(?:run|rm|stop|start|restart|compose|pull|exec))\\b|ssh(?:\\s+(?:-[oplJiFLRDwWcmbeEQS]\\s*\\S+|-[46AaCfGgKkMNnqsTtVvXxYy]+))*\\s+\\S+\\s+[^\\n]*(?:\\$[\\w{(]|`|\\bdev_lab\\.ops\\b)|(?:scp|rsync)\\b[^\\n;&|]*\\s\\S*[\\w.-]:\\S*\\s*$)",
     "matches": "command",
-    "reason": "REMOTE-WRITE-THROUGH-A-DOOR: a hand-written write to a remote host leaves no record of which door, host or reason changed it.\nA server: {python} -m dev_lab.dev.opsserver <server> <verb> [<unit>]; a cluster account: {python} -m dev_lab.dev.hpcaccount deploy-fleet, forget, credential, deploy. Read-only ssh is open.\ndetails: docs-src/dev/refusals.md#remote-write-through-a-door (lab-commons)"
+    "reason": "REMOTE-WRITE-THROUGH-A-DOOR: a hand-written write to a remote host leaves no record of which door, host or reason changed it.\ndev_lab.ops (--subject too): {python} -m dev_lab.dev.planrun preflight --plan P --steps S asks hosts; sshhold open --hours H --plan P --digest D (user's code); planrun run. Else opsserver <server> <verb>, hpcaccount. Spell out $VAR; read-only ssh is open.\ndetails: docs-src/dev/refusals.md#remote-write-through-a-door (lab-commons)"
   }
 ]

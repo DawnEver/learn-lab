@@ -41,7 +41,7 @@ from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
 from learn_lab.representation import PointGraph
-from learn_lab.validity import BoxEnvelope, ChannelEnvelope
+from learn_lab.validity import BoxEnvelope, ChannelEnvelope, channel_entries
 
 __all__ = [
     'FNO',
@@ -52,6 +52,7 @@ __all__ = [
     'FittedTransformerOperator',
     'FittedTransolver',
     'GraphOperator',
+    'GraphSamples',
     'SpectralConv',
     'TransformerOperator',
     'Transolver',
@@ -877,54 +878,84 @@ class GraphOperator:
         if min(self.width, self.layers, self.kernel_width) < 1:
             refuse(f'a graph operator has width, layers and kernel_width >= 1, got {self}')
 
-    def fit(
-        self, x: np.ndarray, graph: PointGraph, y: np.ndarray, *, checkpoint: Checkpoint | None = None
-    ) -> FittedGraphOperator:
-        """``x (n, c_in, N)`` on the ``N`` points of *graph* -> ``y (n, c_out, N)`` on the same points."""
-        graph = graph.require_valid('the training graph')
-        x = require_finite(np.asarray(x, float), 'the input functions')
-        y = require_finite(np.asarray(y, float), 'the output functions')
-        nodes = len(graph.points)
-        if x.ndim != 3 or y.ndim != 3 or x.shape[0] != y.shape[0] or x.shape[2] != nodes or y.shape[2] != nodes:
-            refuse(
-                f'a graph operator is fitted on x (n, c_in, N), y (n, c_out, N) with N = {nodes}; '
-                f'got {x.shape}, {y.shape}'
-            )
+    def fit(self, data: Sequence[GraphSamples], *, checkpoint: Checkpoint | None = None) -> FittedGraphOperator:
+        """One kernel fitted on samples over one or several graphs (discretisations of one domain).
+
+        The loss is the mean over samples of each sample's node-mean squared error, so a sample weighs the same
+        whatever its graph's node count; a batched schedule draws its samples across all graphs.
+        """
+        if not data:
+            refuse('a graph operator is fitted on at least one GraphSamples, got none')
+        groups = [d.require_valid(f'the training samples #{i}') for i, d in enumerate(data)]
+        for name, axis in (('input', 'x'), ('output', 'y')):
+            counts = {getattr(g, axis).shape[1] for g in groups}
+            if len(counts) > 1:
+                refuse(f'every training graph carries the same {name} channels; got {sorted(counts)}')
+        xs = np.concatenate([channel_entries(g.x).reshape(-1, g.x.shape[1]) for g in groups])
+        ys = np.concatenate([channel_entries(g.y).reshape(-1, g.y.shape[1]) for g in groups])
         rt = self.runtime
         rt.seeded()
-        sx, sy = Standardiser.of(x), Standardiser.of(y)
-        box = BoxEnvelope.of(graph.points, margin=self.margin)
+        sx, sy = Standardiser.of(xs), Standardiser.of(ys)
+        box = BoxEnvelope.of(np.concatenate([g.graph.points for g in groups]), margin=self.margin)
         net = _GraphOperatorNet(
-            x.shape[1],
-            y.shape[1],
-            dimension=graph.points.shape[1],
+            xs.shape[1],
+            ys.shape[1],
+            dimension=box.width,
             width=self.width,
             layers=self.layers,
             kernel_width=self.kernel_width,
             lower=box.lower,
             upper=box.upper,
         ).to(rt.torch_device, rt.torch_dtype)
-        xt, yt = rt.tensor(sx.forward(x)), rt.tensor(sy.forward(y))
-        structure = _graph_tensors(rt, graph)
+        tensors = [
+            (rt.tensor(sx.forward(g.x)), rt.tensor(sy.forward(g.y)), _graph_tensors(rt, g.graph)) for g in groups
+        ]
+        sizes = [len(g.x) for g in groups]
+        offsets = np.cumsum([0, *sizes])
+        samples = int(offsets[-1])
 
         def loss(index: torch.Tensor | None) -> torch.Tensor:
-            xb, yb = take(index, xt, yt)
-            return ((net(xb, *structure) - yb) ** 2).mean()
+            total, drawn = 0.0, samples if index is None else len(index)
+            for (xt, yt, structure), lo, hi in zip(tensors, offsets[:-1], offsets[1:], strict=True):
+                local = None if index is None else index[(index >= lo) & (index < hi)] - int(lo)
+                if local is not None and not len(local):
+                    continue
+                xb, yb = take(local, xt, yt)
+                total = total + ((net(xb, *structure) - yb) ** 2).mean() * (len(xb) / drawn)
+            return total
 
         history = minimise(
             net.parameters(),
             loss,
             self.schedule,
-            samples=len(xt),
+            samples=samples,
             seed=rt.seed,
             checkpoint=checkpoint,
             config=repr(self),
-            data=[xt, yt, *structure],
+            data=[t for xt, yt, structure in tensors for t in (xt, yt, *structure)],
         )
-        envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
+        envelope = ChannelEnvelope.of(xs, fixed_shape=False, margin=self.margin)
         return FittedGraphOperator(
             net=net.eval(), runtime=rt, envelope=envelope, points=box, inputs=sx, outputs=sy, history=history
         )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphSamples:
+    """``x (n, c_in, N)`` -> ``y (n, c_out, N)``: *n* samples on the ``N`` points of one *graph*."""
+
+    graph: PointGraph
+    x: np.ndarray
+    y: np.ndarray
+
+    def require_valid(self, what: str) -> GraphSamples:
+        graph = self.graph.require_valid(f'{what} graph')
+        x = require_finite(np.asarray(self.x, float), f'{what} input functions')
+        y = require_finite(np.asarray(self.y, float), f'{what} output functions')
+        nodes = len(graph.points)
+        if x.ndim != 3 or y.ndim != 3 or x.shape[0] != y.shape[0] or x.shape[2] != nodes or y.shape[2] != nodes:
+            refuse(f'{what} are x (n, c_in, N), y (n, c_out, N) with N = {nodes}; got {x.shape}, {y.shape}')
+        return GraphSamples(graph, x, y)
 
 
 def _graph_tensors(rt: Runtime, graph: PointGraph) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

@@ -21,7 +21,7 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.deep.hysteresis import PlayHysteresis
 from learn_lab.deep.networks import MLP
-from learn_lab.deep.operator import FNO, DeepONet, GraphOperator, TransformerOperator, Transolver
+from learn_lab.deep.operator import FNO, DeepONet, GraphOperator, GraphSamples, TransformerOperator, Transolver
 from learn_lab.deep.pdenet import PDENet
 from learn_lab.deep.physics import PhysicsInformedField
 from learn_lab.deep.preconditioner import LearnedPreconditioner
@@ -155,7 +155,7 @@ CASES = {
     ),
     'graph_operator': (
         GraphOperator(width=4, layers=2, kernel_width=4, schedule=FEW, runtime=CPU64),
-        lambda m: m.fit(GRID[:, :, 0], LINE, -GRID[:, :, 0]),
+        lambda m: m.fit([GraphSamples(LINE, GRID[:, :, 0], -GRID[:, :, 0])]),
         lambda f: [f.predict(GRID[:2, :, 0], LINE), f.predict(GRID[:2, :, 0, :5], mesh_graph(COORDS[:5], radius=2.0))],
         lambda f: f.predict(GRID[:1, :, 0] + 5.0, LINE),
     ),

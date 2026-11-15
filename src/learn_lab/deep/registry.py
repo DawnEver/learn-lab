@@ -28,7 +28,7 @@ from learn_lab.deep.field import FieldModel
 from learn_lab.deep.fit import Checkpoint, Schedule
 from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.deep.hysteresis import PlayHysteresis
-from learn_lab.deep.operator import FNO, DeepONet, GraphOperator, TransformerOperator, Transolver
+from learn_lab.deep.operator import FNO, DeepONet, GraphOperator, GraphSamples, TransformerOperator, Transolver
 from learn_lab.deep.pdenet import PDENet
 from learn_lab.deep.surrogate import DeepEnsemble
 from learn_lab.errors import refuse
@@ -234,7 +234,7 @@ def _graph_operator(
     model = GraphOperator(width=width, layers=layers, kernel_width=kernel_width, schedule=schedule, **declared)
 
     def fit(x, y, c, _domain):
-        fitted = model.fit(x, graph, y, checkpoint=c)
+        fitted = model.fit([GraphSamples(graph, x, y)], checkpoint=c)
         return lambda q: fitted.predict(q, graph)
 
     return _Rows(fit, shapes, checkpoint)

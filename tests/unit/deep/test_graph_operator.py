@@ -13,7 +13,7 @@ import torch
 
 from learn_lab.deep.fit import Schedule, minimise
 from learn_lab.deep.networks import MLP
-from learn_lab.deep.operator import GraphOperator
+from learn_lab.deep.operator import GraphOperator, GraphSamples
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 from learn_lab.representation import intervals, mesh_graph
@@ -60,7 +60,7 @@ def fitted():
         runtime=CPU64,
         margin=0.5,
     )
-    return model.fit(F, _graph(TRAIN), U)
+    return model.fit([GraphSamples(_graph(TRAIN), F, U)])
 
 
 def test_the_test_points_are_a_different_finer_set() -> None:

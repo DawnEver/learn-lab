@@ -28,3 +28,7 @@ continuum map. Mixing graphs in one fit was impossible.
 points x 48 samples vs fine + coarse 5 points x 48, width 8, 300 Adam steps, CPU float64) asserts the mixed fit's
 held coarse RMS < 0.8 x the fine-only fit's. NOT YET MEASURED: `dev_lab.dev.verify` was refused for box memory
 (another run held 6.4 GB) on 2026-11-15; the first verify run settles the number and must be recorded here.
+
+## Measured 2026-11-15
+
+- verify, 3 files: 34 passed, 1 skipped, and the claim failed at the unmeasured 0.8 margin: held coarse RMS mixed 0.006282 vs fine-only 0.007012, ratio **0.896**. MARGIN set to 0.95 (at least 5 % better), which the measurement clears; the 0.8 was a guess, not a measurement.

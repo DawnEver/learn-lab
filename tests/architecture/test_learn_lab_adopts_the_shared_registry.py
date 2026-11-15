@@ -36,6 +36,9 @@ _MECHANISMS: Final = {
     'INTEGRATION-IS-MERGES-ONLY': (_HOOKS,),
     'ORIGIN-HOLDS-ONLY-DECLARED-BRANCHES': (_HOOKS,),  # the same `session-branch` pre-push row
     'LATEST-DEPENDENCIES': (_HOOKS,),
+    'BASE-HOLDS-THE-MILESTONE': (_HOOKS,),
+    'VERSION-TAG-NEEDS-APPROVAL': (_HOOKS,),
+    'WALLS-ARE-RECORDED': (TestPath('tests/architecture/test_the_family_config_is_rendered.py'),),
     # Both are the forge's server-side steps
     # (dev_lab.dev.forgemerge, dev_lab.dev.forgereview) over a repo whose integrator table declares
     # `pr_merges_since`; learn-lab declares it, so its PRs merge and are reviewed by the kit alone.

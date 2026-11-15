@@ -284,8 +284,8 @@ nvtx = [
 
 [[package]]
 name = "dev-lab"
-version = "0.0.1.dev3119+g6904a9ceb"
-source = { git = "https://github.com/DawnEver/dev-lab.git?branch=integrate%2Fmain#6904a9ceb5781cd1eadf71d8c2f2d9e9046aff1c" }
+version = "0.0.1.dev3415+g5deb7e6a8"
+source = { git = "https://github.com/DawnEver/dev-lab.git?branch=pr%2Factions-focused-measurement-1115#5deb7e6a8d001ae3e70b3c4710809b819bda7e99" }
 dependencies = [
     { name = "cryptography" },
     { name = "lab-commons", extra = ["io", "paths", "structured", "units"] },
@@ -461,8 +461,8 @@ wheels = [
 
 [[package]]
 name = "lab-commons"
-version = "0.3.1.dev1470+gde715ae41"
-source = { git = "https://github.com/DawnEver/lab-commons.git#de715ae4191c5aa0a7522198aae7153a6b91d850" }
+version = "0.3.1.dev1500+g2915f2d36"
+source = { git = "https://github.com/DawnEver/lab-commons.git#2915f2d361a9867e29b866ab4a07dd7e1b86b284" }
 
 [package.optional-dependencies]
 io = [
@@ -526,7 +526,7 @@ provides-extras = ["torch", "openvino"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "dev-lab", extras = ["test"], git = "https://github.com/DawnEver/dev-lab.git?branch=integrate%2Fmain" },
+    { name = "dev-lab", extras = ["test"], git = "https://github.com/DawnEver/dev-lab.git?branch=pr%2Factions-focused-measurement-1115" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },
@@ -756,7 +756,7 @@ wheels = [
 [[package]]
 name = "numerics-lab"
 version = "0.1.0"
-source = { git = "https://github.com/DawnEver/numerics-lab.git#04f6adac6068949dacabc4a02da68456e6f316b2" }
+source = { git = "https://github.com/DawnEver/numerics-lab.git#5aa9013b4535e9f142d4423869cfeaf23998e95a" }
 dependencies = [
     { name = "numpy" },
     { name = "scipy" },

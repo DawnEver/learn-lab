@@ -41,6 +41,11 @@ def test_every_push_runs_the_session_branch_invariants() -> None:
     assert _row_module('pre-push', 'session-branch') == 'dev_lab.dev.sessionbranch'
 
 
+def test_every_push_checks_the_milestone_and_tag_consent() -> None:
+    """The shared pre-push owner checks both milestone ancestry and version-tag approval."""
+    assert _row_module('pre-push', 'milestone-base') == 'dev_lab.dev.milestonebase'
+
+
 def test_this_checkout_pins_its_lock() -> None:
     """PIN, judged on the forge over HEAD: the lock left the pre-push (dev-lab toolchain plan P3)."""
     assert_the_lock_is_pinned(_ROOT)

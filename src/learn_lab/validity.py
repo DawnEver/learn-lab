@@ -31,7 +31,7 @@ class Validity(StrEnum):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class BoxEnvelope:
-    """The axis-aligned box ``lower <= x <= upper`` the training points span, widened by ``margin`` of each side."""
+    """An axis-aligned box ``lower <= x <= upper``; :meth:`of` derives one from samples and their margin."""
 
     lower: np.ndarray
     upper: np.ndarray

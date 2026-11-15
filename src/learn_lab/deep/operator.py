@@ -672,8 +672,10 @@ class Transolver:
     deterministic). Points are shared ``(p, d)`` or per sample ``(n, p, d)``, and their number may differ
     between fit and predict. An optional point ``measure`` (quadrature weights, ``(p,)`` or ``(n, p)``; given at
     fit, then required at predict) makes each slice token a quadrature rather than a point mean: on a scattered
-    cloud the mean is Monte-Carlo quadrature, whose O(p^-1/2) error is a floor no training removes. A query's points are refused outside the training box; its inputs outside the
-    per-channel value box.
+    cloud the mean is Monte-Carlo quadrature, whose O(p^-1/2) error is a floor no training removes. A query's points
+    are refused outside the coordinate box; its inputs outside the per-channel value box. ``fit(point_domain=...)``
+    declares that coordinate box independently of the training samples and uses it for both normalization and the
+    query guard. Without a declaration the observed training box and ``margin`` remain selectable as before.
     """
 
     width: int = 64
@@ -708,6 +710,7 @@ class Transolver:
         *,
         measure: np.ndarray | None = None,
         checkpoint: Checkpoint | None = None,
+        point_domain: BoxEnvelope | None = None,
     ) -> FittedTransolver:
         """``x (n, c_in, p)`` at ``coords (p, d)`` or ``(n, p, d)`` -> ``y (n, c_out, p)`` at the same points."""
         x = require_finite(np.asarray(x, float), 'the input functions')
@@ -716,10 +719,30 @@ class Transolver:
         _point_sets(x, c, 'a Transolver fit')
         if y.ndim != 3 or y.shape[::2] != x.shape[::2]:
             refuse(f'a Transolver is fitted on x (n, c_in, p) and y (n, c_out, p); got {x.shape}, {y.shape}')
+        points = c.reshape(-1, c.shape[-1])
+        if point_domain is None:
+            box = BoxEnvelope.of(points, margin=self.margin)
+        else:
+            if not isinstance(point_domain, BoxEnvelope):
+                refuse('a Transolver point_domain must be a BoxEnvelope')
+            try:
+                lower = np.array(point_domain.lower, dtype=float, copy=True)
+                upper = np.array(point_domain.upper, dtype=float, copy=True)
+            except (TypeError, ValueError) as why:
+                refuse(f'a Transolver point_domain must contain real coordinate bounds: {why}')
+            if (
+                lower.shape != (c.shape[-1],)
+                or upper.shape != lower.shape
+                or not np.isfinite(lower).all()
+                or not np.isfinite(upper).all()
+                or np.any(lower > upper)
+            ):
+                refuse('a Transolver point_domain needs finite ordered bounds matching the coordinate dimension')
+            box = BoxEnvelope(lower, upper)
+            box.require(points, 'a Transolver training point')
         rt = self.runtime
         rt.seeded()
         sx, sy = Standardiser.of(x), Standardiser.of(y)
-        box = BoxEnvelope.of(c.reshape(-1, c.shape[-1]), margin=self.margin)
         net = _TransolverNet(
             x.shape[1],
             y.shape[1],
@@ -769,7 +792,7 @@ class Transolver:
             seed=rt.seed,
             checkpoint=checkpoint,
             config=repr(self),
-            data=[xt, ct, yt] if at is None else [xt, ct, yt, at],
+            data=[xt, ct, yt, box.lower, box.upper] if at is None else [xt, ct, yt, box.lower, box.upper, at],
         )
         envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
         return FittedTransolver(

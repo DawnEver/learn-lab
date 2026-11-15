@@ -43,8 +43,8 @@ dev = [
 # One CUDA build serves both platforms: native Windows CUDA (workstations, incl. Blackwell sm_120 which needs
 # CUDA >= 12.8; cu130 builds cover it and Ada sm_80) and Linux (Ada A100/H200). macOS falls through to PyPI's CPU wheel.
 [tool.uv.sources]
-# dev-lab floats on integrate/main like every family repo; the lock is the pin.
-dev-lab = { git = "https://github.com/DawnEver/dev-lab.git", branch = "integrate/main" }
+# The tested Actions measurement door is qualified on its feature branch; the lock is the exact pin.
+dev-lab = { git = "https://github.com/DawnEver/dev-lab.git", branch = "pr/actions-focused-measurement-1115" }
 torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
 
 [[tool.uv.index]]

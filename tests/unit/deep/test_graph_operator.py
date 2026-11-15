@@ -81,7 +81,7 @@ def test_a_pointwise_network_without_message_passing_misses_the_bar() -> None:
     net = MLP([2, 64, 64, 1], activation='gelu').to(rt.torch_device, rt.torch_dtype)
     xt, yt = rt.tensor(rows), rt.tensor(U[:, 0].ravel()[:, None])
 
-    def loss() -> torch.Tensor:
+    def loss(_index=None) -> torch.Tensor:
         return ((net(xt) - yt) ** 2).mean()
 
     minimise(net.parameters(), loss, Schedule(adam_steps=1500, learning_rate=3e-3))

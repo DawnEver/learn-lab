@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse, require_finite
@@ -68,11 +68,19 @@ class NeuralODE:
         net = MLP([x.shape[2], *self.hidden, x.shape[2]], activation='tanh').to(rt.torch_device, rt.torch_dtype)
         time_scale = float(t[-1] - t[0])
 
-        def loss() -> torch.Tensor:
-            return ((rk4(lambda s: net(s) / time_scale, windows[:, 0], window_t) - windows) ** 2).mean()
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            (w,) = take(index, windows)
+            return ((rk4(lambda s: net(s) / time_scale, w[:, 0], window_t) - w) ** 2).mean()
 
         history = minimise(
-            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[windows, window_t]
+            net.parameters(),
+            loss,
+            self.schedule,
+            samples=len(windows),
+            seed=rt.seed,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[windows, window_t],
         )
         return FittedDynamics(
             net=net.eval(),

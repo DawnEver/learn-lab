@@ -37,7 +37,7 @@ def _fit(checkpoint=None, *, stop_after=None, config=CONFIG, schedule=SCHEDULE, 
     x = torch.linspace(-1, 1, 16, dtype=RT.torch_dtype).reshape(8, 2) + shift
     calls = 0
 
-    def loss():
+    def loss(_index=None):
         nonlocal calls
         calls += 1
         if stop_after is not None and calls > stop_after:
@@ -81,7 +81,7 @@ def test_a_checkpoint_without_training_data_is_refused(tmp_path):
     with pytest.raises(Refused, match='training data'):
         minimise(
             [torch.zeros(1, requires_grad=True)],
-            lambda: torch.zeros(()),
+            lambda _index: torch.zeros(()),
             SHORT,
             checkpoint=Checkpoint(tmp_path, every=1),
         )
@@ -177,7 +177,7 @@ def test_a_cosine_schedule_anneals_adam_to_zero_and_a_constant_one_does_not(monk
     net = MLP([2, 8, 1]).to(RT.torch_device, RT.torch_dtype)
     x = torch.ones(4, 2, dtype=RT.torch_dtype)
 
-    def loss():
+    def loss(_index=None):
         return (net(x) ** 2).mean()
 
     minimise(net.parameters(), loss, COSINE)

@@ -29,7 +29,7 @@ import torch
 from torch import nn
 
 from learn_lab.deep.fit import Checkpoint, Schedule, minimise
-from learn_lab.deep.graph import MessagePassing
+from learn_lab.deep.graph import MessagePassing, owners, subgraph
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse, require_finite
@@ -151,18 +151,30 @@ class LearnedPreconditioner:
         net = _PreconditionerNet(hidden=self.hidden, rounds=self.rounds).to(rt.torch_device, rt.torch_dtype)
         nt, et, vt = rt.tensor(nodes), torch.as_tensor(edges, device=rt.torch_device), rt.tensor(values)
         lower = torch.as_tensor(np.flatnonzero(edges[1] > edges[0]), device=rt.torch_device)
-        source, target = et[:, lower]
+        owner = owners(offsets, rt.torch_device)
 
-        def a_times(v: torch.Tensor) -> torch.Tensor:
-            return v.index_add(0, et[1], vt[:, None] * v[et[0]])
+        def residual(n: torch.Tensor, e: torch.Tensor, v: torch.Tensor, w: torch.Tensor, low: torch.Tensor):
+            g, c = net(n, e, v, low)
+            source, target = e[:, low]
+            gw = _gt_times(g, c, source, target, w)
+            agw = gw.index_add(0, e[1], v[:, None] * gw[e[0]])
+            return ((_g_times(g, c, source, target, agw) - w) ** 2).sum() / w.shape[0]
 
-        def loss() -> torch.Tensor:
-            g, c = net(nt, et, vt, lower)
-            product = _g_times(g, c, source, target, a_times(_gt_times(g, c, source, target, wt)))
-            return ((product - wt) ** 2).sum() / wt.shape[0]
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            if index is None:
+                return residual(nt, et, vt, wt, lower)
+            nodes, kept, e = subgraph(index, owner, et)
+            return residual(nt[nodes], e, vt[kept], wt[nodes], torch.nonzero(e[1] > e[0])[:, 0])
 
         history = minimise(
-            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[nt, et, vt, wt]
+            net.parameters(),
+            loss,
+            self.schedule,
+            samples=len(systems),
+            seed=rt.seed,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[nt, et, vt, wt],
         )
         return FittedPreconditioner(
             net=net.eval(),

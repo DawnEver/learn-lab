@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
@@ -58,8 +58,10 @@ class DeepEnsemble:
             histories.append(
                 minimise(
                     net.parameters(),
-                    lambda net=net: ((net(xt) - yt) ** 2).mean(),
+                    lambda index, net=net: _squared(net, *take(index, xt, yt)),
                     self.schedule,
+                    samples=len(xt),
+                    seed=rt.seed + member,
                     checkpoint=None if checkpoint is None else checkpoint.member(member),
                     config=repr(self),
                     data=[xt, yt],
@@ -108,3 +110,7 @@ class FittedEnsemble:
         mean = numpy(mean_s) * self.y_scale + self.y_shift
         var = numpy(outs.var(0, unbiased=False)) * self.y_scale**2 if variance else None
         return Prediction(mean, var, grad)
+
+
+def _squared(net: torch.nn.Module, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    return ((net(x) - y) ** 2).mean()

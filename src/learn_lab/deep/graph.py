@@ -27,7 +27,7 @@ from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
 from learn_lab.validity import ChannelEnvelope
 
-__all__ = ['FittedGraphModel', 'GraphModel', 'Graphs', 'MessagePassing']
+__all__ = ['FittedGraphModel', 'GraphModel', 'Graphs', 'MessagePassing', 'owners', 'subgraph']
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -128,13 +128,21 @@ class GraphModel:
         inputs = _tensors(rt, graphs, sx, se)
         yt = rt.tensor(sy.forward(y))
 
-        def loss() -> torch.Tensor:
-            return ((net(*inputs) - yt) ** 2).mean()
+        owner = owners(graphs.offsets, rt.torch_device)
+
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            if index is None:
+                return ((net(*inputs) - yt) ** 2).mean()
+            nodes, kept, edges = subgraph(index, owner, inputs[1])
+            features = None if inputs[2] is None else inputs[2][kept]
+            return ((net(inputs[0][nodes], edges, features) - yt[nodes]) ** 2).mean()
 
         history = minimise(
             net.parameters(),
             loss,
             self.schedule,
+            samples=len(graphs.offsets) - 1,
+            seed=rt.seed,
             checkpoint=checkpoint,
             config=repr(self),
             data=[t for t in (*inputs, yt) if t is not None],
@@ -150,6 +158,25 @@ class GraphModel:
             outputs=sy,
             history=history,
         )
+
+
+def owners(offsets: np.ndarray, device: torch.device) -> torch.Tensor:
+    """The graph each node of a batch with these *offsets* belongs to: the sample axis of a graph batch."""
+    sizes = torch.as_tensor(np.diff(offsets), device=device)
+    return torch.repeat_interleave(torch.arange(len(sizes), device=device), sizes)
+
+
+def subgraph(
+    index: torch.Tensor, owner: torch.Tensor, edges: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """The nodes of graphs *index*, the edges among them and those edges renumbered into the kept nodes.
+
+    No edge joins two graphs of a batch, so an edge is kept exactly when its source is.
+    """
+    keep = torch.isin(owner, index)
+    nodes = torch.nonzero(keep)[:, 0]
+    kept = torch.nonzero(keep[edges[0]])[:, 0]
+    return nodes, kept, (torch.cumsum(keep, 0) - 1)[edges[:, kept]]
 
 
 def _tensors(rt: Runtime, graphs: Graphs, sx: Standardiser, se: Standardiser | None):

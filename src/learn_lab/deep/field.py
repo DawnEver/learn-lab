@@ -20,7 +20,7 @@ import torch
 from torch import nn
 from torch.utils.checkpoint import checkpoint as recomputed
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
@@ -87,17 +87,25 @@ class FieldModel:
         def squared(xc: torch.Tensor, yc: torch.Tensor) -> torch.Tensor:
             return ((net(xc) - yc) ** 2).sum()
 
-        def loss() -> torch.Tensor:
-            if chunk is None or chunk >= len(xt):
-                return squared(xt, yt) / yt.numel()
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            xb, yb = take(index, xt, yt)
+            if chunk is None or chunk >= len(xb):
+                return squared(xb, yb) / yb.numel()
             parts = (
-                recomputed(squared, xt[i : i + chunk], yt[i : i + chunk], use_reentrant=False)
-                for i in range(0, len(xt), chunk)
+                recomputed(squared, xb[i : i + chunk], yb[i : i + chunk], use_reentrant=False)
+                for i in range(0, len(xb), chunk)
             )
-            return torch.stack(list(parts)).sum() / yt.numel()
+            return torch.stack(list(parts)).sum() / yb.numel()
 
         history = minimise(
-            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, yt]
+            net.parameters(),
+            loss,
+            self.schedule,
+            samples=len(xt),
+            seed=rt.seed,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[xt, yt],
         )
         envelope = ChannelEnvelope.of(x, margin=self.margin)
         return FittedFieldModel(net=net.eval(), runtime=rt, envelope=envelope, inputs=sx, outputs=sy, history=history)

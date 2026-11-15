@@ -23,7 +23,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.equation import pde_library
 from learn_lab.errors import refuse, require_finite
@@ -154,17 +154,22 @@ class PDENet:
         x0, x1 = rt.tensor(u0), rt.tensor(u1)
         # The residual is a rate: the one-step change over dt, so its scale is the data's, not dt's.
         rate = (x1 - x0) / dt
+        # The normaliser is the FULL data's, so a batch's misfit is an unbiased estimate of the full one.
+        normaliser = (rate**2).mean()
 
-        def misfit() -> torch.Tensor:
-            return (((_rk4(net, x0, dt) - x0) / dt - rate) ** 2).mean() / (rate**2).mean()
+        def misfit(index: torch.Tensor | None) -> torch.Tensor:
+            u, r = take(index, x0, rate)
+            return (((_rk4(net, u, dt) - u) / dt - r) ** 2).mean() / normaliser
 
-        def penalised() -> torch.Tensor:
-            return misfit() + self.sparsity * net.coefficients.abs().sum()
+        def penalised(index: torch.Tensor | None) -> torch.Tensor:
+            return misfit(index) + self.sparsity * net.coefficients.abs().sum()
 
         history = minimise(
             net.parameters(),
             penalised,
             self.schedule,
+            samples=len(x0),
+            seed=rt.seed,
             checkpoint=checkpoint and checkpoint.member(0),
             config=repr(self),
             data=[x0, x1],
@@ -178,6 +183,8 @@ class PDENet:
                 net.parameters(),
                 misfit,
                 refit,
+                samples=len(x0),
+                seed=rt.seed,
                 checkpoint=checkpoint and checkpoint.member(1),
                 config=repr(self),
                 data=[x0, x1],

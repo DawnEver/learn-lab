@@ -11,6 +11,12 @@ shapes and the SHA-256 of the training data); anything else is refused, and so i
 the step. Under :meth:`Runtime.seeded`'s deterministic kernels the resumed fit ends on the uninterrupted fit's
 weights bit for bit, in either phase: the polish runs as one single-iteration L-BFGS call per step, whose
 curvature memory is optimizer state, so a step resumed from a checkpoint is the step the uninterrupted fit takes.
+
+The loss closure takes an index: ``loss(None)`` is the full objective, ``loss(index)`` the same mean over the
+samples *index* names along the closure's own sample axis (:func:`take` slices it). ``Schedule.batch`` makes the
+Adam phase stochastic: each step draws ``batch`` distinct samples as a function of ``(seed, step)`` alone, so a
+resumed fit draws the batches the uninterrupted fit draws. L-BFGS always sees the full objective: its line search
+compares losses across trial points, which a fresh draw per evaluation would make incomparable.
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ import torch
 from learn_lab.artifact import canonical, sha256
 from learn_lab.errors import refuse
 
-__all__ = ['Checkpoint', 'Schedule', 'minimise']
+__all__ = ['Checkpoint', 'Schedule', 'minimise', 'take']
 
 FORMAT = 'learn-lab fit checkpoint'
 VERSION = 1
@@ -45,12 +51,16 @@ class Schedule:
     cosine from ``learning_rate`` at step 0 towards 0 at the last step. On a loss that draws fresh noise every
     step, a constant rate leaves the weights jittering, so the fit is whatever snapshot the last step lands on;
     annealing settles them. The rate is a function of the step alone, so a resumed fit takes the same steps.
+
+    ``batch`` is the number of samples each Adam step sees (``None``: all of them). A batch at least the sample
+    count is every sample, in a drawn order. The polish always sees every sample (see :func:`minimise`).
     """
 
     adam_steps: int = 2000
     learning_rate: float = 1e-3
     lbfgs_steps: int = 0
     decay: str = 'constant'
+    batch: int | None = None
 
     def __post_init__(self) -> None:
         if self.adam_steps < 0 or self.lbfgs_steps < 0 or self.adam_steps + self.lbfgs_steps == 0:
@@ -59,6 +69,10 @@ class Schedule:
             refuse(f'a learning rate is > 0, got {self.learning_rate}')
         if self.decay not in DECAYS:
             refuse(f'a decay is one of {DECAYS}, got {self.decay!r}')
+        if self.batch is not None and (
+            isinstance(self.batch, bool) or not isinstance(self.batch, int) or self.batch < 1
+        ):
+            refuse(f'a batch is a sample count >= 1 (or None for every sample), got {self.batch!r}')
 
     def rate(self, step: int) -> float:
         """Adam's learning rate at 0-based *step*."""
@@ -82,6 +96,19 @@ class Checkpoint:
     def member(self, index: int) -> Checkpoint:
         """The checkpoint of member *index* of a fit that trains several networks (a subdirectory)."""
         return replace(self, directory=self.directory / f'member-{index}')
+
+
+def take(index: torch.Tensor | None, *tensors: torch.Tensor | None) -> tuple[torch.Tensor | None, ...]:
+    """*tensors* as they are when *index* is ``None``, else their rows *index* (``None`` stays ``None``)."""
+    if index is None:
+        return tensors
+    return tuple(None if t is None else t[index] for t in tensors)
+
+
+def _draw(schedule: Schedule, samples: int, seed: int, step: int, device: torch.device) -> torch.Tensor:
+    """The ``min(batch, samples)`` distinct sample indices of Adam *step*, a function of (seed, step) alone."""
+    generator = torch.Generator().manual_seed((int(seed) * 1_000_003 + step) % 2**63)
+    return torch.randperm(samples, generator=generator)[: schedule.batch].to(device)
 
 
 def _digest(data: Sequence[torch.Tensor | np.ndarray]) -> str:
@@ -172,14 +199,22 @@ def _read(checkpoint: Checkpoint, identity: str, schedule: Schedule) -> tuple[di
 
 def minimise(
     parameters: Iterable[torch.Tensor],
-    loss: Callable[[], torch.Tensor],
+    loss: Callable[[torch.Tensor | None], torch.Tensor],
     schedule: Schedule,
     *,
+    samples: int | None = None,
+    seed: int = 0,
     checkpoint: Checkpoint | None = None,
     config: str = '',
     data: Sequence[torch.Tensor | np.ndarray] = (),
 ) -> list[float]:
-    """Minimise ``loss()`` over *parameters*; return the loss after every step. A non-finite loss is refused.
+    """Minimise ``loss(None)`` over *parameters*; return the loss after every step. A non-finite loss is refused.
+
+    *samples* is the length of the loss's sample axis (``None``: it has none, and a batched schedule is refused).
+    Under ``schedule.batch`` every Adam step calls ``loss(index)`` on a fresh draw seeded by (*seed*, step), and
+    records that batch's loss -- an unbiased estimate of the full mean, since every family's loss is a mean.
+    Every L-BFGS evaluation, and the loss it records, is ``loss(None)``: a line search is only sound on one
+    deterministic objective.
 
     The history holds one loss per Adam step, then the loss after each L-BFGS step. With a *checkpoint*, both
     phases write their state every ``checkpoint.every`` steps (and at the end of each phase) and resume from a
@@ -196,6 +231,8 @@ def minimise(
             refuse(f'the training loss became {number} at step {len(history)}')
         history.append(number)
 
+    if schedule.batch is not None and samples is None:
+        refuse(f'{config or "this fit"} declares no sample axis, so it cannot take batch={schedule.batch}')
     if checkpoint is not None and not len(data):
         refuse('a checkpointed fit names its training data, so a resume on other data is refused')
     identity = '' if checkpoint is None else _identity(config, schedule, parameters, _digest(data))
@@ -231,7 +268,8 @@ def minimise(
         for group in adam.param_groups:
             group['lr'] = schedule.rate(step)
         adam.zero_grad(set_to_none=True)
-        value = loss()
+        index = None if schedule.batch is None else _draw(schedule, samples, seed, step, parameters[0].device)
+        value = loss(index)
         value.backward()
         adam.step()
         record(value)
@@ -239,7 +277,7 @@ def minimise(
 
     def closure() -> torch.Tensor:
         lbfgs.zero_grad(set_to_none=True)
-        value = loss()
+        value = loss(None)
         value.backward()
         return value
 
@@ -247,6 +285,6 @@ def minimise(
     for _ in range(len(history), end):
         lbfgs.step(closure)
         # Not under no_grad: a physics loss differentiates the field wrt its inputs to form the residual.
-        record(loss())
+        record(loss(None))
         checkpointed(lbfgs, end)
     return history

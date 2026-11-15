@@ -62,7 +62,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
 from learn_lab.deep.networks import MonotoneScalar
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse, require_finite
@@ -301,12 +301,20 @@ class PlayHysteresis:
         # displacement -- the variable the declared input is.
         driven, measured = (y_t, x_t) if self.inverted else (x_t, y_t)
 
-        def loss() -> torch.Tensor:
-            u = bank.played(driven)
-            return (((bank.output_of(u, bank.histories(u)) - measured) ** 2) * mask).sum() / mask.sum()
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            d, m, k = take(index, driven, measured, mask)
+            u = bank.played(d)
+            return (((bank.output_of(u, bank.histories(u)) - m) ** 2) * k).sum() / k.sum()
 
         history = minimise(
-            bank.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[x_t, y_t, mask]
+            bank.parameters(),
+            loss,
+            self.schedule,
+            samples=len(x_t),
+            seed=rt.seed,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[x_t, y_t, mask],
         )
         span = float(np.max(np.abs(seen)))
         envelope = BoxEnvelope(np.array([-span]), np.array([span])) if self.odd else BoxEnvelope.of(seen[:, None])

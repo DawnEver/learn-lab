@@ -22,6 +22,7 @@ _SHIPPED: Final = frozenset({
     'BARE-INTERPRETER',
     'BARE-PYTHON',
     'BARE-TEST-INVOCATION',
+    'COMMIT-HOOKS-RUN',  # shipped with the bc556 kit; actual guard behavior is planted below.
     'CONSENT-CODE-FROM-THE-USER',  # gained 2026-11-07 with dev-lab 83c4f29
     'FORGE-WRITE-VIA-CLI',
     'FORGE-WRITE-VIA-GH-API',
@@ -79,6 +80,7 @@ def test_the_shipped_set_is_pinned_by_name() -> None:
         ('pytest tests', 'BARE-TEST-INVOCATION'),
         ('python -m pytest -q', 'BARE-TEST-INVOCATION'),
         ('git stash', 'GIT-STASH'),
+        ('git commit --no-verify -m measured-work', 'COMMIT-HOOKS-RUN'),
         ('git reset --hard HEAD', 'GIT-RESET'),
         ('git add .', 'GIT-STAGE-EVERYTHING'),
         ('git push origin main --force-with-lease', 'PUSH-FORCE'),
@@ -97,6 +99,7 @@ def test_a_forbidden_shape_is_refused_by_the_rule_that_owns_it(command: str, rul
     [
         './.venv/Scripts/python.exe -m dev_lab.dev.verify',
         'git push origin main',
+        'git commit -m measured-work',
         'git worktree add --detach .claude/worktrees/scratch 1a2b3c4',
         './.venv/Scripts/python.exe -m dev_lab.dev.forge issue create --title x --body y',
         'gh issue list --state open',

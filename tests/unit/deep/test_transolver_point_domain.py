@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from learn_lab import artifact
-from learn_lab.deep.fit import Schedule
+from learn_lab.deep.fit import Checkpoint, Schedule
 from learn_lab.deep.operator import Transolver
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
@@ -125,3 +125,15 @@ def test_the_domain_is_owned_by_the_fit_and_survives_the_artifact_round_trip(tmp
     np.testing.assert_array_equal(restored.net.span.detach().cpu().numpy(), [1.0, 2.0])
     with pytest.raises(Refused, match='out_of_domain'):
         restored.predict(np.ones((1, 1, 1)), np.array([[1.01, 1.0]]))
+
+
+def test_a_checkpoint_keeps_its_coordinate_domain_and_refuses_a_changed_one(tmp_path):
+    checkpoint = Checkpoint(tmp_path / 'checkpoint', every=1)
+    fitted = _model().fit(*_data(), point_domain=_domain(), checkpoint=checkpoint)
+    resumed = _model().fit(*_data(), point_domain=_domain(), checkpoint=checkpoint)
+    query = np.array([[0.0, 0.0], [1.0, 2.0]])
+    values = np.full((1, 1, len(query)), 1.5)
+    np.testing.assert_array_equal(resumed.predict(values, query), fitted.predict(values, query))
+    changed = BoxEnvelope(np.array([-1.0, 0.0]), np.array([1.0, 2.0]))
+    with pytest.raises(Refused, match='checkpoint'):
+        _model().fit(*_data(), point_domain=changed, checkpoint=checkpoint)

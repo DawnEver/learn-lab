@@ -284,8 +284,8 @@ nvtx = [
 
 [[package]]
 name = "dev-lab"
-version = "0.0.1.dev3404+gbc55691a0"
-source = { git = "https://github.com/DawnEver/dev-lab.git?branch=integrate%2Fmain#bc55691a0575293fdc18355ae9f3cc4b4801e6c1" }
+version = "0.0.1.dev3415+g5deb7e6a8"
+source = { git = "https://github.com/DawnEver/dev-lab.git?branch=pr%2Factions-focused-measurement-1115#5deb7e6a8d001ae3e70b3c4710809b819bda7e99" }
 dependencies = [
     { name = "cryptography" },
     { name = "lab-commons", extra = ["io", "paths", "structured", "units"] },
@@ -526,7 +526,7 @@ provides-extras = ["torch", "openvino"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "dev-lab", extras = ["test"], git = "https://github.com/DawnEver/dev-lab.git?branch=integrate%2Fmain" },
+    { name = "dev-lab", extras = ["test"], git = "https://github.com/DawnEver/dev-lab.git?branch=pr%2Factions-focused-measurement-1115" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },

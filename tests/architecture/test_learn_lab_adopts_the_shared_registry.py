@@ -65,6 +65,8 @@ _MECHANISMS: Final = {
     **dict.fromkeys(
         (
             'AGENT-GUARD',
+            # The shipped guard refuses commits that bypass the normal hooks; live positive/negative controls pin it.
+            'COMMIT-HOOKS-RUN',
             # The guard refuses a write outside the checkout.
             'WRITES-STAY-IN-THE-TREE',
             'SUBAGENT-NO-PUSH',

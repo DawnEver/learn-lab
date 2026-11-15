@@ -1,4 +1,4 @@
-"""The one training loop: Adam, then optional L-BFGS polish, on a loss closure; the history is the record.
+"""The one training loop: Adam (decoupled weight decay: ``Schedule.weight_decay``), then optional L-BFGS polish, on a loss closure; the history is the record.
 
 A :class:`Checkpoint` makes the whole fit resumable. Every ``every`` steps of either phase it writes, into its
 directory, ``weights.pt`` -- the parameters, the running optimizer's state and the torch RNG state, saved by
@@ -54,6 +54,11 @@ class Schedule:
 
     ``batch`` is the number of samples each Adam step sees (``None``: all of them). A batch at least the sample
     count is every sample, in a drawn order. The polish always sees every sample (see :func:`minimise`).
+
+    ``weight_decay`` is the Adam phase's decoupled weight decay (AdamW): each step shrinks every parameter by
+    ``rate(step) * weight_decay`` of itself, outside the adaptive gradient scaling, so it is one regulariser that
+    means the same thing for every family. ``0.0`` is plain Adam. The L-BFGS polish takes no decay: it minimises
+    the objective as given, and decoupled decay is a property of an optimiser's step, not of the objective.
     """
 
     adam_steps: int = 2000
@@ -61,6 +66,7 @@ class Schedule:
     lbfgs_steps: int = 0
     decay: str = 'constant'
     batch: int | None = None
+    weight_decay: float = 0.0
 
     def __post_init__(self) -> None:
         if self.adam_steps < 0 or self.lbfgs_steps < 0 or self.adam_steps + self.lbfgs_steps == 0:
@@ -73,6 +79,10 @@ class Schedule:
             isinstance(self.batch, bool) or not isinstance(self.batch, int) or self.batch < 1
         ):
             refuse(f'a batch is a sample count >= 1 (or None for every sample), got {self.batch!r}')
+        if isinstance(self.weight_decay, bool) or not (
+            isinstance(self.weight_decay, (int, float)) and 0 <= self.weight_decay < math.inf
+        ):
+            refuse(f'a weight decay is a finite number >= 0, got {self.weight_decay!r}')
 
     def rate(self, step: int) -> float:
         """Adam's learning rate at 0-based *step*."""
@@ -236,7 +246,7 @@ def minimise(
     if checkpoint is not None and not len(data):
         refuse('a checkpointed fit names its training data, so a resume on other data is refused')
     identity = '' if checkpoint is None else _identity(config, schedule, parameters, _digest(data))
-    adam = torch.optim.Adam(parameters, lr=schedule.learning_rate)
+    adam = torch.optim.AdamW(parameters, lr=schedule.learning_rate, weight_decay=schedule.weight_decay)
     # One iteration per call: the curvature memory is optimizer state, so every polish step is checkpointable.
     # max_eval is the opening evaluation plus strong-Wolfe's own 25-trial budget; the default (1.25 * max_iter)
     # would leave the line search no trial at all.

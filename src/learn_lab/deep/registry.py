@@ -4,7 +4,7 @@ Every row is shaped (:class:`~learn_lab.space.Family`): its build takes ``shapes
 per-sample shapes of sample-indexed arrays -- and an optional :class:`~learn_lab.deep.fit.Checkpoint`, and
 returns a surrogate on those arrays flattened to rows, so :func:`~learn_lab.validation.cross_validate` folds
 it along the samples. The n-th fit of one build checkpoints under ``member-<n>``. Common settings: ``steps``
-(Adam), ``learning_rate`` and ``batch`` (samples per Adam step, ``None`` for all; see :class:`~learn_lab.deep.fit.Schedule`); a network of uniform layers is ``width`` x ``depth``. Data a family needs
+(Adam), ``learning_rate``, ``batch`` (samples per Adam step, ``None`` for all) and ``weight_decay`` (Adam's decoupled decay, ``0.0`` for none; see :class:`~learn_lab.deep.fit.Schedule`); a network of uniform layers is ``width`` x ``depth``. Data a family needs
 beyond ``(x, y)`` is a fixed setting: DeepONet's shared query ``points``, a graph's ``edges`` (one topology
 for every sample), a neural ODE's sample times ``t`` (``x`` and ``y`` both the trajectories; a trajectory is
 predicted from its start), a graph operator's ``graph`` (one point set for every sample), a Transolver's ``coords``, a diffusion field's
@@ -84,12 +84,22 @@ _WIDTH: Final = Integer(2, 512)
 _DEPTH: Final = Integer(1, 8)
 
 
-def _schedule(steps: int, learning_rate: float, polish: int = 0, batch: int | None = None) -> Schedule:
-    return Schedule(adam_steps=steps, learning_rate=learning_rate, lbfgs_steps=polish, batch=batch)
+def _schedule(
+    steps: int, learning_rate: float, polish: int = 0, batch: int | None = None, weight_decay: float = 0.0
+) -> Schedule:
+    return Schedule(
+        adam_steps=steps, learning_rate=learning_rate, lbfgs_steps=polish, batch=batch, weight_decay=weight_decay
+    )
 
 
-def _deep_ensemble(*, shapes, checkpoint, width=64, depth=2, steps=3000, learning_rate=3e-3, batch=None, **declared):
-    model = DeepEnsemble(hidden=(width,) * depth, schedule=_schedule(steps, learning_rate, batch=batch), **declared)
+def _deep_ensemble(
+    *, shapes, checkpoint, width=64, depth=2, steps=3000, learning_rate=3e-3, batch=None, weight_decay=0.0, **declared
+):
+    model = DeepEnsemble(
+        hidden=(width,) * depth,
+        schedule=_schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay),
+        **declared,
+    )
 
     def fit(x, y, c, domain):
         fitted = model.fit(x, y, domain=domain, checkpoint=c)
@@ -98,16 +108,37 @@ def _deep_ensemble(*, shapes, checkpoint, width=64, depth=2, steps=3000, learnin
     return _Rows(fit, shapes, checkpoint)
 
 
-def _unet(*, shapes, checkpoint, width=16, levels=2, steps=3000, learning_rate=2e-3, batch=None, **declared):
-    model = FieldModel(width=width, levels=levels, schedule=_schedule(steps, learning_rate, batch=batch), **declared)
+def _unet(
+    *, shapes, checkpoint, width=16, levels=2, steps=3000, learning_rate=2e-3, batch=None, weight_decay=0.0, **declared
+):
+    model = FieldModel(
+        width=width,
+        levels=levels,
+        schedule=_schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay),
+        **declared,
+    )
     return _Rows(lambda x, y, c, _domain: model.fit(x, y, checkpoint=c).predict, shapes, checkpoint)
 
 
 def _deeponet(
-    *, shapes, checkpoint, points, width=64, depth=2, basis=32, steps=3000, learning_rate=2e-3, batch=None, **declared
+    *,
+    shapes,
+    checkpoint,
+    points,
+    width=64,
+    depth=2,
+    basis=32,
+    steps=3000,
+    learning_rate=2e-3,
+    batch=None,
+    weight_decay=0.0,
+    **declared,
 ):
     model = DeepONet(
-        hidden=(width,) * depth, basis=basis, schedule=_schedule(steps, learning_rate, batch=batch), **declared
+        hidden=(width,) * depth,
+        basis=basis,
+        schedule=_schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay),
+        **declared,
     )
 
     def fit(x, y, c, _domain):
@@ -117,9 +148,21 @@ def _deeponet(
     return _Rows(fit, shapes, checkpoint)
 
 
-def _fno(*, shapes, checkpoint, modes=12, width=32, layers=4, steps=2000, learning_rate=3e-3, batch=None, **declared):
+def _fno(
+    *,
+    shapes,
+    checkpoint,
+    modes=12,
+    width=32,
+    layers=4,
+    steps=2000,
+    learning_rate=3e-3,
+    batch=None,
+    weight_decay=0.0,
+    **declared,
+):
     grid = len(shapes[0]) - 1  # (channels, *grid)
-    schedule = _schedule(steps, learning_rate, batch=batch)
+    schedule = _schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay)
     model = FNO(modes=(modes,) * grid, width=width, layers=layers, schedule=schedule, **declared)
     return _Rows(lambda x, y, c, _domain: model.fit(x, y, checkpoint=c).predict, shapes, checkpoint)
 
@@ -135,9 +178,10 @@ def _transformer_operator(
     steps=2000,
     learning_rate=3e-3,
     batch=None,
+    weight_decay=0.0,
     **declared,
 ):
-    schedule = _schedule(steps, learning_rate, batch=batch)
+    schedule = _schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay)
     model = TransformerOperator(width=heads * head_width, heads=heads, layers=layers, schedule=schedule, **declared)
 
     def fit(x, y, c, _domain):
@@ -159,9 +203,10 @@ def _transolver(
     steps=2000,
     learning_rate=1e-3,
     batch=None,
+    weight_decay=0.0,
     **declared,
 ):
-    schedule = _schedule(steps, learning_rate, batch=batch)
+    schedule = _schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay)
     model = Transolver(width=width, heads=heads, layers=layers, slices=slices, schedule=schedule, **declared)
 
     def fit(x, y, c, _domain):
@@ -182,9 +227,10 @@ def _graph_operator(
     steps=2000,
     learning_rate=3e-3,
     batch=None,
+    weight_decay=0.0,
     **declared,
 ):
-    schedule = _schedule(steps, learning_rate, batch=batch)
+    schedule = _schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay)
     model = GraphOperator(width=width, layers=layers, kernel_width=kernel_width, schedule=schedule, **declared)
 
     def fit(x, y, c, _domain):
@@ -205,9 +251,15 @@ def _gnn(
     steps=3000,
     learning_rate=2e-3,
     batch=None,
+    weight_decay=0.0,
     **declared,
 ):
-    model = GraphModel(hidden=hidden, rounds=rounds, schedule=_schedule(steps, learning_rate, batch=batch), **declared)
+    model = GraphModel(
+        hidden=hidden,
+        rounds=rounds,
+        schedule=_schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay),
+        **declared,
+    )
 
     def batch(nodes: np.ndarray) -> Graphs:
         return Graphs.batch([(n, edges, edge_features) for n in nodes])
@@ -220,10 +272,24 @@ def _gnn(
 
 
 def _neural_ode(
-    *, shapes, checkpoint, t, width=64, depth=2, horizon=10, steps=2000, learning_rate=3e-3, batch=None, **declared
+    *,
+    shapes,
+    checkpoint,
+    t,
+    width=64,
+    depth=2,
+    horizon=10,
+    steps=2000,
+    learning_rate=3e-3,
+    batch=None,
+    weight_decay=0.0,
+    **declared,
 ):
     model = NeuralODE(
-        hidden=(width,) * depth, horizon=horizon, schedule=_schedule(steps, learning_rate, batch=batch), **declared
+        hidden=(width,) * depth,
+        horizon=horizon,
+        schedule=_schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay),
+        **declared,
     )
 
     def fit(_paths, y, c, _domain):
@@ -233,16 +299,32 @@ def _neural_ode(
     return _Rows(fit, shapes, checkpoint)
 
 
-def _monotone_law(*, shapes, checkpoint, hidden=16, steps=3000, learning_rate=1e-2, polish=200, batch=None, **declared):
-    model = MonotoneLaw(hidden=hidden, schedule=_schedule(steps, learning_rate, polish, batch), **declared)
+def _monotone_law(
+    *,
+    shapes,
+    checkpoint,
+    hidden=16,
+    steps=3000,
+    learning_rate=1e-2,
+    polish=200,
+    batch=None,
+    weight_decay=0.0,
+    **declared,
+):
+    model = MonotoneLaw(
+        hidden=hidden, schedule=_schedule(steps, learning_rate, polish, batch, weight_decay), **declared
+    )
     return _Rows(lambda x, y, c, _domain: model.fit(x, y, checkpoint=c).value, shapes, checkpoint)
 
 
 def _play_hysteresis(
-    *, shapes, checkpoint, plays=16, hidden=16, steps=1500, learning_rate=1e-2, batch=None, **declared
+    *, shapes, checkpoint, plays=16, hidden=16, steps=1500, learning_rate=1e-2, batch=None, weight_decay=0.0, **declared
 ):
     model = PlayHysteresis(
-        plays=plays, hidden=hidden, schedule=_schedule(steps, learning_rate, batch=batch), **declared
+        plays=plays,
+        hidden=hidden,
+        schedule=_schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay),
+        **declared,
     )
 
     def fit(x, y, c, _domain):
@@ -253,10 +335,23 @@ def _play_hysteresis(
 
 
 def _diffusion_field(
-    *, shapes, checkpoint, count=64, width=16, levels=1, steps=3000, learning_rate=2e-3, batch=None, **declared
+    *,
+    shapes,
+    checkpoint,
+    count=64,
+    width=16,
+    levels=1,
+    steps=3000,
+    learning_rate=2e-3,
+    batch=None,
+    weight_decay=0.0,
+    **declared,
 ):
     model = DiffusionField(
-        width=width, levels=levels, schedule=_schedule(steps, learning_rate, batch=batch), **declared
+        width=width,
+        levels=levels,
+        schedule=_schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay),
+        **declared,
     )
 
     def fit(x, y, c, _domain):
@@ -266,8 +361,8 @@ def _diffusion_field(
     return _Rows(fit, shapes, checkpoint)
 
 
-def _pde_net(*, shapes, checkpoint, dt, dx, steps=2000, learning_rate=1e-2, batch=None, **declared):
-    model = PDENet(schedule=_schedule(steps, learning_rate, batch=batch), **declared)
+def _pde_net(*, shapes, checkpoint, dt, dx, steps=2000, learning_rate=1e-2, batch=None, weight_decay=0.0, **declared):
+    model = PDENet(schedule=_schedule(steps, learning_rate, batch=batch, weight_decay=weight_decay), **declared)
 
     def fit(x, y, c, _domain):
         fitted = model.fit(x, y, dt=dt, dx=dx, checkpoint=c)

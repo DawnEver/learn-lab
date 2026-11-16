@@ -41,7 +41,7 @@ from typing import Final
 import numpy as np
 
 from learn_lab.errors import refuse
-from learn_lab.validity import BoxEnvelope
+from learn_lab.validity import BoxEnvelope, HullEnvelope
 
 __all__ = ['FAMILIES', 'FORMAT', 'VERSION', 'canonical', 'family_of', 'load', 'manifest', 'save', 'sha256']
 
@@ -82,6 +82,7 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
     'regression_tree': (f'{_RESPONSE}tree:RegressionTree', f'{_RESPONSE}tree:FittedTree'),
     'forest': (f'{_RESPONSE}tree:Forest', f'{_RESPONSE}tree:FittedForest'),
     'multilayer_perceptron': (f'{_RESPONSE}neural:MultilayerPerceptron', f'{_RESPONSE}neural:Network'),
+    'clough_tocher': (f'{_RESPONSE}clough_tocher:CloughTocher', f'{_RESPONSE}clough_tocher:FittedCloughTocher'),
     'chaos_expansion': (f'{_RESPONSE}chaos:ChaosExpansion', f'{_RESPONSE}chaos:FittedChaos'),
     'ensemble': (f'{_RESPONSE}ensemble:Ensemble', f'{_RESPONSE}ensemble:FittedEnsemble'),
     'bagging': (f'{_RESPONSE}bagging:Bagging', f'{_RESPONSE}bagging:FittedBagging'),
@@ -120,6 +121,19 @@ def _vector(envelope: BoxEnvelope, k: int) -> dict:
     return {'inputs': inputs, 'outputs': {'kind': 'vector', 'width': int(k)}}
 
 
+def _hull(envelope: HullEnvelope, k: int) -> dict:
+    """A hull-bound family's schema: its envelope is the hull's facets in its affine plane, not a box."""
+    hull = {
+        'origin': envelope.origin.tolist(),
+        'basis': envelope.basis.tolist(),
+        'normals': envelope.normals.tolist(),
+        'offsets': envelope.offsets.tolist(),
+        'slack': envelope.slack,
+    }
+    inputs = {'kind': 'vector', 'width': envelope.width, 'envelope': {'hull': hull}}
+    return {'inputs': inputs, 'outputs': {'kind': 'vector', 'width': int(k)}}
+
+
 #: The input/output schema of each numpy family, read off its fitted state; the deep rows are the codec's.
 _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'polynomial': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
@@ -134,6 +148,7 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'regression_tree': lambda f: _vector(f.envelope, f.value.shape[1]),
     'forest': lambda f: _vector(f.envelope, f.trees[0].value.shape[1]),
     'multilayer_perceptron': lambda f: _vector(f.envelope, f.weights[-1].shape[1]),
+    'clough_tocher': lambda f: _hull(f.envelope, f.values.shape[1]),
     'chaos_expansion': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
     'ensemble': lambda f: _schema(family_of(f.members[0]), f.members[0]),
     'bagging': lambda f: _schema(family_of(f.members[0]), f.members[0]),

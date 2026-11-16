@@ -7,7 +7,9 @@ Three answers, never a silent extrapolation:
   :meth:`BoxEnvelope.require`; a caller that has a fallback (the classical solver) asks :meth:`classify`;
 - ``IN_DOMAIN``: inside the envelope.
 
-The box is the simplest envelope that is honest for a vector input; richer inputs (grids, graphs) declare
+The box is the simplest envelope that is honest for a vector input. :class:`HullEnvelope` is the tighter one a
+model defined only between its samples needs (an interpolant): the convex hull of the points inside their
+affine hull, so a degenerate set (collinear, coplanar) still has one. Richer inputs (grids, graphs) declare
 their own envelope type with the same two methods.
 """
 
@@ -15,12 +17,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Final
 
 import numpy as np
+from scipy.spatial import ConvexHull
 
 from learn_lab.errors import refuse
 
-__all__ = ['BoxEnvelope', 'ChannelEnvelope', 'Validity', 'channel_entries']
+__all__ = ['BoxEnvelope', 'ChannelEnvelope', 'HullEnvelope', 'Validity', 'channel_entries']
+
+#: How far outside a hull (or off its affine hull) a point must sit to be outside, as a fraction of the points'
+#: largest extent. A vertex of the set evaluates its facet equations to a roundoff residue of order
+#: ``eps * |x|``, not zero; this floor sits far above that and far below any gap worth refusing.
+HULL_SLACK_REL: Final = 1e-9
+
+#: A singular value below this fraction of the largest spans no direction of the affine hull.
+_RANK_REL: Final = 1e-10
 
 
 class Validity(StrEnum):
@@ -72,16 +84,91 @@ class BoxEnvelope:
 
     def require(self, x: np.ndarray, what: str) -> np.ndarray:
         """``x`` as a float matrix if every row is in the domain, else a refusal naming the first stranger."""
+        return _require_rows(self, x, what, f'lower={self.lower}, upper={self.upper}')
+
+
+def _require_rows(envelope: BoxEnvelope | HullEnvelope, x: object, what: str, described: str) -> np.ndarray:
+    x = np.asarray(x, dtype=float)
+    verdict = envelope.classify(x)
+    bad = np.flatnonzero(verdict != Validity.IN_DOMAIN)
+    if bad.size:
+        row = int(bad[0])
+        refuse(
+            f'{what}: {bad.size} point(s) are {verdict[row]}, first row {row} = {x[row] if x.ndim == 2 else x}; '
+            f'the envelope is {described}'
+        )
+    return x
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class HullEnvelope:
+    """The convex hull of a point set within its affine hull ``origin + basis @ t``.
+
+    ``basis (d, rank)`` is orthonormal; inside the plane a point is in when ``normals @ t + offsets <= slack``
+    for every facet, and off the plane it is out when its distance exceeds ``slack`` (input units). ``lower``
+    and ``upper`` are the points' bounding box, kept for a reader that wants the span.
+    """
+
+    origin: np.ndarray
+    basis: np.ndarray
+    normals: np.ndarray
+    offsets: np.ndarray
+    slack: float
+    lower: np.ndarray
+    upper: np.ndarray
+
+    @classmethod
+    def of(cls, x: np.ndarray) -> HullEnvelope:
         x = np.asarray(x, dtype=float)
-        verdict = self.classify(x)
-        bad = np.flatnonzero(verdict != Validity.IN_DOMAIN)
-        if bad.size:
-            row = int(bad[0])
-            refuse(
-                f'{what}: {bad.size} point(s) are {verdict[row]}, first row {row} = {x[row] if x.ndim == 2 else x}; '
-                f'the envelope is lower={self.lower}, upper={self.upper}'
-            )
-        return x
+        if x.ndim != 2 or x.shape[0] == 0:
+            refuse(f'a hull is spanned by (n, d) points, got shape {x.shape}')
+        if not np.all(np.isfinite(x)):
+            refuse('a hull is spanned by finite points')
+        lower, upper = x.min(axis=0), x.max(axis=0)
+        extent = float(np.max(upper - lower))
+        origin = x.mean(axis=0)
+        _, singular, rows = np.linalg.svd(x - origin, full_matrices=False)
+        rank = int(np.sum(singular > _RANK_REL * singular[0])) if singular.size and singular[0] > 0 else 0
+        basis = rows[:rank].T
+        t = (x - origin) @ basis
+        if rank == 0:
+            normals, offsets = np.zeros((0, 0)), np.zeros(0)
+        elif rank == 1:
+            normals, offsets = np.array([[1.0], [-1.0]]), np.array([-t[:, 0].max(), t[:, 0].min()])
+        else:
+            equations = ConvexHull(t).equations
+            normals, offsets = equations[:, :-1], equations[:, -1]
+        return cls(origin, basis, normals, offsets, HULL_SLACK_REL * (extent or 1.0), lower, upper)
+
+    @property
+    def width(self) -> int:
+        return self.origin.shape[0]
+
+    @property
+    def rank(self) -> int:
+        """The dimension of the affine hull: 0 for one point, 1 for collinear points, and so on."""
+        return self.basis.shape[1]
+
+    def classify(self, x: np.ndarray) -> np.ndarray:
+        """One :class:`Validity` per row of ``x``."""
+        x = np.asarray(x, dtype=float)
+        if x.ndim != 2 or x.shape[1] != self.width:
+            return np.full(x.shape[0] if x.ndim else 1, Validity.INVALID, dtype=object)
+        finite = np.all(np.isfinite(x), axis=1)
+        centred = np.where(finite[:, None], x, 0.0) - self.origin
+        t = centred @ self.basis
+        outside = np.linalg.norm(centred - t @ self.basis.T, axis=1) > self.slack
+        if self.offsets.size:
+            outside |= np.max(t @ self.normals.T + self.offsets, axis=1) > self.slack
+        out = np.where(outside, Validity.OUT_OF_DOMAIN, Validity.IN_DOMAIN).astype(object)
+        out[~finite] = Validity.INVALID
+        return out
+
+    def require(self, x: np.ndarray, what: str) -> np.ndarray:
+        """``x`` as a float matrix if every row is in the hull, else a refusal naming the first stranger."""
+        return _require_rows(
+            self, x, what, f'the hull of rank {self.rank} within lower={self.lower}, upper={self.upper}'
+        )
 
 
 def channel_entries(x: np.ndarray) -> np.ndarray:

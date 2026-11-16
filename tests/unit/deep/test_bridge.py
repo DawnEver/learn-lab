@@ -85,7 +85,7 @@ def test_a_network_upstream_of_the_classical_op_trains_end_to_end():
     target = rt.tensor(np.stack([solve(row) for row in planted]))
     net = MLP([1, 16, N]).to(rt.torch_device, rt.torch_dtype)
 
-    def loss():
+    def loss(_index=None):
         return ((torch.stack([op(row) for row in net(z)]) - target) ** 2).mean()
 
     history = minimise(net.parameters(), loss, Schedule(adam_steps=300, learning_rate=1e-2))

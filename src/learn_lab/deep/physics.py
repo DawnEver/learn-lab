@@ -398,6 +398,12 @@ class PhysicsInformedField:
         checkpoint: Checkpoint | None = None,
     ) -> FittedField:
         """Fit the field to the provider's residuals; ``identify`` + ``observations`` make it an inverse problem."""
+        if self.schedule.batch is not None:
+            refuse(
+                f'a physics-informed field cannot take batch={self.schedule.batch}: its objective is a quadrature '
+                'over per-condition points whose resampling, balancing and continuation are per-step state, not '
+                'a mean over samples'
+            )
         unknown = set(identify) - set(provider.parameters)
         if unknown:
             refuse(f'identify names {sorted(unknown)}; the provider declares {sorted(provider.parameters)}')
@@ -459,7 +465,7 @@ class PhysicsInformedField:
         updates: list[tuple[int, dict[str, float]]] = []
         calls = [0]
 
-        def loss() -> torch.Tensor:
+        def loss(_index: None) -> torch.Tensor:
             step, calls[0] = calls[0], calls[0] + 1
             if step < self.schedule.adam_steps:
                 self._continue(step, params, nominal)

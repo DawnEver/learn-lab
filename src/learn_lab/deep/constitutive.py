@@ -32,7 +32,7 @@ from typing import Final
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
 from learn_lab.deep.networks import MonotoneScalar
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
@@ -89,8 +89,10 @@ class MonotoneLaw:
         wt = rt.tensor(w / w.mean())
         history = minimise(
             net.parameters(),
-            lambda: torch.mean(wt * (net(xt) - yt) ** 2),
+            lambda index: _weighted(net, *take(index, xt, yt, wt)),
             self.schedule,
+            samples=len(xt),
+            seed=rt.seed,
             checkpoint=checkpoint,
             config=repr(self),
             data=[xt, yt],
@@ -143,3 +145,7 @@ class FittedLaw:
         xt = self.runtime.tensor(flat / self.x_scale, grad=True)
         (slope,) = torch.autograd.grad(self.net(_warp(xt, self.knee)).sum(), xt)
         return (numpy(slope) * self.y_scale / self.x_scale).reshape(shape)
+
+
+def _weighted(net: torch.nn.Module, x: torch.Tensor, y: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+    return torch.mean(w * (net(x) - y) ** 2)

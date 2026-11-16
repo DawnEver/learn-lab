@@ -124,7 +124,7 @@ def _pointwise_control() -> float:
     scale = np.abs(U_TRAIN).max()
     xt, yt = torch.as_tensor(rows), torch.as_tensor(U_TRAIN.reshape(-1, 1) / scale)
 
-    def loss():
+    def loss(_index=None):
         return ((net(xt) - yt) ** 2).mean()
 
     minimise(net.parameters(), loss, FIT)

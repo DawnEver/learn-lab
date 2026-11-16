@@ -24,7 +24,7 @@ import torch
 from torch.utils.checkpoint import checkpoint as recomputed
 
 from learn_lab.deep.field import UNet
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
@@ -94,28 +94,36 @@ class DiffusionField:
         def squared(z: torch.Tensor, cc: torch.Tensor, t: torch.Tensor, eps: torch.Tensor) -> torch.Tensor:
             return ((net(_inputs(z, cc, t, steps)) - eps) ** 2).sum()
 
-        def loss() -> torch.Tensor:
-            t = torch.randint(0, steps, (len(yt),), device=yt.device)
-            eps = torch.randn_like(yt)
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            cb, yb = take(index, ct, yt)
+            t = torch.randint(0, steps, (len(yb),), device=yb.device)
+            eps = torch.randn_like(yb)
             a = abar[t][:, None, None, None]
-            z = a.sqrt() * yt + (1 - a).sqrt() * eps
-            if chunk is None or chunk >= len(yt):
-                return squared(z, ct, t, eps) / yt.numel()
+            z = a.sqrt() * yb + (1 - a).sqrt() * eps
+            if chunk is None or chunk >= len(yb):
+                return squared(z, cb, t, eps) / yb.numel()
             parts = (
                 recomputed(
                     squared,
                     z[i : i + chunk],
-                    ct[i : i + chunk],
+                    cb[i : i + chunk],
                     t[i : i + chunk],
                     eps[i : i + chunk],
                     use_reentrant=False,
                 )
-                for i in range(0, len(yt), chunk)
+                for i in range(0, len(yb), chunk)
             )
-            return torch.stack(list(parts)).sum() / yt.numel()
+            return torch.stack(list(parts)).sum() / yb.numel()
 
         history = minimise(
-            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[ct, yt]
+            net.parameters(),
+            loss,
+            self.schedule,
+            samples=len(yt),
+            seed=rt.seed,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[ct, yt],
         )
         return FittedDiffusionField(
             net=net.eval(),

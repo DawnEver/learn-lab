@@ -35,13 +35,13 @@ import torch
 from torch import nn
 from torch.utils.checkpoint import checkpoint as recomputed
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
 from learn_lab.representation import PointGraph
-from learn_lab.validity import BoxEnvelope, ChannelEnvelope
+from learn_lab.validity import BoxEnvelope, ChannelEnvelope, channel_entries
 
 __all__ = [
     'FNO',
@@ -52,6 +52,7 @@ __all__ = [
     'FittedTransformerOperator',
     'FittedTransolver',
     'GraphOperator',
+    'GraphSamples',
     'SpectralConv',
     'TransformerOperator',
     'Transolver',
@@ -114,11 +115,19 @@ class DeepONet:
         net = net.to(rt.torch_device, rt.torch_dtype)
         ut, yt, gt = rt.tensor(_scalar(su, u)), rt.tensor(y), rt.tensor(_scalar(sg, g))
 
-        def loss() -> torch.Tensor:
-            return ((net(ut, yt) - gt) ** 2).mean()
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            ub, gb = take(index, ut, gt)
+            return ((net(ub, yt) - gb) ** 2).mean()
 
         history = minimise(
-            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[ut, yt, gt]
+            net.parameters(),
+            loss,
+            self.schedule,
+            samples=len(ut),
+            seed=rt.seed,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[ut, yt, gt],
         )
         envelope = ChannelEnvelope.of(u[:, None, :], margin=self.margin)
         return FittedDeepONet(
@@ -262,17 +271,25 @@ class FNO:
         def squared(xc: torch.Tensor, yc: torch.Tensor) -> torch.Tensor:
             return ((net(xc) - yc) ** 2).sum()
 
-        def loss() -> torch.Tensor:
-            if chunk is None or chunk >= len(xt):
-                return squared(xt, yt) / yt.numel()
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            xb, yb = take(index, xt, yt)
+            if chunk is None or chunk >= len(xb):
+                return squared(xb, yb) / yb.numel()
             parts = (
-                recomputed(squared, xt[i : i + chunk], yt[i : i + chunk], use_reentrant=False)
-                for i in range(0, len(xt), chunk)
+                recomputed(squared, xb[i : i + chunk], yb[i : i + chunk], use_reentrant=False)
+                for i in range(0, len(xb), chunk)
             )
-            return torch.stack(list(parts)).sum() / yt.numel()
+            return torch.stack(list(parts)).sum() / yb.numel()
 
         history = minimise(
-            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, yt]
+            net.parameters(),
+            loss,
+            self.schedule,
+            samples=len(xt),
+            seed=rt.seed,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[xt, yt],
         )
         envelope = ChannelEnvelope.of(x, margin=self.margin)
         return FittedFNO(
@@ -447,17 +464,25 @@ class TransformerOperator:
         def squared(xc: torch.Tensor, yc: torch.Tensor) -> torch.Tensor:
             return ((net(xc, ct) - yc) ** 2).sum()
 
-        def loss() -> torch.Tensor:
-            if chunk is None or chunk >= len(xt):
-                return squared(xt, yt) / yt.numel()
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            xb, yb = take(index, xt, yt)
+            if chunk is None or chunk >= len(xb):
+                return squared(xb, yb) / yb.numel()
             parts = (
-                recomputed(squared, xt[i : i + chunk], yt[i : i + chunk], use_reentrant=False)
-                for i in range(0, len(xt), chunk)
+                recomputed(squared, xb[i : i + chunk], yb[i : i + chunk], use_reentrant=False)
+                for i in range(0, len(xb), chunk)
             )
-            return torch.stack(list(parts)).sum() / yt.numel()
+            return torch.stack(list(parts)).sum() / yb.numel()
 
         history = minimise(
-            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, ct, yt]
+            net.parameters(),
+            loss,
+            self.schedule,
+            samples=len(xt),
+            seed=rt.seed,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[xt, ct, yt],
         )
         envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
         return FittedTransformerOperator(
@@ -741,26 +766,30 @@ class Transolver:
         def squared(xc, cc, yc, ac) -> torch.Tensor:
             return ((net(xc, cc, ac) - yc) ** 2).sum()
 
-        def loss() -> torch.Tensor:
-            if chunk is None or chunk >= len(xt):
-                return squared(xt, ct, yt, at) / yt.numel()
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            xb, yb, ab = take(index, xt, yt, at)
+            (cb,) = take(index, ct) if own else (ct,)
+            if chunk is None or chunk >= len(xb):
+                return squared(xb, cb, yb, ab) / yb.numel()
             parts = (
                 recomputed(
                     squared,
-                    xt[i : i + chunk],
-                    ct[i : i + chunk] if own else ct,
-                    yt[i : i + chunk],
-                    None if at is None else at[i : i + chunk],
+                    xb[i : i + chunk],
+                    cb[i : i + chunk] if own else cb,
+                    yb[i : i + chunk],
+                    None if ab is None else ab[i : i + chunk],
                     use_reentrant=False,
                 )
-                for i in range(0, len(xt), chunk)
+                for i in range(0, len(xb), chunk)
             )
-            return torch.stack(list(parts)).sum() / yt.numel()
+            return torch.stack(list(parts)).sum() / yb.numel()
 
         history = minimise(
             net.parameters(),
             loss,
             self.schedule,
+            samples=len(xt),
+            seed=rt.seed,
             checkpoint=checkpoint,
             config=repr(self),
             data=[xt, ct, yt, box.lower, box.upper] if at is None else [xt, ct, yt, box.lower, box.upper, at],
@@ -872,46 +901,84 @@ class GraphOperator:
         if min(self.width, self.layers, self.kernel_width) < 1:
             refuse(f'a graph operator has width, layers and kernel_width >= 1, got {self}')
 
-    def fit(
-        self, x: np.ndarray, graph: PointGraph, y: np.ndarray, *, checkpoint: Checkpoint | None = None
-    ) -> FittedGraphOperator:
-        """``x (n, c_in, N)`` on the ``N`` points of *graph* -> ``y (n, c_out, N)`` on the same points."""
-        graph = graph.require_valid('the training graph')
-        x = require_finite(np.asarray(x, float), 'the input functions')
-        y = require_finite(np.asarray(y, float), 'the output functions')
-        nodes = len(graph.points)
-        if x.ndim != 3 or y.ndim != 3 or x.shape[0] != y.shape[0] or x.shape[2] != nodes or y.shape[2] != nodes:
-            refuse(
-                f'a graph operator is fitted on x (n, c_in, N), y (n, c_out, N) with N = {nodes}; '
-                f'got {x.shape}, {y.shape}'
-            )
+    def fit(self, data: Sequence[GraphSamples], *, checkpoint: Checkpoint | None = None) -> FittedGraphOperator:
+        """One kernel fitted on samples over one or several graphs (discretisations of one domain).
+
+        The loss is the mean over samples of each sample's node-mean squared error, so a sample weighs the same
+        whatever its graph's node count; a batched schedule draws its samples across all graphs.
+        """
+        if not data:
+            refuse('a graph operator is fitted on at least one GraphSamples, got none')
+        groups = [d.require_valid(f'the training samples #{i}') for i, d in enumerate(data)]
+        for name, axis in (('input', 'x'), ('output', 'y')):
+            counts = {getattr(g, axis).shape[1] for g in groups}
+            if len(counts) > 1:
+                refuse(f'every training graph carries the same {name} channels; got {sorted(counts)}')
+        xs = np.concatenate([channel_entries(g.x).reshape(-1, g.x.shape[1]) for g in groups])
+        ys = np.concatenate([channel_entries(g.y).reshape(-1, g.y.shape[1]) for g in groups])
         rt = self.runtime
         rt.seeded()
-        sx, sy = Standardiser.of(x), Standardiser.of(y)
-        box = BoxEnvelope.of(graph.points, margin=self.margin)
+        sx, sy = Standardiser.of(xs), Standardiser.of(ys)
+        box = BoxEnvelope.of(np.concatenate([g.graph.points for g in groups]), margin=self.margin)
         net = _GraphOperatorNet(
-            x.shape[1],
-            y.shape[1],
-            dimension=graph.points.shape[1],
+            xs.shape[1],
+            ys.shape[1],
+            dimension=box.width,
             width=self.width,
             layers=self.layers,
             kernel_width=self.kernel_width,
             lower=box.lower,
             upper=box.upper,
         ).to(rt.torch_device, rt.torch_dtype)
-        xt, yt = rt.tensor(sx.forward(x)), rt.tensor(sy.forward(y))
-        structure = _graph_tensors(rt, graph)
+        tensors = [
+            (rt.tensor(sx.forward(g.x)), rt.tensor(sy.forward(g.y)), _graph_tensors(rt, g.graph)) for g in groups
+        ]
+        sizes = [len(g.x) for g in groups]
+        offsets = np.cumsum([0, *sizes])
+        samples = int(offsets[-1])
 
-        def loss() -> torch.Tensor:
-            return ((net(xt, *structure) - yt) ** 2).mean()
+        def loss(index: torch.Tensor | None) -> torch.Tensor:
+            total, drawn = 0.0, samples if index is None else len(index)
+            for (xt, yt, structure), lo, hi in zip(tensors, offsets[:-1], offsets[1:], strict=True):
+                local = None if index is None else index[(index >= lo) & (index < hi)] - int(lo)
+                if local is not None and not len(local):
+                    continue
+                xb, yb = take(local, xt, yt)
+                total = total + ((net(xb, *structure) - yb) ** 2).mean() * (len(xb) / drawn)
+            return total
 
         history = minimise(
-            net.parameters(), loss, self.schedule, checkpoint=checkpoint, config=repr(self), data=[xt, yt, *structure]
+            net.parameters(),
+            loss,
+            self.schedule,
+            samples=samples,
+            seed=rt.seed,
+            checkpoint=checkpoint,
+            config=repr(self),
+            data=[t for xt, yt, structure in tensors for t in (xt, yt, *structure)],
         )
-        envelope = ChannelEnvelope.of(x, fixed_shape=False, margin=self.margin)
+        envelope = ChannelEnvelope.of(xs, fixed_shape=False, margin=self.margin)
         return FittedGraphOperator(
             net=net.eval(), runtime=rt, envelope=envelope, points=box, inputs=sx, outputs=sy, history=history
         )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphSamples:
+    """``x (n, c_in, N)`` -> ``y (n, c_out, N)``: *n* samples on the ``N`` points of one *graph*."""
+
+    graph: PointGraph
+    x: np.ndarray
+    y: np.ndarray
+
+    def require_valid(self, what: str) -> GraphSamples:
+        graph = self.graph.require_valid(f'{what} graph')
+        x = require_finite(np.asarray(self.x, float), f'{what} input functions')
+        y = require_finite(np.asarray(self.y, float), f'{what} output functions')
+        nodes = len(graph.points)
+        if x.ndim != 3 or y.ndim != 3 or x.shape[0] != y.shape[0] or x.shape[2] != nodes or y.shape[2] != nodes:
+            refuse(f'{what} are x (n, c_in, N), y (n, c_out, N) with N = {nodes}; got {x.shape}, {y.shape}')
+        return GraphSamples(graph, x, y)
 
 
 def _graph_tensors(rt: Runtime, graph: PointGraph) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

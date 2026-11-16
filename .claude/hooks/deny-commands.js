@@ -393,6 +393,18 @@ const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toL
  * `{python}` (or a repo door's `<venv python>`) and the engine writes the TARGET checkout's interpreter by
  * absolute path -- the same answer as dev_lab.dev.venvpath.remedy_interpreter.
  */
+/** The environment a new launch in `root` takes (dev-lab #632; twin of dev_lab.dev.venvpointer.current). */
+function currentEnv(root) {
+  try {
+    const name = fs.readFileSync(path.join(root, '.venv-current'), 'utf8').trim();
+    const env = path.join(root, '.venvs', name);
+    if (name && path.basename(name) === name && name !== '.' && name !== '..' && fs.statSync(env).isDirectory()) {
+      return env;
+    }
+  } catch {}
+  return path.join(root, '.venv');
+}
+
 const VENV_TAIL = process.platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python'];
 const posix = (p) => p.replace(/\\/g, '/');
 
@@ -400,19 +412,19 @@ const posix = (p) => p.replace(/\\/g, '/');
  * exists (2026-11-03: a target with no venv was named `<target>/.venv/...python`, a command that cannot run); its
  * own spelling only when no interpreter exists anywhere. */
 function remedyPython(root) {
-  const own = path.join(path.resolve(root), '.venv', ...VENV_TAIL);
+  const own = path.join(currentEnv(path.resolve(root)), ...VENV_TAIL);
   if (fs.existsSync(own)) return posix(own);
   try {
     const named = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(path.join(root, '.git'), 'utf8'));
     const gitdir = named ? path.resolve(root, named[1]) : '';
     if (gitdir && path.basename(path.dirname(gitdir)) === 'worktrees') {
-      const main = path.join(path.dirname(path.dirname(path.dirname(gitdir))), '.venv', ...VENV_TAIL);
+      const main = path.join(currentEnv(path.dirname(path.dirname(path.dirname(gitdir)))), ...VENV_TAIL);
       if (fs.existsSync(main)) return posix(main);
     }
   } catch {
     // a `.git` directory, or none: the session's interpreter, else the checkout's own spelling below
   }
-  const session = sessionRoot && path.join(sessionRoot, '.venv', ...VENV_TAIL);
+  const session = sessionRoot && path.join(currentEnv(sessionRoot), ...VENV_TAIL);
   if (session && fs.existsSync(session)) return posix(session);
   return posix(own);
 }
@@ -458,7 +470,7 @@ function reasonFor(rule, reason, cmd, cwd, sessionRoot) {
 /** The session checkout's own interpreter, or null: a checkout without a venv has nobody to ask. */
 function venvPython(sessionRoot) {
   const tail = process.platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python'];
-  const python = sessionRoot ? path.join(sessionRoot, '.venv', ...tail) : '';
+  const python = sessionRoot ? path.join(currentEnv(sessionRoot), ...tail) : '';
   return python && fs.existsSync(python) ? python : null;
 }
 
@@ -481,6 +493,22 @@ function liveRunRefusal(target, sessionRoot) {
   const why = done.error ? done.error.message : `exit ${done.status}${said ? '' : ', no answer'}`;
   return `TREE-HAS-A-LIVE-RUN: could not confirm that no run executes from ${target} (${why}); re-run when ` +
     `${remedyPython(sessionRoot)} -m dev_lab.dev.liverun --tree ${target} answers.`;
+}
+
+/* `when: 'background'`: `python -m dev_lab.dev.shelllife --admit` judges the line on stdin -- exit 0 admitted, exit 1
+ * prints the refusal. '' admits; null is nobody to ask (no interpreter, no kit, a crash), and the row's pattern decides. */
+function lifetimeRefusal(cmd, sessionRoot) {
+  const python = venvPython(sessionRoot);
+  if (!python) return null;
+  const done = spawnSync(python, ['-m', 'dev_lab.dev.shelllife', '--admit'], {
+    input: cmd,
+    encoding: 'utf8',
+    timeout: 15000,
+    windowsHide: true,
+  });
+  if (done.status === 0) return '';
+  const said = String(done.stdout || '').trim();
+  return done.status === 1 && said ? said : null;
 }
 
 /* ================================ A ROW THAT STILL ADMITS A FAMILY SIBLING CLONE ================================
@@ -627,6 +655,18 @@ for (const rule of rules) {
   }
   if (hit && rule.admits === 'family-sibling-clone' && familySiblingClone(cmd, input.cwd)) continue;
   let liveReason = '';
+  // A 'background' row binds only on a Bash call the agent runs in the background (BACKGROUND-SHELL-IS-BOUNDED),
+  // and there the session's interpreter judges it (a longer life needs the USER's grant); the pattern only without one.
+  if (rule.when === 'background') {
+    const background = input.tool_name === 'Bash' && input.tool_input.run_in_background === true;
+    const asked = background ? lifetimeRefusal(cmd, sessionRoot) : null;
+    if (asked !== null) {
+      liveReason = asked;
+      hit = asked !== '';
+    } else {
+      hit = hit && background;
+    }
+  }
   if (hit && rule.when === 'live-run') {
     // A PROBE judging which rule owns a shape sets this (run_engine(live_run=False)): its own suite is a
     // run in the checkout it probes. The tool never sends the key, so no agent command can set it.

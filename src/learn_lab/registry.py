@@ -15,6 +15,7 @@ from typing import Final
 from learn_lab.errors import refuse
 from learn_lab.models.response.bagging import Bagging
 from learn_lab.models.response.chaos import ChaosExpansion
+from learn_lab.models.response.clough_tocher import CloughTocher
 from learn_lab.models.response.co_kriging import CoKriging
 from learn_lab.models.response.gaussian_process import GaussianProcess
 from learn_lab.models.response.gradient_enhanced import GradientEnhancedKriging
@@ -79,6 +80,8 @@ SURROGATES: Final = {
         }),
     ),
     'chaos_expansion': Family(ChaosExpansion, Space({'degree': Integer(1, 6)})),
+    # Nothing to tune: it passes through every sample; its settings steer only the nodal-gradient estimate.
+    'clough_tocher': Family(CloughTocher, Space({})),
     # Nothing to tune: the exponents are fitted, and pinning one is physics, not a search dimension.
     'power_law': Family(PowerLaw, Space({})),
     # The law's exponents are textbook or fitted; the residual's base is a declaration tuned on its own row.

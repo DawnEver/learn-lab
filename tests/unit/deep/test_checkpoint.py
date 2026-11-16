@@ -166,14 +166,16 @@ COSINE = Schedule(adam_steps=12, learning_rate=1e-2, decay='cosine')
 
 
 def test_a_cosine_schedule_anneals_adam_to_zero_and_a_constant_one_does_not(monkeypatch):
+    # Spy on the class the loop builds: torch wraps `step` onto each optimizer class at its first instance, so
+    # once any AdamW exists `AdamW.step` is its own attribute and a spy on `Adam.step` sees no call.
     rates = []
-    adam_step = torch.optim.Adam.step
+    adam_step = torch.optim.AdamW.step
 
     def spy(self, *args, **kwargs):
         rates.append(self.param_groups[0]['lr'])
         return adam_step(self, *args, **kwargs)
 
-    monkeypatch.setattr(torch.optim.Adam, 'step', spy)
+    monkeypatch.setattr(torch.optim.AdamW, 'step', spy)
     net = MLP([2, 8, 1]).to(RT.torch_device, RT.torch_dtype)
     x = torch.ones(4, 2, dtype=RT.torch_dtype)
 

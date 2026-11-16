@@ -284,8 +284,8 @@ nvtx = [
 
 [[package]]
 name = "dev-lab"
-version = "0.0.1.dev3415+g5deb7e6a8"
-source = { git = "https://github.com/DawnEver/dev-lab.git?branch=pr%2Factions-focused-measurement-1115#5deb7e6a8d001ae3e70b3c4710809b819bda7e99" }
+version = "0.0.1.dev3591+gd77b39b98"
+source = { git = "https://github.com/DawnEver/dev-lab.git#d77b39b98bcb16dfbe70756834a741fba82cb44f" }
 dependencies = [
     { name = "cryptography" },
     { name = "lab-commons", extra = ["io", "paths", "structured", "units"] },
@@ -461,8 +461,8 @@ wheels = [
 
 [[package]]
 name = "lab-commons"
-version = "0.3.1.dev1507+g50a403422"
-source = { git = "https://github.com/DawnEver/lab-commons.git#50a4034228fc19df80ea2640b6998d5addddb613" }
+version = "0.3.1.dev1534+g92e3a9c3a"
+source = { git = "https://github.com/DawnEver/lab-commons.git#92e3a9c3af00198592c219492f58095bc5b4c5fa" }
 
 [package.optional-dependencies]
 io = [
@@ -526,7 +526,7 @@ provides-extras = ["torch", "openvino"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "dev-lab", extras = ["test"], git = "https://github.com/DawnEver/dev-lab.git?branch=pr%2Factions-focused-measurement-1115" },
+    { name = "dev-lab", extras = ["test"], git = "https://github.com/DawnEver/dev-lab.git" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },

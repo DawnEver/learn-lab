@@ -8,12 +8,13 @@
  * is a rule in the JSON file passed as argv[2] (`.claude/hooks/deny-rules.json`), so adding or
  * retiring a rule is a data change, never an engine change.
  *
- * A rule is {name, pattern, matches?, allow?, scope?, severity?, reason}. `scope: 'subagent'` judges the rule only
+ * A rule is {name, pattern, matches?, allow?, scope?, severity?, asks?, reason}. `scope: 'subagent'` judges the rule only
  * when the payload carries a non-empty `agent_id`. `severity: 'hint'` never denies: the call runs and the
  * reason reaches the agent as `additionalContext` -- unless a refusing rule also fires, which wins. `pattern` (JS regex source) denies a
  * command it matches, unless `allow` (regex source) also matches -- the sanctioned spelling.
  * `reason` is the rewrite hint shown to the agent; `{root}` in it expands to the tool call's cwd, and `{python}`
- * (or a door's `<venv python>`) to the target checkout's interpreter by ABSOLUTE path.
+ * (or a door's `<venv python>`) to the target checkout's interpreter by ABSOLUTE path. `asks` names the Python
+ * module that judges a call the pattern only prefilters (A ROW WHOSE JUDGE IS A MODULE, below).
  *
  * ================================ WHAT IS MATCHED, AND WHY ================================
  *
@@ -319,9 +320,17 @@ function namedDir(words) {
 
 /** The directory the command acts in -- the ONE answer to "which tree" every judge reads. A segment acts in the
  * call's cwd as moved by the `cd X` segments before it, or in the dir its git/uv/dep call names. The answer is
- * the dir of the first segment `acts` selects (the one a rule fired on), else of the first segment that is not
- * a `cd`, else the cwd the `cd`s leave. */
+ * the dir of the first segment `acts` selects at any command position (the one a rule fired on, behind a
+ * `timeout 50m` too), else of the first segment that is not a `cd`, else the cwd the `cd`s leave. A shell's
+ * `-c` script is a command line of its own starting in its segment's dir, so its `cd`s move it (2026-11-17:
+ * `timeout 50m bash -c 'cd B && ...'` from A, and a bounded `dep --bootstrap C`, were both judged against A). */
 function targetDir(cmd, cwd, acts = () => true) {
+  const found = targetIn(cmd, cwd, acts);
+  return found.hit ?? found.first ?? found.dir;
+}
+
+/** `targetDir`'s walk: {hit} the dir of the first acting segment, else {first, dir}. */
+function targetIn(cmd, cwd, acts) {
   let dir = cwd;
   let first = null;
   const word = String.raw`("[^"\n]*"|'[^'\n]*'|[^\s;&|()]+)`;
@@ -332,12 +341,20 @@ function targetDir(cmd, cwd, acts = () => true) {
       dir = path.resolve(dir, hostPath(cd[1]));
       continue;
     }
-    const named = namedDir(text.match(new RegExp(word, 'g')) || []);
+    const positions = commandPositions(text);
+    const acting = positions.find((position) => acts(position));
+    const named = namedDir((acting ?? positions[positions.length - 1] ?? text).match(new RegExp(word, 'g')) || []);
     const here = named ? path.resolve(dir, hostPath(named)) : dir;
-    if (acts(text)) return here;
+    if (acting !== undefined) return { hit: here };
+    if (positions.some((position) => SHELLS.test(commandWord(position)))) {
+      for (const script of inlineScripts(text)) {
+        const inner = targetIn(script, here, acts);
+        if (inner.hit) return inner;
+      }
+    }
     if (first === null && text) first = here;
   }
-  return first === null ? dir : first;
+  return { hit: null, first, dir };
 }
 
 /** The directory the segment `rule` fires on acts in (`targetDir`). */
@@ -351,13 +368,20 @@ function ruleTarget(rule, cmd, cwd) {
   return targetDir(cmd, cwd, (text) => at.test(text));
 }
 
-/** The nearest directory at or above `dir` holding a `.git` (a worktree's `.git` is a file). */
+/** `dir` spelled for comparison: case-folded where the filesystem is (Windows), as Python's `os.path.normcase`. */
+const normcase = (dir) => (process.platform === 'win32' ? path.resolve(dir).toLowerCase() : path.resolve(dir));
+
+/** Directories git's discovery never climbs into: GIT_CEILING_DIRECTORIES, git's own contract. */
+const CEILINGS = new Set((process.env.GIT_CEILING_DIRECTORIES || '').split(path.delimiter).filter(Boolean).map(normcase));
+
+/** The nearest directory at or above `dir` holding a `.git` (a worktree's `.git` is a file), stopping where git
+ * does -- the walk dev_lab.dev.gitdirs.ancestors also takes. */
 function repoRoot(dir) {
   let at = path.resolve(dir);
   for (;;) {
     if (fs.existsSync(path.join(at, '.git'))) return at;
     const up = path.dirname(at);
-    if (up === at) return null;
+    if (up === at || CEILINGS.has(normcase(up))) return null;
     at = up;
   }
 }
@@ -393,16 +417,17 @@ const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toL
  * `{python}` (or a repo door's `<venv python>`) and the engine writes the TARGET checkout's interpreter by
  * absolute path -- the same answer as dev_lab.dev.venvpath.remedy_interpreter.
  */
-/** The environment a new launch in `root` takes (dev-lab #632; twin of dev_lab.dev.venvpointer.current). */
+/** The ONE resolver (dev-lab #641): installed beside this engine; in the package, one directory up. Loaded only
+ * when a remedy names an interpreter, so a missing copy never stops a decision: the remedy names its door. */
+const MISSING_RESOLVER = 'venv_resolver.js is missing beside deny-commands.js -- run: python -m dev_lab.dev.agent_guard --install';
+let resolver;
 function currentEnv(root) {
-  try {
-    const name = fs.readFileSync(path.join(root, '.venv-current'), 'utf8').trim();
-    const env = path.join(root, '.venvs', name);
-    if (name && path.basename(name) === name && name !== '.' && name !== '..' && fs.statSync(env).isDirectory()) {
-      return env;
-    }
-  } catch {}
-  return path.join(root, '.venv');
+  if (resolver === undefined) {
+    const file = [__dirname, path.dirname(__dirname)].map((dir) => path.join(dir, 'venv_resolver.js')).find(fs.existsSync);
+    resolver = file ? require(file) : null;
+  }
+  if (!resolver) throw new Error(MISSING_RESOLVER);
+  return resolver.currentEnv(root);
 }
 
 const VENV_TAIL = process.platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python'];
@@ -433,7 +458,12 @@ function remedyPython(root) {
 function expand(text, checkout) {
   const out = String(text).replaceAll('{root}', root);
   if (!checkout || !/\{python\}|<venv python>/.test(out)) return out;
-  const python = remedyPython(checkout);
+  let python;
+  try {
+    python = remedyPython(checkout);
+  } catch (missing) {
+    python = `<${missing.message}>`; // the refusal still stands, and names the door that restores the resolver
+  }
   return out.replaceAll('{python}', python).replaceAll('<venv python>', python);
 }
 
@@ -448,7 +478,7 @@ function reasonFor(rule, reason, cmd, cwd, sessionRoot) {
   if (!target || !sessionRoot || samePath(target, sessionRoot)) return reason;
   const shown = target.replace(/\\/g, '/');
   const door = doorsOf(target)[rule.name] && expand(doorsOf(target)[rule.name], target);
-  // One header line; the full wording is docs-src/dev/refusals.md#cross-repo-refusals (lab-commons).
+  // One header line; the full wording is docs-src/dev/refusals.md#cross-repo-refusals (dev-lab).
   const details = reason.split('\n').filter((line) => line.startsWith('details: '));
   if (door) {
     return [`${rule.name}: refused; ${shown} declares its own door for it:`, door, ...details].join('\n');
@@ -509,6 +539,32 @@ function lifetimeRefusal(cmd, sessionRoot) {
   if (done.status === 0) return '';
   const said = String(done.stdout || '').trim();
   return done.status === 1 && said ? said : null;
+}
+
+/* ================================ A ROW WHOSE JUDGE IS A MODULE ================================
+ *
+ * `asks: '<module>'`: the decision needs repo state no regex reads (TRACKED-CITES-NO-EPHEMERAL: is a path the
+ * journal line cites ignored HERE?), so the pattern is only a cheap PREFILTER. After it matched -- never before, so
+ * the common call starts no interpreter -- the session checkout's Python runs `-m <module> --admit` with the hook
+ * payload on stdin. Exit 1 with text refuses with that text, verbatim; anything else admits: no interpreter, no kit,
+ * a crash or a timeout is nobody's refusal, as the hook this replaced was (the commit-time check stands behind it).
+ */
+function askedRefusal(module, sessionRoot) {
+  let python;
+  try {
+    python = venvPython(sessionRoot);
+  } catch {
+    return ''; // no resolver: nobody to ask
+  }
+  if (!python) return '';
+  const done = spawnSync(python, ['-m', module, '--admit'], {
+    input: JSON.stringify(input),
+    encoding: 'utf8',
+    timeout: 15000,
+    windowsHide: true,
+  });
+  const said = String(done.stdout || '').trim();
+  return done.status === 1 ? said : '';
 }
 
 /* ================================ A ROW THAT STILL ADMITS A FAMILY SIBLING CLONE ================================
@@ -589,6 +645,66 @@ function familySiblingClone(cmd, cwd) {
   }
 }
 
+/* ================================ A GREP WHOSE OPERANDS ARE FILES WALKS NOTHING ================================
+ *
+ * `admits: 'file-operands'` (RECURSIVE-GREP): `-r` names a WALK only when an operand is a directory, or when none is
+ * given (grep then walks the cwd). Measured 2026-11-16: `grep -rn x src/a.py` was hinted though it reads one file.
+ * The operands are read off the firing segment's argv, in the directory that segment acts in.
+ */
+const GREP = /^(?:.*[/\\])?[ef]?grep(?:\.exe)?$/i;
+const GREP_VALUED_SHORT = 'efmABCdD';
+const GREP_VALUED_LONG =
+  /^--(?:regexp|file|max-count|after-context|before-context|context|include|exclude|exclude-dir|exclude-from|label|binary-files|devices|directories)$/;
+
+/** The words the segment `rule` fires on would run, quotes dropped; null when it fires on none. */
+function firingWords(rule, cmd) {
+  let at;
+  try {
+    at = new RegExp(`^(?:${rule.pattern})`);
+  } catch {
+    return null;
+  }
+  const firing = segments(splitHeredocs(cmd).rest)
+    .flatMap((segment) => commandPositions(segment))
+    .find((text) => at.test(text));
+  return firing ? (firing.match(/"[^"\n]*"|'[^'\n]*'|\S+/g) || []).map((w) => w.replace(/^["']|["']$/g, '')) : null;
+}
+
+function fileOperands(rule, cmd, cwd) {
+  const words = cwd && firingWords(rule, cmd);
+  if (!words) return false;
+  let patternGiven = false;
+  const positional = [];
+  for (let i = words.findIndex((w) => GREP.test(w)) + 1; i > 0 && i < words.length; i += 1) {
+    const w = words[i];
+    if (w === '--') {
+      positional.push(...words.slice(i + 1));
+      break;
+    }
+    if (/^--(?:regexp|file)=/.test(w)) patternGiven = true;
+    else if (GREP_VALUED_LONG.test(w)) {
+      patternGiven = patternGiven || w === '--regexp' || w === '--file';
+      i += 1;
+    } else if (/^-[^-]/.test(w)) {
+      const valued = [...w.slice(1)].findIndex((c) => GREP_VALUED_SHORT.includes(c));
+      if (valued >= 0 && 'ef'.includes(w[valued + 1])) patternGiven = true;
+      if (valued >= 0 && valued + 2 === w.length) i += 1; // the value is the next word
+    } else if (!w.startsWith('--')) positional.push(w);
+  }
+  const operands = patternGiven ? positional : positional.slice(1);
+  const dir = ruleTarget(rule, cmd, cwd);
+  return (
+    operands.length > 0 &&
+    operands.every((operand) => {
+      try {
+        return fs.statSync(path.resolve(dir, hostPath(operand))).isFile();
+      } catch {
+        return false;
+      }
+    })
+  );
+}
+
 /* A refusal is a WALL (WALLS-ARE-RECORDED, dev_lab.dev.walls): one metrics line and one ledger line, appended by the
  * ONE writer in a DETACHED interpreter, so the refusal the agent sees waits for nothing. No interpreter, no line. The
  * command never leaves this process: only a sha256 prefix of it does. A reason names a door when a line beyond its
@@ -615,7 +731,12 @@ function logRefusal(name, where, reason) {
 /** Does `rule` fire on any executed text? */
 function fires(rule, texts, cmd) {
   // A 'line' rule names a shape that spans segments (a code piped into a command), so it reads the whole line.
-  if (rule.matches === 'line') return new RegExp(rule.pattern).test(cmd);
+  // Never a body a sink consumes (2026-11-16: prose naming a path was refused): the shell text and executed bodies.
+  if (rule.matches === 'line') {
+    const at = new RegExp(rule.pattern);
+    const { rest, executed } = splitHeredocs(cmd);
+    return at.test(rest) || executed.some((body) => at.test(body));
+  }
   const argument = rule.matches === 'argument';
   // A 'command' rule anchors at the start of a segment, and at the start of a LINE inside
   // interpreter code. An 'argument' rule names an option, so it is searched within the text.
@@ -654,7 +775,12 @@ for (const rule of rules) {
     continue; // one malformed rule never blocks the session
   }
   if (hit && rule.admits === 'family-sibling-clone' && familySiblingClone(cmd, input.cwd)) continue;
+  if (hit && rule.admits === 'file-operands' && fileOperands(rule, cmd, input.cwd)) continue;
   let liveReason = '';
+  if (hit && rule.asks) {
+    liveReason = askedRefusal(rule.asks, sessionRoot);
+    hit = liveReason !== '';
+  }
   // A 'background' row binds only on a Bash call the agent runs in the background (BACKGROUND-SHELL-IS-BOUNDED),
   // and there the session's interpreter judges it (a longer life needs the USER's grant); the pattern only without one.
   if (rule.when === 'background') {

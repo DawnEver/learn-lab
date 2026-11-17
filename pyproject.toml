@@ -129,3 +129,8 @@ judge_app = 5619495
 # The bundle prepare the judge reads, on THIS forge (the base places it on Gitea unless a repo names GitHub).
 [tool.dev_lab.ci."review-prepare.yml"]
 forge = "github"
+
+# D42 (2026-11-17) adoption ledger, read by dev_lab.dev.famtests.treechecks: findings not yet fixed; shrink-only (a fixed one reds until deleted).
+# The verify remedy is relative because allow_adoption derives the allow entry from it; a {python} slot needs that derivation first.
+[tool.dev_lab.remedypaths]
+declared = ["BARE-TEST-INVOCATION", "PUSH-NO-VERIFY"]

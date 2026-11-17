@@ -25,7 +25,13 @@ __all__ = ['FittedDynamics', 'NeuralODE', 'rk4']
 
 
 def rk4(rate: Callable[[torch.Tensor], torch.Tensor], x0: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-    """Classic RK4 of autonomous ``dx/dt = rate(x)`` from ``x0 (n, d)`` over the times ``t (T,)``: ``(n, T, d)``."""
+    """Classic RK4 of autonomous ``dx/dt = rate(x)`` from ``x0 (n, d)`` over the times ``t (T,)``: ``(n, T, d)``.
+
+    The differentiable TORCH twin of numerics-lab's ``time_integrators``: training a neural ODE back-propagates
+    through every stage of the march, which a numpy integrator cannot carry, and the fit needs nothing more than
+    fixed steps at the sample times (no error control, events or implicit stages). Integrating a known rate is
+    numerics-lab's.
+    """
     states = [x0]
     for dt in torch.diff(t):
         x = states[-1]

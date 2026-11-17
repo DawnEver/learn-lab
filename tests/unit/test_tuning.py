@@ -118,7 +118,7 @@ def test_a_space_is_a_frozen_mapping_that_says_what_it_holds():
 
 #: Families with nothing to search: every setting is fitted, is physics the caller pins, or is a numerical
 #: tolerance of the fit (the interpolant's gradient estimate) that moves no score a search should chase.
-UNTUNED = {'clough_tocher', 'power_law'}
+UNTUNED = {'clough_tocher', 'law_residual', 'power_law'}
 
 
 def test_every_response_family_declares_a_space_its_constructor_accepts():

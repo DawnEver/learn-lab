@@ -42,7 +42,7 @@ from learn_lab.deep.operator import FNO, GraphOperator, TransformerOperator, Tra
 from learn_lab.deep.runtime import Runtime
 from learn_lab.deep.surrogate import DeepEnsemble
 from learn_lab.errors import refuse
-from learn_lab.representation import PointGraph
+from learn_lab.point_graph import PointGraph
 
 try:  # the NPU leg only: the [openvino] extra
     import openvino as ov

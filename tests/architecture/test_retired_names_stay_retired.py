@@ -20,6 +20,14 @@ RETIRED: dict[str, str] = {
     # 2026-11-08, user ruling: learn-lab states what is tuned; optimi-lab owns the search.
     'tuning import tune': 'tuning import objective (an Objective for optimi-lab to minimise)',
     'Trial(': 'Evaluation (one recorded Objective call)',
+    # 2026-11-17, the domain boundary: learn-lab is generic; a loss law belongs to its domain, a run analysis to optimi-lab.
+    'loss_law': 'LawResidual (any law as the mean, a learned residual); the loss law itself is its domain library',
+    'TEXTBOOK_EXPONENTS': 'the exponent table of the domain library that states the law',
+    'learn_lab.generations': 'optimi_lab.analysis.generations',
+    'learn_lab.representation': 'learn_lab.point_graph',
+    # 2026-11-17: quadrature rules are numerics-lab's; learn-lab converts them with Runtime.tensor.
+    'physics import gauss_legendre': 'numerics_lab.quadrature.gauss_legendre_box',
+    'simplex_rule(': 'numerics_lab.quadrature.simplex_rule (numpy), then Runtime.tensor',
 }
 
 

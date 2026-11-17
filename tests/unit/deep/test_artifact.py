@@ -28,7 +28,7 @@ from learn_lab.deep.preconditioner import LearnedPreconditioner
 from learn_lab.deep.runtime import Runtime
 from learn_lab.deep.surrogate import DeepEnsemble
 from learn_lab.errors import Refused
-from learn_lab.representation import mesh_graph
+from learn_lab.point_graph import mesh_graph
 
 from ._poisson import Poisson
 

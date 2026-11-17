@@ -12,8 +12,8 @@ import pytest
 from learn_lab.deep.fit import Checkpoint
 from learn_lab.deep.registry import DEEP
 from learn_lab.errors import Refused
+from learn_lab.point_graph import intervals, mesh_graph
 from learn_lab.registry import family
-from learn_lab.representation import intervals, mesh_graph
 from learn_lab.tuning import objective
 
 RNG = np.random.default_rng(0)

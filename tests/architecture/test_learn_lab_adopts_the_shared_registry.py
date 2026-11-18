@@ -35,6 +35,7 @@ _MECHANISMS: Final = {
     'SESSION-HISTORY-ONLY-GROWS': (_HOOKS,),
     'INTEGRATION-IS-MERGES-ONLY': (_HOOKS,),
     'ORIGIN-HOLDS-ONLY-DECLARED-BRANCHES': (_HOOKS,),  # the same `session-branch` pre-push row
+    'PUSHED-HEAD-CARRIES-ITS-TASK': (_HOOKS,),  # the same `session-branch` pre-push row (adopted 2026-11-18)
     'LATEST-DEPENDENCIES': (_HOOKS,),
     'BASE-HOLDS-THE-MILESTONE': (_HOOKS,),
     'VERSION-TAG-NEEDS-APPROVAL': (_HOOKS,),
@@ -79,6 +80,11 @@ _MECHANISMS: Final = {
             'RECURSIVE-DELETE',
             'PUSHED-HEAD-IS-WATCHED',
             'SESSION-HEARS-ITS-PRS',  # dev-lab #438: the agent guard's Stop gate and PR record.
+            # Adopted 2026-11-18 with the {python} relock: the guard now ships these rows (pinned in that
+            # test's _SHIPPED), and its rendered wiring refuses a hook row over the five-second budget.
+            'TRACKED-CITES-NO-EPHEMERAL',
+            'HEAVY-IS-THE-MAIN-SESSIONS',
+            'HOOK-UNDER-FIVE-SECONDS',
         ),
         (TestPath('tests/architecture/test_the_agent_guard_is_live.py'),),
     ),
@@ -109,7 +115,6 @@ _ABSENT: Final = frozenset({
     'DOCS-SPLIT', 'MEMORY-SHAPE', 'INJECTED-DOC-WIDTH-CEILING',
     # Code placement and scratch: one src/ and one tests/ tree, no scratch.
     'CODE-IN-CODE-ROOTS', 'SCRATCH-IS-NEVER-COMMITTED', 'STRAY-FILE-REFUSED', 'SPLIT-BY-CONCEPT',
-    'TRACKED-CITES-NO-EPHEMERAL',
     # Meta-rules about guards: carried by the family's shared bodies.
     'DECLARATION-LIES', 'PLANTED-CONTROL', 'FLOOR-ON-EVERY-SCAN', 'ESCAPE-HATCH-CEILING', 'RATCHET-TWO-SIDES',
     'NAMED-SETS-NOT-COUNTS', 'XFAIL-NOT-SKIP', 'MODULE-SIZE-ALARM',

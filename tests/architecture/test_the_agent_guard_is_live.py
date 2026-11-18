@@ -19,6 +19,7 @@ from deny_rules import ADOPTION  # noqa: E402
 
 #: THE FLOOR, BY NAME: the rules learn-lab ships (adopted at founding, 2026-11-07).
 _SHIPPED: Final = frozenset({
+    'BACKGROUND-SHELL-IS-BOUNDED',
     'BARE-INTERPRETER',
     'BARE-PYTHON',
     'BARE-TEST-INVOCATION',

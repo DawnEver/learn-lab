@@ -7,8 +7,7 @@ import pytest
 import torch
 
 from learn_lab.deep.fit import Schedule
-from learn_lab.deep.physics import Energy, PhysicsInformedField, Ritz, gauss_legendre
-from learn_lab.deep.runtime import Runtime
+from learn_lab.deep.physics import Energy, PhysicsInformedField, Ritz
 from learn_lab.errors import Refused
 
 from ._jump import Jump, truth
@@ -41,19 +40,6 @@ def test_gauss_quadrature_lets_lbfgs_polish_the_true_energy_where_monte_carlo_ov
     # planted control: the same points, schedule and network, only the rule differs -- the polish fits the draw
     assert mc_polished > 5 * gauss, report
     assert mc_adam > 5 * gauss, report
-
-
-def test_gauss_legendre_integrates_polynomials_to_its_order_exactly():
-    rt = Runtime()
-    x, w = gauss_legendre([0.0, 1.0], [2.0, 4.0], 3, rt, cells=2)
-    assert x.shape == (36, 2) and w.shape == (36,)
-    p = x[:, 0] ** 5 * x[:, 1] ** 5  # degree 5 per coordinate: exact for order 3
-    exact = (2.0**6 / 6) * ((4.0**6 - 1.0) / 6)
-    assert float((w * p).sum()) == pytest.approx(exact, rel=1e-12, abs=1e-9)
-    assert float(w.sum()) == pytest.approx(6.0, rel=1e-12, abs=1e-12)
-    # control: degree 6 in x0 is beyond order 3 on one cell, so the same rule is NOT exact there
-    y, v = gauss_legendre([0.0], [2.0], 3, rt)
-    assert abs(float((v * y[:, 0] ** 6).sum()) - 2.0**7 / 7) > 1e-3
 
 
 def test_an_energy_takes_a_measure_or_weights_never_both_nor_neither():

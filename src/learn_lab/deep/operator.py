@@ -19,8 +19,8 @@
 - :class:`TransformerOperator` -- self-attention over irregular points.
 - :class:`Transolver` -- Physics-Attention: points grouped into learned slices, attention among the slices;
   cost linear in the points, any point set (Wu et al., ICML 2024; Transolver++ switches).
-- :class:`GraphOperator` -- kernel-integral message passing over a :class:`~learn_lab.representation.PointGraph`
-  (mesh nodes, see :func:`~learn_lab.representation.mesh_graph`); discretisation-invariant: fit on one point
+- :class:`GraphOperator` -- kernel-integral message passing over a :class:`~learn_lab.point_graph.PointGraph`
+  (mesh nodes, see :func:`~learn_lab.point_graph.mesh_graph`); discretisation-invariant: fit on one point
   set, evaluate on another.
 """
 
@@ -40,7 +40,7 @@ from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.deep.standardise import Standardiser
 from learn_lab.errors import refuse, require_finite
-from learn_lab.representation import PointGraph
+from learn_lab.point_graph import PointGraph
 from learn_lab.validity import BoxEnvelope, ChannelEnvelope, channel_entries
 
 __all__ = [
@@ -881,7 +881,7 @@ class _GraphOperatorNet(nn.Module):
 
 @dataclass(frozen=True, slots=True)
 class GraphOperator:
-    """A graph neural operator: kernel-integral layers over a :class:`~learn_lab.representation.PointGraph`.
+    """A graph neural operator: kernel-integral layers over a :class:`~learn_lab.point_graph.PointGraph`.
 
     Each layer is ``h_i <- W h_i + sum_j weight_ij K(x_i, x_j) h_j`` with ``K`` a ``width x width`` matrix from
     an MLP of the two (box-normalised) positions and their offset; the sum is the graph's quadrature of the

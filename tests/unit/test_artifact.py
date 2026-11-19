@@ -26,7 +26,7 @@ from learn_lab.models.response import (
     GaussianProcess,
     GradientEnhancedKriging,
     Lasso,
-    LossLawResidual,
+    LawResidual,
     MultilayerPerceptron,
     MultiOutputKriging,
     NearestNeighbours,
@@ -49,8 +49,8 @@ IDENTITY = 'sha256:planted-training-data'
 CASES = {
     'polynomial': (Polynomial(degree=3, penalty=Lasso(1e-4)), lambda m: m.fit(X, Y)),
     'power_law': (PowerLaw(fixed=((None, 1.0), (1.0, None))), lambda m: m.fit(X, Y)),
-    'loss_law_residual': (
-        LossLawResidual(inputs=('frequency', 'flux'), terms=('hysteresis', 'excess'), base=GaussianProcess(restarts=1)),
+    'law_residual': (
+        LawResidual(law=PowerLaw(fixed=((1.0, 2.0), (1.5, None))), base=GaussianProcess(restarts=1)),
         lambda m: m.fit(X, np.exp(X @ [[1.0, 1.5], [2.0, 1.5]])),
     ),
     'radial_basis': (RadialBasis(), lambda m: m.fit(X, Y)),

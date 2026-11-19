@@ -13,8 +13,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import torch
+from numerics_lab.quadrature import gauss_legendre_box
 
-from learn_lab.deep.physics import Energy, Term, derivative, gauss_legendre
+from learn_lab.deep.physics import Energy, Term, derivative
 from learn_lab.validity import BoxEnvelope
 
 INTERFACE = 0.5
@@ -35,6 +36,12 @@ def truth(x: np.ndarray) -> np.ndarray:
     a, c, d = _coefficients()
     x = x[:, 0]
     return np.where(x < INTERFACE, -SOURCE * x**2 / (2 * K_LEFT) + a * x, -SOURCE * x**2 / (2 * K_RIGHT) + c * x + d)
+
+
+def _rule(runtime, lower, upper, order, *, cells):
+    """The box's Gauss-Legendre rule as the runtime's tensors."""
+    points, weights = gauss_legendre_box(lower, upper, order, cells=cells)
+    return runtime.tensor(points), runtime.tensor(weights)
 
 
 @dataclass(frozen=True)
@@ -67,8 +74,8 @@ class Jump:
         }
         if self.quadrature == 'gauss':
             cells = self.points // self.order
-            left, wl = gauss_legendre([0.0], [INTERFACE], self.order, runtime, cells=cells)
-            right, wr = gauss_legendre([INTERFACE], [1.0], self.order, runtime, cells=cells)
+            left, wl = _rule(runtime, [0.0], [INTERFACE], self.order, cells=cells)
+            right, wr = _rule(runtime, [INTERFACE], [1.0], self.order, cells=cells)
             return {**fixed, 'left': left, 'right': right, 'w_left': wl, 'w_right': wr}
         r = torch.rand(self.points, 1, generator=runtime.generator(), device=runtime.torch_device).to(
             runtime.torch_dtype

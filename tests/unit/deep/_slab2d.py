@@ -13,8 +13,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import torch
+from numerics_lab.quadrature import gauss_legendre_box
 
-from learn_lab.deep.physics import Energy, Term, derivative, gauss_legendre
+from learn_lab.deep.physics import Energy, Term, derivative
 from learn_lab.validity import BoxEnvelope
 
 from . import _jump
@@ -32,6 +33,12 @@ def _profile(x: torch.Tensor) -> torch.Tensor:
 
 def truth(x: np.ndarray) -> np.ndarray:
     return _jump.truth(x[:, :1]) * np.sin(np.pi * x[:, 1])
+
+
+def _rule(runtime, lower, upper, order, *, cells):
+    """The box's Gauss-Legendre rule as the runtime's tensors."""
+    points, weights = gauss_legendre_box(lower, upper, order, cells=cells)
+    return runtime.tensor(points), runtime.tensor(weights)
 
 
 @dataclass(frozen=True)
@@ -59,9 +66,9 @@ class Slab2D:
 
     def collocation(self, runtime):
         o, c = self.order, self.cells
-        left, wl = gauss_legendre([0.0, 0.0], [INTERFACE, 1.0], o, runtime, cells=c)
-        right, wr = gauss_legendre([INTERFACE, 0.0], [1.0, 1.0], o, runtime, cells=c)
-        line = gauss_legendre([0.0], [1.0], o, runtime, cells=2 * c)[0][:, 0]
+        left, wl = _rule(runtime, [0.0, 0.0], [INTERFACE, 1.0], o, cells=c)
+        right, wr = _rule(runtime, [INTERFACE, 0.0], [1.0, 1.0], o, cells=c)
+        line = _rule(runtime, [0.0], [1.0], o, cells=2 * c)[0][:, 0]
 
         def at(fixed, axis):
             p = torch.full((line.shape[0], 2), fixed, dtype=line.dtype, device=line.device)

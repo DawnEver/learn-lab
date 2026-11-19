@@ -7,7 +7,7 @@ and the latent variance ``(n, k)`` and mean gradient ``(n, k, d)`` when asked fo
 * response surfaces -- :class:`Polynomial` (+ :class:`Ridge` / :class:`Lasso`), :class:`RadialBasis`,
   :class:`ChaosExpansion`, :class:`CloughTocher` (a C1 interpolant inside its nodes' hull),
   :class:`PowerLaw` (a scaling law, fitted in log space),
-  :class:`LossLawResidual` (a loss scaling law as the mean, a learned residual on top);
+  :class:`LawResidual` (any law as the mean, a learned residual on top);
 * Kriging -- :class:`GaussianProcess` (kernels in :mod:`~learn_lab.models.response.kernel`, maximum likelihood,
   closed-form leave-one-out), :class:`GradientEnhancedKriging`, :class:`MultiOutputKriging` (ICM),
   :class:`CoKriging` (AR1 multi-fidelity);
@@ -28,7 +28,7 @@ from learn_lab.models.response.ensemble import WEIGHTINGS, Ensemble, FittedEnsem
 from learn_lab.models.response.gaussian_process import FittedGaussianProcess, GaussianProcess, log_likelihood
 from learn_lab.models.response.gradient_enhanced import FittedGradientEnhanced, GradientEnhancedKriging
 from learn_lab.models.response.kernel import KERNEL_FAMILIES
-from learn_lab.models.response.loss_law import TEXTBOOK_EXPONENTS, FittedLossLawResidual, LossLawResidual
+from learn_lab.models.response.law_residual import FittedLawResidual, LawResidual
 from learn_lab.models.response.multi_output import FittedMultiOutput, MultiOutputKriging
 from learn_lab.models.response.neighbours import NEIGHBOUR_WEIGHTS, FittedNeighbours, NearestNeighbours
 from learn_lab.models.response.neural import ACTIVATIONS, MultilayerPerceptron, Network
@@ -43,7 +43,6 @@ __all__ = [
     'NEIGHBOUR_WEIGHTS',
     'RADIAL_KERNELS',
     'SPLITTERS',
-    'TEXTBOOK_EXPONENTS',
     'WEIGHTINGS',
     'Bagging',
     'ChaosExpansion',
@@ -58,7 +57,7 @@ __all__ = [
     'FittedForest',
     'FittedGaussianProcess',
     'FittedGradientEnhanced',
-    'FittedLossLawResidual',
+    'FittedLawResidual',
     'FittedMultiOutput',
     'FittedNeighbours',
     'FittedPolynomial',
@@ -69,7 +68,7 @@ __all__ = [
     'GaussianProcess',
     'GradientEnhancedKriging',
     'Lasso',
-    'LossLawResidual',
+    'LawResidual',
     'MultiOutputKriging',
     'MultilayerPerceptron',
     'NearestNeighbours',

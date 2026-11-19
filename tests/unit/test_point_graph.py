@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from learn_lab.errors import Refused
-from learn_lab.representation import intervals, mesh_graph
+from learn_lab.point_graph import intervals, mesh_graph
 
 
 def _line(n: int, seed: int) -> np.ndarray:

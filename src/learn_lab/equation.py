@@ -20,6 +20,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
+from numerics_lab.linear.dense import least_squares
 
 from learn_lab.errors import refuse, require_finite
 from learn_lab.validity import BoxEnvelope
@@ -164,13 +165,13 @@ class SparseRegression:
                 f'got {x.shape}, {y.shape}'
             )
         theta = library.evaluate(x)
-        coefficients = np.linalg.lstsq(theta, y, rcond=None)[0]
+        coefficients = least_squares(theta, y)
         for _ in range(self.iterations):
             keep = np.abs(coefficients) >= self.threshold
             refit = np.zeros_like(coefficients)
             for j in range(y.shape[1]):
                 if keep[:, j].any():
-                    refit[keep[:, j], j] = np.linalg.lstsq(theta[:, keep[:, j]], y[:, j], rcond=None)[0]
+                    refit[keep[:, j], j] = least_squares(theta[:, keep[:, j]], y[:, j])
             coefficients, converged = refit, np.array_equal(np.abs(refit) >= self.threshold, keep)
             if converged:
                 break

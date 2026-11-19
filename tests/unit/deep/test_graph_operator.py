@@ -16,7 +16,7 @@ from learn_lab.deep.networks import MLP
 from learn_lab.deep.operator import GraphOperator, GraphSamples
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
-from learn_lab.representation import intervals, mesh_graph
+from learn_lab.point_graph import intervals, mesh_graph
 
 MODES = np.arange(1, 5)
 #: The held-out RMS error bar, in u's unit (rms(u) over the held-out set is ~0.05).

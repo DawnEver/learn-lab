@@ -14,7 +14,7 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.operator import GraphOperator, GraphSamples
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
-from learn_lab.representation import intervals, mesh_graph
+from learn_lab.point_graph import intervals, mesh_graph
 
 MODES = np.arange(1, 4)
 CPU64 = Runtime(device='cpu', dtype='float64')

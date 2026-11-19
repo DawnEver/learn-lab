@@ -19,10 +19,11 @@ from deny_rules import ADOPTION  # noqa: E402
 
 #: THE FLOOR, BY NAME: the rules learn-lab ships (adopted at founding, 2026-11-07).
 _SHIPPED: Final = frozenset({
-    'BACKGROUND-SHELL-IS-BOUNDED',
+    'BACKGROUND-SHELL-IS-BOUNDED',  # gained 2026-11-18 with the {python} relock
     'BARE-INTERPRETER',
     'BARE-PYTHON',
     'BARE-TEST-INVOCATION',
+    'CI-CRON-NEEDS-CONSENT',  # gained 2026-11-18 with the {python} relock
     'COMMIT-HOOKS-RUN',  # shipped with the bc556 kit; actual guard behavior is planted below.
     'CONSENT-CODE-FROM-THE-USER',  # gained 2026-11-07 with dev-lab 83c4f29
     'FORGE-WRITE-VIA-CLI',
@@ -32,6 +33,7 @@ _SHIPPED: Final = frozenset({
     'GIT-RESET',
     'GIT-STAGE-EVERYTHING',
     'GIT-STASH',
+    'HEAVY-IS-THE-MAIN-SESSIONS',  # gained 2026-11-18 with the {python} relock
     'HPC-THROUGH-THE-DOOR',  # gained 2026-11-07 with dev-lab 83c4f29
     'PUSH-FORCE',
     'PUSH-NO-VERIFY',
@@ -42,6 +44,7 @@ _SHIPPED: Final = frozenset({
     'REPORTS-LIVE-IN-MEMORY',
     'STATUS-VIA-DOORS',
     'SUBAGENT-NO-PUSH',
+    'TRACKED-CITES-NO-EPHEMERAL',  # gained 2026-11-18 with the {python} relock
     'TREE-HAS-A-LIVE-RUN',
     'WRITES-STAY-IN-THE-TREE',  # gained 2026-11-07 with dev-lab 83c4f29
     'WORKTREE-BASE-IS-EXPLICIT',

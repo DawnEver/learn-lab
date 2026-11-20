@@ -106,8 +106,10 @@ breakglass = ["app:5704921", "role:admin"]  # the ops App (motronics-ops) merges
 [tool.dev_lab.branchset]
 trunk = 'main'
 sessions = ['integrate/main']
-ephemeral = ['pr/*']
+ephemeral = ['pr/*']  # a PR head: deleted with its merge
 prune_merged = true
+max_ahead = 10  # an unlanded branch holding more than 10 commits integration lacks is an alarm
+max_idle_hours = 12  # a branch idle 12 h is pruned when merged, alarmed when not
 
 [tool.dev_lab.doors]
 BARE-TEST-INVOCATION = "<venv python> -m dev_lab.dev.verify -- <paths>  (the measure door; a full run is the forge producer's; a hand-written pytest line has none)"
@@ -123,7 +125,6 @@ adoption = "scripts/deny_rules.py"
 # Who reviews this repo's PRs: the family's isolated judge host (user ruling 2026-11-10), gated on GitHub by the
 # family App's review/judge check run. Keys and defaults: dev_lab.dev.forgereview_declared.
 [tool.dev_lab.review]
-where = "judge"
 judge_app = 5619495
 
 # The bundle prepare the judge reads, on THIS forge (the base places it on Gitea unless a repo names GitHub).

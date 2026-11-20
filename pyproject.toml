@@ -108,8 +108,8 @@ trunk = 'main'
 sessions = ['integrate/main']
 ephemeral = ['pr/*']  # a PR head: deleted with its merge
 prune_merged = true
-max_ahead = 10  # an unlanded branch holding more than 10 commits integration lacks is an alarm
-max_idle_hours = 12  # a branch idle 12 h is pruned when merged, alarmed when not
+max_ahead = 30  # an unlanded branch holding more than 30 commits integration lacks is an alarm
+max_idle_hours = 24  # a branch idle 24 h is pruned when merged, alarmed when not
 
 [tool.dev_lab.doors]
 BARE-TEST-INVOCATION = "<venv python> -m dev_lab.dev.verify -- <paths>  (the measure door; a full run is the forge producer's; a hand-written pytest line has none)"

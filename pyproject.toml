@@ -131,7 +131,3 @@ adoption = "scripts/deny_rules.py"
 # family App's review/judge check run. Keys and defaults: dev_lab.dev.forgereview_declared.
 [tool.dev_lab.review]
 judge_app = 5619495
-
-# The bundle prepare the judge reads, on THIS forge (the base places it on Gitea unless a repo names GitHub).
-[tool.dev_lab.ci."review-prepare.yml"]
-forge = "github"

@@ -82,6 +82,10 @@ allowed_skips = ["tests/unit/deep/test_artifact.py::test_a_fit_saved_on_cuda_loa
 [tool.lab_commons.tests]
 produce = ["-m", "dev_lab.dev.verify", "--part", "{part}"]
 
+[tool.dev_lab.dep]
+extras = []  # torch and openvino are heavy: installed only where a test or job needs them
+needs = { torch = "torch", openvino = "openvino" }
+
 # The family branch flow: integrate/main coordinates; main moves only by `integrate promote` (fast-forward)
 # on a full forge PASS. Past c623e25 (integrate/main created at the founding commits) every commit is a forge merge.
 [tool.dev_lab.integrator]

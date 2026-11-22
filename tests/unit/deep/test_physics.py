@@ -8,6 +8,8 @@ from learn_lab.errors import Refused
 from ._poisson import Poisson
 from ._two_slab import EveryColumnEverywhere, TwoSlab, slope, truth
 
+pytestmark = pytest.mark.torch
+
 FAST = Schedule(adam_steps=1500, learning_rate=2e-3, lbfgs_steps=300)
 
 

@@ -496,6 +496,8 @@ openvino = [
     { name = "nncf" },
     { name = "onnx" },
     { name = "openvino" },
+    { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' and sys_platform != 'win32'" },
 ]
 torch = [
     { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -513,6 +515,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "learn-lab", extras = ["torch"], marker = "extra == 'openvino'" },
     { name = "nncf", marker = "extra == 'openvino'" },
     { name = "numerics-lab", git = "https://github.com/DawnEver/numerics-lab.git" },
     { name = "numpy" },

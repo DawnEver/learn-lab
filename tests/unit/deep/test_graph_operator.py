@@ -18,6 +18,8 @@ from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 from learn_lab.point_graph import intervals, mesh_graph
 
+pytestmark = pytest.mark.torch
+
 MODES = np.arange(1, 5)
 #: The held-out RMS error bar, in u's unit (rms(u) over the held-out set is ~0.05).
 BAR = 2.5e-3

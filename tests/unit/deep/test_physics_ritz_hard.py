@@ -16,6 +16,8 @@ from learn_lab.errors import Refused
 
 from . import _jump, _slab2d
 
+pytestmark = pytest.mark.torch
+
 SCHEDULE = Schedule(adam_steps=3000, learning_rate=1e-3, lbfgs_steps=500)
 PENALTY = 1e3  # the penalised control at its best measured penalty (test_physics_ritz_quadrature.py)
 #: max |u - truth| in the unit of u (peak ~0.6). Measured, seed 0, Gauss + L-BFGS, same net per problem:

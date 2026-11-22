@@ -26,7 +26,8 @@ dependencies = [
 torch = ["torch>=2.7"]
 # Inference export (learn_lab.deep.export): ONNX through torch, post-training quantization and the CPU/iGPU/NPU
 # runtime through OpenVINO + NNCF. Inference only; training stays on torch.
-openvino = ["onnx", "openvino", "nncf"]
+# Export runs through torch, so the extra carries it: the openvino need is served whole by this one extra.
+openvino = ["learn-lab[torch]", "onnx", "openvino", "nncf"]
 
 [dependency-groups]
 dev = [
@@ -58,16 +59,23 @@ testpaths = ["tests"]
 addopts = "--import-mode=importlib -ra"
 pythonpath = ["."]
 xfail_strict = true
+markers = [
+    "torch: needs the [torch] extra (imports torch or learn_lab.deep); its part is tests/torch",
+    "openvino: needs the [openvino] extra (onnx, openvino, nncf and torch); its part is tests/openvino",
+]
 
 [tool.lab_commons.hpc]
 # PIN + FRESHNESS (user ruling 2026-10-17): the venv is exactly the committed lock, and the lock keys it.
-install = 'uv sync --frozen --group dev --extra torch --extra openvino'
+# The install is derived per need-set from [tool.dev_lab.dep] (lab_commons.extras.sync_command).
 dependency_inputs = ['pyproject.toml', 'uv.lock']
 source_roots = ['src']
 collect = 'tests'
 
 [tool.dev_lab.parts]
 output = "output/logs"
+# torch and openvino are extras no hosted runner has until its part's job syncs them: each part runs in its own
+# hosted job, on every event, so the deep tests stay on the GitHub gate (jobparts.runner_for alone would drop them).
+hosted = { torch = { setup = "uv sync --frozen --group dev --extra torch" }, openvino = { setup = "uv sync --frozen --group dev --extra openvino" } }
 
 # One verify worker's measured peak: a CUDA torch process commits ~3.3 GB (test_graph, 2026-11-08), so the
 # 1 GB unmeasured floor got every deep test killed 0xC0000017 (out of memory) by the box.
@@ -80,12 +88,15 @@ worker_mem_gb = 3.5
 allowed_skips = ["tests/unit/deep/test_artifact.py::test_a_fit_saved_on_cuda_loads_on_cuda_exactly_and_on_the_cpu_within_float32"]
 
 [tool.lab_commons.tests]
+# A marker naming what an environment may lack; a part is its need-set. torch and openvino are extras, mapped
+# under [tool.dev_lab.dep] needs; tests/architecture/test_every_test_declares_its_needs.py keeps every importer marked.
+resources = ["openvino", "torch"]
 produce = ["-m", "dev_lab.dev.verify", "--part", "{part}"]
 
 [tool.dev_lab.dep]
-# Every environment carries both: 21 test files import torch and the export tests importorskip openvino, and no
-# test declares a resource marker a need could map to. Moving either behind `needs` first needs those markers.
-extras = ["torch", "openvino"]
+# No extra by default (user ruling 2026-11-21): torch and openvino install only where a part's need asks for them.
+extras = []
+needs = { torch = "torch", openvino = "openvino" }
 
 # The family branch flow: integrate/main coordinates; main moves only by `integrate promote` (fast-forward)
 # on a full forge PASS. Past c623e25 (integrate/main created at the founding commits) every commit is a forge merge.

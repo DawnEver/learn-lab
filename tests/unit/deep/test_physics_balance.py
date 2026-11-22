@@ -11,6 +11,8 @@ from learn_lab.errors import Refused
 
 from ._poisson import Poisson
 
+pytestmark = pytest.mark.torch
+
 SHORT = Schedule(adam_steps=300, learning_rate=2e-3)
 ANNEAL = Balance(rule='gradient_norm', reference='pde', alpha=0.1, every=10)
 EDGES = np.array([[0.0], [1.0]])

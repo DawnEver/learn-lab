@@ -23,11 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
-import pytest
-
-pytest.importorskip('openvino', reason='the benchmark needs the [openvino] extra')
-
 import openvino as ov
+import pytest
 
 from learn_lab.deep import export
 from learn_lab.deep.field import FieldModel
@@ -35,6 +32,8 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.runtime import Runtime
 
 from . import _openvino
+
+pytestmark = pytest.mark.openvino
 
 BATCH, GRID, REPEATS = 16, 64, 30
 #: A cell whose max error exceeds this fraction of the output scale is not answering as the model does.

@@ -7,14 +7,11 @@ import copy
 import json
 from dataclasses import replace
 
+import nncf
 import numpy as np
+import openvino as ov
 import pytest
 import torch
-
-pytest.importorskip('openvino', reason='export needs the [openvino] extra')
-
-import nncf
-import openvino as ov
 
 from learn_lab.deep import export
 from learn_lab.deep.field import FieldModel
@@ -25,6 +22,8 @@ from learn_lab.equivalence import Statistic, Tolerance, equivalence
 from learn_lab.errors import Refused
 
 from . import _openvino
+
+pytestmark = pytest.mark.openvino
 
 CPU32 = Runtime(device='cpu', dtype='float32')
 BATCH, GRID = 8, 16

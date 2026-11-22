@@ -12,6 +12,8 @@ from learn_lab.errors import Refused
 
 from ._jump import Jump, truth
 
+pytestmark = pytest.mark.torch
+
 ADAM = Schedule(adam_steps=3000, learning_rate=1e-3, lbfgs_steps=0)
 POLISHED = Schedule(adam_steps=3000, learning_rate=1e-3, lbfgs_steps=500)
 PENALTY = 1e3  # measured, Gauss + L-BFGS: 2.11e-3 at 1e3, 4.30e-3 at 1e4 (stiffer), 6.50e-3 at 1e2 (ends slack)

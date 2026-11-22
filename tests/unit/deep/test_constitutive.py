@@ -8,6 +8,8 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 
 def _law(b):
     """A saturating H(B) shape (A/m vs T): linear plus an exponential knee, odd and monotone."""

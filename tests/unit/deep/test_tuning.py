@@ -16,6 +16,8 @@ from learn_lab.point_graph import intervals, mesh_graph
 from learn_lab.registry import family
 from learn_lab.tuning import objective
 
+pytestmark = pytest.mark.torch
+
 RNG = np.random.default_rng(0)
 FAST = {'steps': 2, 'learning_rate': 1e-2}
 

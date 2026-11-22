@@ -12,6 +12,8 @@ from learn_lab.deep.runtime import Runtime
 
 from ._poisson import Poisson
 
+pytestmark = pytest.mark.torch
+
 SHORT = Schedule(adam_steps=60, learning_rate=1e-2, lbfgs_steps=2)
 CPU64 = Runtime(device='cpu', dtype='float64')
 

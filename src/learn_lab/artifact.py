@@ -86,6 +86,18 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
     'chaos_expansion': (f'{_RESPONSE}chaos:ChaosExpansion', f'{_RESPONSE}chaos:FittedChaos'),
     'ensemble': (f'{_RESPONSE}ensemble:Ensemble', f'{_RESPONSE}ensemble:FittedEnsemble'),
     'bagging': (f'{_RESPONSE}bagging:Bagging', f'{_RESPONSE}bagging:FittedBagging'),
+    'nearest_neighbours_classifier': (
+        'learn_lab.models.classifier:NearestNeighboursClassifier',
+        'learn_lab.models.classifier:FittedNeighboursClassifier',
+    ),
+    'classification_tree': (
+        'learn_lab.models.classifier:ClassificationTree',
+        'learn_lab.models.classifier:FittedClassificationTree',
+    ),
+    'logistic_regression': (
+        'learn_lab.models.classifier:LogisticRegression',
+        'learn_lab.models.classifier:FittedLogistic',
+    ),
     'sparse_regression': ('learn_lab.equation:SparseRegression', 'learn_lab.equation:IdentifiedLaw'),
     'deep_ensemble': ('learn_lab.deep.surrogate:DeepEnsemble', 'learn_lab.deep.surrogate:FittedEnsemble'),
     'physics_informed_field': ('learn_lab.deep.physics:PhysicsInformedField', 'learn_lab.deep.physics:FittedField'),
@@ -134,6 +146,11 @@ def _hull(envelope: HullEnvelope, k: int) -> dict:
     return {'inputs': inputs, 'outputs': {'kind': 'vector', 'width': int(k)}}
 
 
+def _classes(envelope: BoxEnvelope, classes: np.ndarray) -> dict:
+    """A classifier's schema: a vector family's inputs, and the classes it tells apart as its output."""
+    return {'inputs': _vector(envelope, 0)['inputs'], 'outputs': {'kind': 'classes', 'classes': classes.tolist()}}
+
+
 #: The input/output schema of each numpy family, read off its fitted state; the deep rows are the codec's.
 _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'polynomial': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
@@ -152,6 +169,9 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'chaos_expansion': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
     'ensemble': lambda f: _schema(family_of(f.members[0]), f.members[0]),
     'bagging': lambda f: _schema(family_of(f.members[0]), f.members[0]),
+    'nearest_neighbours_classifier': lambda f: _classes(f.envelope, f.classes),
+    'classification_tree': lambda f: _classes(f.envelope, f.classes),
+    'logistic_regression': lambda f: _classes(f.envelope, f.classes),
     'sparse_regression': lambda f: {
         'inputs': {'kind': 'state', 'variables': list(f.library.variables)},
         'outputs': {'kind': 'rate', 'targets': list(f.targets)},

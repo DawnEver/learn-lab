@@ -91,7 +91,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --all-extras"
+          "run": "uv sync --frozen --extra torch --extra openvino"
         },
         {
           "name": "Install the normal measurement hooks",
@@ -136,7 +136,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --all-extras"
+          "run": "uv sync --frozen --extra torch --extra openvino"
         },
         {
           "id": "pending",
@@ -160,12 +160,14 @@
     },
     "part": {
       "env": {
-        "GITHUB_TOKEN": "${{ github.token }}"
+        "GITHUB_TOKEN": "${{ github.token }}",
+        "LAB_COMMONS_BOX": "${{ github.workspace }}/../lab-commons/box.sqlite"
       },
       "needs": "parts",
       "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && ((inputs.measurement_paths == '' && inputs.measurement_sha == '') && (needs.parts.outputs.matrix != '')) }}",
       "name": "tests/${{ matrix.part }}",
       "runs-on": "${{ matrix.runs-on }}",
+      "timeout-minutes": 90,
       "steps": [
         {
           "uses": "actions/checkout@v4",
@@ -183,7 +185,12 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --all-extras"
+          "run": "uv sync --frozen --extra torch --extra openvino"
+        },
+        {
+          "name": "Sync the part's extras",
+          "shell": "bash",
+          "run": "uv sync --frozen $(uv run --no-sync python -m dev_lab.dev.depneeds flags --part \"${{ matrix.part }}\")"
         },
         {
           "name": "Produce and post the part",
@@ -236,7 +243,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --all-extras"
+          "run": "uv sync --frozen --extra torch --extra openvino"
         },
         {
           "name": "Post every part no job settled",
@@ -272,7 +279,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --all-extras"
+          "run": "uv sync --frozen --extra torch --extra openvino"
         },
         {
           "name": "tests/security",
@@ -308,7 +315,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --all-extras"
+          "run": "uv sync --frozen --extra torch --extra openvino"
         },
         {
           "name": "head gates",
@@ -353,7 +360,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --all-extras"
+          "run": "uv sync --frozen --extra torch --extra openvino"
         },
         {
           "id": "ready",
@@ -403,7 +410,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --all-extras"
+          "run": "uv sync --frozen --extra torch --extra openvino"
         },
         {
           "name": "Promote main",

@@ -120,7 +120,7 @@ max_idle_hours = 24  # a branch idle 24 h is pruned when merged, alarmed when no
 BARE-TEST-INVOCATION = "<venv python> -m dev_lab.dev.verify -- <paths>  (the measure door; a full run is the forge producer's; a hand-written pytest line has none)"
 PUSH-NO-VERIFY = "push without skipping the hook; no hook runs a test, and the forge produces the part"
 NETWORK-VERB = "<venv python> -m dev_lab.dev.netverb -- <git push|fetch|pull|clone|ls-remote|submodule update ...  or  uv lock|add|remove ...>  (retries 3x, then reports a diagnosis); an environment change is <venv python> -m dev_lab.dev.dep --sync, which retries inside"
-ENV-MUTATION-THROUGH-THE-DOOR = "<any family venv python> -m dev_lab.dev.dep --bootstrap <this checkout> --group dev --extra torch --extra openvino  (run from this checkout)"
+ENV-MUTATION-THROUGH-THE-DOOR = "<any family venv python> -m dev_lab.dev.dep --bootstrap <this checkout>  (run from this checkout; the extras are [tool.dev_lab.dep]'s, and a relock is --lock-upgrade <this checkout>)"
 
 # The family files famfiles renders read their per-repo deltas from this one module.
 [tool.dev_lab.render]
@@ -131,7 +131,3 @@ adoption = "scripts/deny_rules.py"
 # family App's review/judge check run. Keys and defaults: dev_lab.dev.forgereview_declared.
 [tool.dev_lab.review]
 judge_app = 5619495
-
-# The bundle prepare the judge reads, on THIS forge (the base places it on Gitea unless a repo names GitHub).
-[tool.dev_lab.ci."review-prepare.yml"]
-forge = "github"

@@ -26,6 +26,7 @@ _SHIPPED: Final = frozenset({
     'CI-CRON-NEEDS-CONSENT',  # gained 2026-11-18 with the {python} relock
     'COMMIT-HOOKS-RUN',  # shipped with the bc556 kit; actual guard behavior is planted below.
     'CONSENT-CODE-FROM-THE-USER',  # gained 2026-11-07 with dev-lab 83c4f29
+    'FAMILY-REPO-IS-CHECKED-OUT',  # gained 2026-11-22 with the dev-lab e8646709 relock
     'FORGE-WRITE-VIA-CLI',
     'FORGE-WRITE-VIA-GH-API',
     'FORGE-WRITE-VIA-HTTP',
@@ -35,6 +36,8 @@ _SHIPPED: Final = frozenset({
     'GIT-STASH',
     'HEAVY-IS-THE-MAIN-SESSIONS',  # gained 2026-11-18 with the {python} relock
     'HPC-THROUGH-THE-DOOR',  # gained 2026-11-07 with dev-lab 83c4f29
+    'MACHINE-FILE-IS-RENDERED',  # gained 2026-11-22 with the dev-lab e8646709 relock
+    'OUTPUT-HOLDS-NO-CODE',  # gained 2026-11-22 with the dev-lab e8646709 relock
     'PUSH-FORCE',
     'PUSH-NO-VERIFY',
     'PUSH-REMOTE-DELETE',

@@ -2,9 +2,9 @@ version = 1
 revision = 5
 requires-python = ">=3.13, <3.15"
 resolution-markers = [
-    "(python_full_version >= '3.14' and sys_platform == 'linux') or (python_full_version >= '3.14' and sys_platform == 'win32')",
+    "python_full_version >= '3.14' and (sys_platform == 'linux' or sys_platform == 'win32')",
     "python_full_version >= '3.14' and sys_platform != 'linux' and sys_platform != 'win32'",
-    "(python_full_version < '3.14' and sys_platform == 'linux') or (python_full_version < '3.14' and sys_platform == 'win32')",
+    "python_full_version < '3.14' and (sys_platform == 'linux' or sys_platform == 'win32')",
     "python_full_version < '3.14' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 
@@ -284,8 +284,8 @@ nvtx = [
 
 [[package]]
 name = "dev-lab"
-version = "0.0.1.dev4244+ga0949430c"
-source = { git = "https://github.com/DawnEver/dev-lab.git#a0949430cebe465ff25a905b601b8eeb4931413a" }
+version = "0.0.1.dev4440+ge8646709f"
+source = { git = "https://github.com/DawnEver/dev-lab.git#e8646709fce2d7b93874af2c15026c49e680508c" }
 dependencies = [
     { name = "cryptography" },
     { name = "lab-commons", extra = ["io", "paths", "structured", "units"] },
@@ -461,8 +461,8 @@ wheels = [
 
 [[package]]
 name = "lab-commons"
-version = "0.3.1.dev1627+g1392b8e90"
-source = { git = "https://github.com/DawnEver/lab-commons.git#1392b8e90eb844766ce5c6a0f8c21b7a73d4decc" }
+version = "0.3.1.dev1661+g029cb6dc2"
+source = { git = "https://github.com/DawnEver/lab-commons.git#029cb6dc2486915dbb64110b27ecc48053129f30" }
 
 [package.optional-dependencies]
 io = [
@@ -519,7 +519,7 @@ requires-dist = [
     { name = "onnx", marker = "extra == 'openvino'" },
     { name = "openvino", marker = "extra == 'openvino'" },
     { name = "scipy" },
-    { name = "torch", marker = "(sys_platform == 'linux' and extra == 'torch') or (sys_platform == 'win32' and extra == 'torch')", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
+    { name = "torch", marker = "(sys_platform == 'linux' or sys_platform == 'win32') and extra == 'torch'", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
     { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32' and extra == 'torch'", specifier = ">=2.7" },
 ]
 provides-extras = ["torch", "openvino"]
@@ -1520,8 +1520,8 @@ name = "torch"
 version = "2.14.1+cu130"
 source = { registry = "https://download.pytorch.org/whl/cu130" }
 resolution-markers = [
-    "(python_full_version >= '3.14' and sys_platform == 'linux') or (python_full_version >= '3.14' and sys_platform == 'win32')",
-    "(python_full_version < '3.14' and sys_platform == 'linux') or (python_full_version < '3.14' and sys_platform == 'win32')",
+    "python_full_version >= '3.14' and (sys_platform == 'linux' or sys_platform == 'win32')",
+    "python_full_version < '3.14' and (sys_platform == 'linux' or sys_platform == 'win32')",
 ]
 dependencies = [
     { name = "cuda-bindings", marker = "sys_platform != 'win32'" },

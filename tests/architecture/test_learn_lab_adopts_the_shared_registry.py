@@ -62,6 +62,12 @@ _MECHANISMS: Final = {
     'FORGE-DOORS-ARE-CONSENT': (TestPath('pyproject.toml'),),
     'LANDED-BRANCH-CONTINUES': (TestPath('pyproject.toml'),),
     'NO-PUSH-ONTO-A-CLOSED-PR': (TestPath('pyproject.toml'),),
+    # Adopted 2026-11-22 with the dev-lab e8646709 relock: `[tool.dev_lab.dep] extras` is the one declaration; the
+    # rendered workflows sync only it (ciworkflows refuses an `--all-extras` at render) and the render test pins them.
+    'ALL-EXTRAS-REFUSED': (
+        TestPath('pyproject.toml'),
+        TestPath('tests/architecture/test_the_ci_workflow_is_rendered.py'),
+    ),
     # November 2026, the founding month, is the first month this tree holds.
     'MONTHLY-PLANS-CARRIED': (TestPath('tests/architecture/test_every_month_carries_its_plans.py'),),
     # The agent guard ships in every family repo; the rendered
@@ -79,12 +85,16 @@ _MECHANISMS: Final = {
             # wiring (pinned live by the same test) runs `dev_lab.dev.pushwatch` on PostToolUse.
             'RECURSIVE-DELETE',
             'PUSHED-HEAD-IS-WATCHED',
-            'SESSION-HEARS-ITS-PRS',  # dev-lab #438: the agent guard's Stop gate and PR record.
+            # dev-lab #438: the agent guard's wiring delivers a task's forge news; the registry renamed
+            # SESSION-HEARS-ITS-PRS to this (D79, D81), moved here 2026-11-22 with the dev-lab e8646709 relock.
+            'TASK-HEARS-ITS-FORGE-EVENTS',
             # Adopted 2026-11-18 with the {python} relock: the guard now ships these rows (pinned in that
             # test's _SHIPPED), and its rendered wiring refuses a hook row over the five-second budget.
             'TRACKED-CITES-NO-EPHEMERAL',
             'HEAVY-IS-THE-MAIN-SESSIONS',
             'HOOK-UNDER-FIVE-SECONDS',
+            # Adopted 2026-11-22 with the dev-lab e8646709 relock: a shipped deny row (pinned in _SHIPPED).
+            'OUTPUT-HOLDS-NO-CODE',
         ),
         (TestPath('tests/architecture/test_the_agent_guard_is_live.py'),),
     ),
@@ -118,6 +128,9 @@ _ABSENT: Final = frozenset({
     # Meta-rules about guards: carried by the family's shared bodies.
     'DECLARATION-LIES', 'PLANTED-CONTROL', 'FLOOR-ON-EVERY-SCAN', 'ESCAPE-HATCH-CEILING', 'RATCHET-TWO-SIDES',
     'NAMED-SETS-NOT-COUNTS', 'XFAIL-NOT-SKIP', 'MODULE-SIZE-ALARM',
+    # Hosts (gained 2026-11-22 with the dev-lab e8646709 relock): learn-lab deploys no host role, so it runs no
+    # scheduler to restrict and declares no ssh endpoint whose key it could check.
+    'SCHEDULER-ONLY-FOR-SERVING', 'SSH-HOST-KEY-DECLARED',
 })  # fmt: skip
 
 #: The size of the absent set at founding (2026-11-07); lowering it is the only legal edit.

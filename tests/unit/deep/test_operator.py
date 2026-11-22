@@ -8,6 +8,8 @@ from learn_lab.deep.operator import FNO, DeepONet
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 MODES = np.arange(1, 6)
 DEEPONET_BAR = 0.02  # relative L2 over the held-out set, dimensionless
 FNO_BAR = 0.01  # relative L2 at the training resolution, dimensionless

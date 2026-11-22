@@ -5,6 +5,8 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.surrogate import DeepEnsemble
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 
 def _truth(x):
     return np.stack([np.sin(2 * x[:, 0]) + x[:, 1] ** 2], axis=1)

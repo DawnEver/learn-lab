@@ -24,6 +24,8 @@ from learn_lab.point_graph import intervals, mesh_graph
 
 from ._poisson import Poisson
 
+pytestmark = pytest.mark.torch
+
 RT = Runtime(device='cpu', dtype='float64')
 N = 16
 RNG = np.random.default_rng(0)

@@ -8,6 +8,8 @@ from learn_lab.deep.field import FieldModel
 from learn_lab.deep.fit import Schedule
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 N = 16
 BAR = 0.05  # relative L2 over the held-out set, dimensionless
 

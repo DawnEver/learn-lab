@@ -17,6 +17,8 @@ from learn_lab.deep.preconditioner import LearnedPreconditioner
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 RTOL = 1e-8
 #: Mean learned iterations over mean Jacobi iterations on the held-out matrices must be below this.
 REDUCTION = 0.7

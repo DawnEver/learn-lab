@@ -10,6 +10,8 @@ from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 N = 4
 A = np.array([[4.0, -1.0, 0.0, 0.0], [-1.0, 4.0, -1.0, 0.0], [0.0, -1.0, 4.0, -1.0], [0.0, 0.0, -1.0, 4.0]])
 A[0, 3] = 0.5  # unsymmetric, so a VJP that forgot the transpose is wrong too

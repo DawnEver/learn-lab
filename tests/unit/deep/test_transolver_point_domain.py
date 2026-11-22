@@ -10,6 +10,8 @@ from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 from learn_lab.validity import BoxEnvelope, Validity
 
+pytestmark = pytest.mark.torch
+
 
 def _data():
     coords = np.array([[0.2, 0.4], [0.8, 0.4], [0.2, 1.6], [0.8, 1.6]])

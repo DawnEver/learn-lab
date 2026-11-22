@@ -12,6 +12,8 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.hysteresis import PlayHysteresis, dissipation, play
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 R_TRUE = np.linspace(0.0, 0.9, 60)  # input unit
 W_TRUE = np.exp(-(((R_TRUE - 0.3) / 0.2) ** 2))
 W_TRUE *= 0.7 / W_TRUE.sum()

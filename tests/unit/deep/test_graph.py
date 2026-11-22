@@ -7,6 +7,8 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.graph import GraphModel, Graphs
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 BAR = 0.05  # relative L2 over the held-out graphs' nodes, dimensionless
 
 

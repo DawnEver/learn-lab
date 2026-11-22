@@ -9,6 +9,8 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 OMEGA, ZETA = 2.0, 0.1
 BAR = 0.01  # max |x error| over the held-out trajectory, unit of x (its amplitude starts at ~0.6)
 T = np.linspace(0.0, 5.0, 51)

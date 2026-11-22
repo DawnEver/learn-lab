@@ -39,6 +39,8 @@ from learn_lab.deep.operator import Transolver
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 CPU64 = Runtime(device='cpu')
 MODES = 3
 GRID = 11

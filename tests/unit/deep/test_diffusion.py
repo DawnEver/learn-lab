@@ -12,6 +12,8 @@ from learn_lab.deep.fit import Schedule
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 N, A, S = 8, 1.0, 0.3  # grid side; mean amplitude and noise amplitude, T
 MEAN_BAR = 0.06  # T: RMS over the grid of (sample mean - closed-form mean)
 VARIANCE_BAR = 0.3  # relative error of the grid-averaged sample variance, dimensionless

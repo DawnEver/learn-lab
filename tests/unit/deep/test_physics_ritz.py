@@ -10,6 +10,8 @@ from learn_lab.errors import Refused
 
 from ._poisson import Poisson
 
+pytestmark = pytest.mark.torch
+
 #: Adam only, on a quadrature redrawn every 10 steps: an L-BFGS polish on one fixed Monte Carlo draw fits that
 #: draw's quadrature error (measured, 1024 points: 7.5e-2 redrawn then polished, 2.0e-2 never redrawn, 1.1e-2 Adam
 #: only). Deep Ritz's floor sits above the PINN's (2e-3 on this problem): the Monte Carlo integral of the energy

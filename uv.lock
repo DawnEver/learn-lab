@@ -284,8 +284,8 @@ nvtx = [
 
 [[package]]
 name = "dev-lab"
-version = "0.0.1.dev4440+ge8646709f"
-source = { git = "https://github.com/DawnEver/dev-lab.git#e8646709fce2d7b93874af2c15026c49e680508c" }
+version = "0.0.1.dev4499+g48085510d"
+source = { git = "https://github.com/DawnEver/dev-lab.git#48085510df85a645f639cc6c224e31b160fa700e" }
 dependencies = [
     { name = "cryptography" },
     { name = "lab-commons", extra = ["io", "paths", "structured", "units"] },
@@ -756,7 +756,7 @@ wheels = [
 [[package]]
 name = "numerics-lab"
 version = "0.1.0"
-source = { git = "https://github.com/DawnEver/numerics-lab.git#36d7e520bb00ecf394aecc57193e54fe2ed80655" }
+source = { git = "https://github.com/DawnEver/numerics-lab.git#dfdc361e5537df101fe3e6e7b6afb427aa1a0883" }
 dependencies = [
     { name = "numpy" },
     { name = "scipy" },

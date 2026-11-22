@@ -22,9 +22,16 @@
   },
   {
     "name": "SUBAGENT-NO-PUSH",
-    "pattern": "(?:git(?:\\.exe)?(?:\\s+-C\\s+\\S+)*\\s+push\\b|(?:sh\\s+)?\\S*with-retry\\.sh\\s+push\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab.dev\\.netverb\\b[^\\n]*\\spush\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.family\\s+(?:join)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.sshhold\\s+(?:open|run|credential|close)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.forge\\s+(?:pr\\s+create|pr\\s+ready|pr\\s+draft|pr\\s+hold|pr\\s+release|pr\\s+close|pr\\s+continue|review\\s+carry|pr\\s+close\\-landed|pr\\s+close\\-superseded|pr\\s+breakglass|breakglass\\s+open|review\\s+takeover|review\\s+again|security\\s+release|cancel\\-stuck)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.ops\\.consent\\s+(?:grant)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.integrate\\s+(?:promote)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.branchprune\\s+(?:delete|task)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.hpcaccount\\s+(?:deploy\\-fleet|forget|retention|credential)(?![\\w-])|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.opsserver(?![\\w.-])|gh(?:\\.exe)?\\s+workflow\\s+enable(?![\\w-])|gh(?:\\.exe)?\\s+workflow\\s+disable(?![\\w-])|git(?:\\.exe)?\\b[^\\n]*\\s--no-verify\\b|SKIP=|\\$env:SKIP\\s*=)",
+    "pattern": "(?:git(?:\\.exe)?(?:\\s+-C\\s+\\S+)*\\s+push\\b|(?:sh\\s+)?\\S*with-retry\\.sh\\s+push\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab.dev\\.netverb\\b[^\\n]*\\spush\\b|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.forge\\s+(?:pr\\s+create(?![\\w-])|pr\\s+ready(?![\\w-])|pr\\s+draft(?![\\w-])|pr\\s+hold(?![\\w-])|pr\\s+release(?![\\w-])|pr\\s+close(?![\\w-])|pr\\s+continue(?![\\w-])|review\\s+carry(?![\\w-])|pr\\s+close\\-landed(?![\\w-])|pr\\s+close\\-superseded(?![\\w-])|pr\\s+breakglass(?![\\w-])|breakglass\\s+open(?![\\w-])|review\\s+takeover(?![\\w-])|review\\s+again(?![\\w-])|security\\s+release(?![\\w-])|cancel\\-stuck(?![\\w-]))|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.integrate\\s+(?:promote(?![\\w-]))|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.branchprune\\s+(?:delete(?![\\w-])|task(?![\\w-]))|gh(?:\\.exe)?\\s+workflow\\s+enable(?![\\w-])|gh(?:\\.exe)?\\s+workflow\\s+disable(?![\\w-])|git(?:\\.exe)?\\b[^\\n]*\\s--no-verify\\b|SKIP=|\\$env:SKIP\\s*=)",
     "matches": "shell",
     "reason": "SUBAGENT-NO-PUSH: publishing is the main session`s, and a skipped hook publishes what nobody checked.\nCommit on your lane and hand the commit SHA back to the main session, which merges and pushes; measure the tests you touched: {python} -m dev_lab.dev.verify -- <paths>.\ndetails: docs-src/dev/refusals.md#subagent-no-push (dev-lab)",
+    "scope": "subagent"
+  },
+  {
+    "name": "MAIN-ONLY-DOOR",
+    "pattern": "(?:\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.family\\s+(?:join(?![\\w-]))|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.sshhold\\s+(?:open(?![\\w-])|run(?![\\w-])|credential(?![\\w-])|close(?![\\w-]))|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.ops\\.consent\\s+(?:grant(?![\\w-]))|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.hpcaccount\\s+(?:deploy\\-fleet(?![\\w-])(?![^\\n;&|]*\\s\\-\\-dry\\-run(?![\\w-]))|forget(?![\\w-])|retention(?![\\w-])|credential(?![\\w-]))|\\S*python[\\w.]*(?:\\.exe)?\\s+-m\\s+dev_lab\\.dev\\.opsserver(?![\\w.-]))",
+    "matches": "shell",
+    "reason": "MAIN-ONLY-DOOR: this door is the main session`s alone: it acts on another machine or on shared state under the user`s word.\nHand the exact command back to the main session, which runs it and reads the result. Reading stays yours: {python} -m dev_lab.dev.sshhold status, {python} -m dev_lab.dev.hpcaccount drift-fleet, and hpcaccount deploy-fleet --dry-run.\ndetails: docs-src/dev/refusals.md#main-only-door (dev-lab)",
     "scope": "subagent"
   },
   {
@@ -146,6 +153,12 @@
       "family-sibling-clone",
       "bound-worktree-home"
     ]
+  },
+  {
+    "name": "WORKTREE-NAMES-ITS-TASK",
+    "pattern": "git(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))*\\s+worktree\\s+(?:add(?:\\s+(?:-[bB]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+)|--reason(?:=|\\s+)(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+)|--(?!reason\\b)[\\w-]+|-(?![bB](?:\\s|$))\\w+))*|move(?:\\s+-\\S+)*\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))\\s+(?:\"(?:[^\"\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+(?:[aA][gG][eE][nN][tT]-[0-9a-fA-F]{6,}|(?:[\\w.-]*[-_.])?(?=[0-9a-fA-F]*[0-9])(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{6,})[\\\\/]?\"|'(?:[^'\\n]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+(?:[aA][gG][eE][nN][tT]-[0-9a-fA-F]{6,}|(?:[\\w.-]*[-_.])?(?=[0-9a-fA-F]*[0-9])(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{6,})[\\\\/]?'|(?:[^\\s\"\\';&|()]*[\\\\/])?\\.claude[\\\\/]+worktrees[\\\\/]+(?:[aA][gG][eE][nN][tT]-[0-9a-fA-F]{6,}|(?:[\\w.-]*[-_.])?(?=[0-9a-fA-F]*[0-9])(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{6,})[\\\\/]?)(?=\\s|$|[;&|)])",
+    "matches": "command",
+    "reason": "WORKTREE-NAMES-ITS-TASK: a hash-like worktree name says nothing about its task: nobody can tell what the tree is for.\nName it for what it does under its task: git worktree add -b pr/<task>/<feature> .claude/worktrees/<feature> <sha>\ndetails: docs-src/dev/refusals.md#worktree-names-its-task (dev-lab)"
   },
   {
     "name": "BARE-INTERPRETER",

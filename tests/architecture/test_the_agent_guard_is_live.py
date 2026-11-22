@@ -37,6 +37,7 @@ _SHIPPED: Final = frozenset({
     'HEAVY-IS-THE-MAIN-SESSIONS',  # gained 2026-11-18 with the {python} relock
     'HPC-THROUGH-THE-DOOR',  # gained 2026-11-07 with dev-lab 83c4f29
     'MACHINE-FILE-IS-RENDERED',  # gained 2026-11-22 with the dev-lab e8646709 relock
+    'MAIN-ONLY-DOOR',  # gained 2026-11-22 with the dev-lab 48085510 relock
     'OUTPUT-HOLDS-NO-CODE',  # gained 2026-11-22 with the dev-lab e8646709 relock
     'PUSH-FORCE',
     'PUSH-NO-VERIFY',
@@ -51,6 +52,7 @@ _SHIPPED: Final = frozenset({
     'TREE-HAS-A-LIVE-RUN',
     'WRITES-STAY-IN-THE-TREE',  # gained 2026-11-07 with dev-lab 83c4f29
     'WORKTREE-BASE-IS-EXPLICIT',
+    'WORKTREE-NAMES-ITS-TASK',  # gained 2026-11-22 with the dev-lab 48085510 relock
     'WORKTREES-STAY-INSIDE',
 })
 

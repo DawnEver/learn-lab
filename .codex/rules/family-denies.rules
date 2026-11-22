@@ -141,6 +141,7 @@ prefix_rule(
 # BACKGROUND-SHELL-IS-BOUNDED: a property of a background call, which Codex execpolicy does not see
 # TRACKED-CITES-NO-EPHEMERAL: judged on what the journal line cites against the repo; a prefix reads neither
 # SUBAGENT-NO-PUSH: scoped to subagents; Codex execpolicy has no agent scope
+# MAIN-ONLY-DOOR: scoped to subagents; Codex execpolicy has no agent scope
 # HEAVY-IS-THE-MAIN-SESSIONS: scoped to subagents; Codex execpolicy has no agent scope
 # CONSENT-CODE-FROM-THE-USER: judged on the path it writes or removes, not on the command word
 # REPORTS-LIVE-IN-MEMORY: judged on the path it writes or removes, not on the command word
@@ -148,6 +149,7 @@ prefix_rule(
 # WRITES-STAY-IN-THE-TREE: judged on the path it writes or removes, not on the command word
 # RECURSIVE-DELETE: judged on the path it writes or removes, not on the command word
 # WORKTREES-STAY-INSIDE: judged on the path it writes or removes, not on the command word
+# WORKTREE-NAMES-ITS-TASK: judged on the name of the directory it makes, not on the command word
 # FORGE-WRITE-VIA-GH-API: a write is a method flag anywhere in the argv; reads share every prefix
 # FORGE-WRITE-VIA-HTTP: a write is a method and a forge URL anywhere in the argv
 # STATUS-VIA-DOORS: the forbidden status contexts are an argument value, not a prefix

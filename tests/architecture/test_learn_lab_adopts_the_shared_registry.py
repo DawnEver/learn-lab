@@ -95,6 +95,11 @@ _MECHANISMS: Final = {
             'HOOK-UNDER-FIVE-SECONDS',
             # Adopted 2026-11-22 with the dev-lab e8646709 relock: a shipped deny row (pinned in _SHIPPED).
             'OUTPUT-HOLDS-NO-CODE',
+            # Adopted 2026-11-22 with the dev-lab 48085510 relock: a shipped deny row refuses a hash-like worktree
+            # name (pinned in _SHIPPED), and the same live wiring's Stop hook sends back a final message naming
+            # an image by a relative path.
+            'WORKTREE-NAMES-ITS-TASK',
+            'IMAGES-BY-ABSOLUTE-PATH',
         ),
         (TestPath('tests/architecture/test_the_agent_guard_is_live.py'),),
     ),

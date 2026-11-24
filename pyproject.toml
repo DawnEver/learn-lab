@@ -131,3 +131,35 @@ adoption = "scripts/deny_rules.py"
 # family App's review/judge check run. Keys and defaults: dev_lab.dev.forgereview_declared.
 [tool.dev_lab.review]
 judge_app = 5619495
+
+# DECLARED-LAYOUT (dev_lab.dev.layout): the WHOLE tree as an allow-list -- each directory pattern (one glob per
+# segment; the deepest matching row judges) and the formats a file there may be ('.suffix', an exact name, "" for
+# none, "*" for anything). Undeclared is refused. NO-BACKUP-COPIES: nothing under output/ or scratch/ is ever a
+# clone, worktree, exported tree, bundle or patch, whatever a row says. Formats (R3): TOML declarations, JSONL
+# machine records, CSV tables, NPZ arrays, Markdown reports, PNG figures; vendor-native only at an adapter boundary.
+[tool.dev_lab.placement]
+# A worktree is a real second tree, judged by the run inside it.
+pruned_paths = ['.claude/worktrees']
+
+[tool.dev_lab.placement.layout]
+'.' = ['.md', '.toml', '.lock', '.gitattributes', '.gitignore', '.rgignore', 'license', 'makefile']
+'.claude' = ['.json']
+'.claude/hooks' = ['.js', '.json']
+'.claude/memory' = ['.md']
+'.claude/rules' = ['.md']
+'.claude/tasks' = ['.md']
+'.codex' = []
+'.codex/rules' = ['.rules']
+'.github' = []
+'.github/workflows' = ['.yml']
+'docs-src' = ['.md']
+'output' = []
+'output/forge' = []
+'output/forge/*' = ['.json', '.tmp']
+'output/logs' = []
+'output/logs/[0-9][0-9]/[0-9][0-9]/[0-9][0-9]/*' = ['.log', '.jsonl', '.json', '.gz', '.coverage', '.txt', '.csv', '.md', '.npz', '.png']
+'output/runcache' = ['.jsonl']
+'scratch' = ['*']
+'scripts' = ['.py']
+'src' = ['.py']
+'tests' = ['.py']

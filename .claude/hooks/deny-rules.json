@@ -98,6 +98,12 @@
     "reason": "GIT-STASH: `refs/stash` is repo-wide, so a stash is popped by whoever pops next -- possibly another agent.\nCommit it on your own lane branch, or take a throwaway checkout: git worktree add --detach .claude/worktrees/<name> <sha>\ndetails: docs-src/dev/refusals.md#git-stash (dev-lab)"
   },
   {
+    "name": "ARCHIVE-IS-NO-STORE",
+    "pattern": "\\bgit(?:\\s+-C\\s+\\S+)*\\s+bundle\\s+create\\b",
+    "matches": "command",
+    "reason": "ARCHIVE-IS-NO-STORE: a bundle parks unlanded work where nobody reads it again (ONLY-VERSION-TAGS).\nUnlanded work is merged or discarded (MERGE-OR-DELETE): merge it through a PR, or LAND its discard with a declared `git merge -s ours` PR, then `branchprune delete <branch>`\ndetails: docs-src/dev/refusals.md#archive-is-no-store (dev-lab)"
+  },
+  {
     "name": "GIT-RESET",
     "pattern": "\\bgit(?:\\s+-C\\s+\\S+)*\\s+reset(?:\\s|$)",
     "matches": "command",

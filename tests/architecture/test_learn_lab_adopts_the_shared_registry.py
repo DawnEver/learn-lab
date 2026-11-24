@@ -39,6 +39,8 @@ _MECHANISMS: Final = {
     'LATEST-DEPENDENCIES': (_HOOKS,),
     'BASE-HOLDS-THE-MILESTONE': (_HOOKS,),
     'VERSION-TAG-NEEDS-APPROVAL': (_HOOKS,),
+    # Adopted 2026-11-24 with dev-lab cbecf58a: the same milestonebase pre-push row refuses a non-version tag.
+    'ONLY-VERSION-TAGS': (_HOOKS,),
     'WALLS-ARE-RECORDED': (TestPath('tests/architecture/test_the_family_config_is_rendered.py'),),
     # Both are the forge's server-side steps
     # (dev_lab.dev.forgemerge, dev_lab.dev.forgereview) over a repo whose integrator table declares

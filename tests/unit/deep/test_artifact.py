@@ -283,17 +283,17 @@ def test_a_fit_saved_on_cuda_loads_on_cuda_exactly_and_on_the_cpu_within_float32
 
 
 def test_a_module_outside_the_table_is_never_built(tmp_path) -> None:
-    """A re-sealed manifest naming torch's own Sequential: the hash passes, the module table refuses."""
+    """A manifest naming torch's own Sequential is refused while it is read: no argument set is declared for it.
+
+    The refusal comes before any hash or import, so no seal, however forged, reaches the module table.
+    """
     declaration, fit, _, _ = CASES['monotone_law']
     path = artifact.save(fit(declaration), tmp_path / 'law', declaration=declaration, data_identity=IDENTITY)
     raw = _raw(path)
     assert raw['state']['fields']['net']['module'] == 'MonotoneScalar'
     raw['state']['fields']['net']['module'] = 'Sequential'
-    record = artifact._restored(raw, path)  # the reader's own restoration, to forge a valid seal
-    record.pop('content_hash')
-    raw['content_hash'] = artifact.sha256(artifact.canonical(record))
     (path / artifact.MANIFEST).write_text(tomlkit.dumps(raw), encoding='utf-8')
-    with pytest.raises(Refused, match="module is one of .*got 'Sequential'"):
+    with pytest.raises(Refused, match="module 'Sequential', which is not one an artifact declares"):
         artifact.load(path)
 
 

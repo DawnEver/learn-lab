@@ -8,10 +8,12 @@ not to the table fails here, naming the row to write.
 
 import dataclasses
 import importlib
+import inspect
 import pkgutil
 
 import learn_lab
-from learn_lab.artifact_fields import DATACLASS_FIELDS
+from learn_lab.artifact_fields import DATACLASS_FIELDS, MODULE_ARGUMENTS
+from learn_lab.deep.artifact import MODULES  # torch: this pin reflects; the manifest reader never does
 
 
 def _reflected() -> dict[str, tuple[str, ...]]:
@@ -49,3 +51,13 @@ def test_every_learn_lab_dataclass_declares_its_fields_as_data() -> None:
     assert len(reflected) >= 100, f'the scan reached only {len(reflected)} dataclasses'
     drift = _drift(DATACLASS_FIELDS, reflected)
     assert drift == {}, f'write these rows into learn_lab/artifact_fields.py DATACLASS_FIELDS: {drift}'
+
+
+def test_every_codec_module_declares_its_arguments_as_data() -> None:
+    """A module node restores a None argument from MODULE_ARGUMENTS: it is each constructor's signature, in order."""
+    reflected = {
+        name: tuple(p for p in inspect.signature(cls.__init__).parameters if p != 'self')
+        for name, cls in MODULES.items()
+    }
+    drift = _drift(MODULE_ARGUMENTS, reflected)
+    assert drift == {}, f'write these rows into learn_lab/artifact_fields.py MODULE_ARGUMENTS: {drift}'

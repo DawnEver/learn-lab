@@ -335,3 +335,35 @@ DATACLASS_FIELDS: Final[dict[str, tuple[str, ...]]] = {
     'learn_lab.validity:ChannelEnvelope': ('box', 'shape'),
     'learn_lab.validity:HullEnvelope': ('origin', 'basis', 'normals', 'offsets', 'slack', 'lower', 'upper'),
 }
+
+#: Each torch module of the deep codec's table (``learn_lab.deep.artifact.MODULES``) -> its constructor's argument
+#: names, in order: a module node's arguments store only the non-``None`` ones, and reading restores each absent
+#: declared one as ``None`` in this order. Pinned to the constructors' signatures by the same test.
+MODULE_ARGUMENTS: Final[dict[str, tuple[str, ...]]] = {
+    'MLP': ('widths', 'activation', 'input_scale'),
+    'MonotoneScalar': ('hidden', 'odd'),
+    'UNet': ('c_in', 'c_out', 'width', 'levels'),
+    'DeepONetNet': ('sensors', 'dim', 'hidden', 'basis', 'lower', 'upper'),
+    'FNONet': ('c_in', 'c_out', 'modes', 'width', 'layers'),
+    'TransformerNet': ('c_in', 'c_out', 'width', 'heads', 'layers', 'kernel', 'causal', 'lower', 'upper'),
+    'TransolverNet': (
+        'c_in',
+        'c_out',
+        'width',
+        'heads',
+        'layers',
+        'slices',
+        'mlp_ratio',
+        'temperature',
+        'adaptive_temperature',
+        'gumbel',
+        'reference',
+        'lower',
+        'upper',
+    ),
+    'MessagePassing': ('node_in', 'edge_in', 'out', 'hidden', 'rounds'),
+    'PlayBank': ('plays', 'hidden', 'odd', 'input_is', 'shaped', 'inverted'),
+    'StencilResponse': ('order', 'kernel', 'accuracy', 'degree', 'dx', 'constrained', 'seed'),
+    'GraphOperatorNet': ('c_in', 'c_out', 'dimension', 'width', 'layers', 'kernel_width', 'lower', 'upper'),
+    'PreconditionerNet': ('hidden', 'rounds'),
+}

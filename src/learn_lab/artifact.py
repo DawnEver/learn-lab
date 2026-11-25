@@ -53,7 +53,7 @@ from typing import Final
 import numpy as np
 import tomlkit
 
-from learn_lab.artifact_fields import DATACLASS_FIELDS
+from learn_lab.artifact_fields import DATACLASS_FIELDS, MODULE_ARGUMENTS
 from learn_lab.errors import refuse
 from learn_lab.validity import BoxEnvelope, HullEnvelope
 
@@ -558,6 +558,8 @@ def _store_tree(node: object, where: str, shape: tuple[int, int] | None) -> obje
     if not isinstance(node, Mapping):
         return node
     tag, keys = _tagged(node, where)
+    if tag == 'module':
+        return {**node, 'arguments': _store_arguments(node, f'{where}.arguments', shape)}
     if tag != 'dataclass':
         return {k: _store_tree(node[k], f'{where}.{k}', shape) for k in keys if node.get(k) is not None}
     path = node['dataclass']
@@ -581,6 +583,9 @@ def _restore_tree(node: object, where: str, shape: tuple[int, int] | None) -> ob
     if not isinstance(node, Mapping):
         return node
     tag, keys = _tagged(node, where)
+    if tag == 'module':
+        restored = {k: node.get(k) for k in keys}
+        return {**restored, 'arguments': _restore_arguments(node, f'{where}.arguments', shape)}
     if tag != 'dataclass':
         return {k: None if node.get(k) is None else _restore_tree(node[k], f'{where}.{k}', shape) for k in keys}
     path = node['dataclass']
@@ -598,6 +603,43 @@ def _restore_tree(node: object, where: str, shape: tuple[int, int] | None) -> ob
         else:
             restored[name] = _restore_tree(value, here, shape)
     return {'dataclass': path, 'fields': restored}
+
+
+def _declared_arguments(module: object, where: str) -> tuple[str, ...]:
+    arguments = MODULE_ARGUMENTS.get(module) if isinstance(module, str) else None
+    if arguments is None:
+        refuse(f'{where} belongs to module {module!r}, which is not one an artifact declares')
+    return arguments
+
+
+def _argument_pairs(node: Mapping, where: str) -> list:
+    pairs = _table_node(node.get('arguments'), where).get('dict')
+    if not isinstance(pairs, list) or not all(isinstance(p, list) and len(p) == 2 for p in pairs):
+        refuse(f'{where} is the module arguments as [name, value] pairs, got {node.get("arguments")!r}')
+    return pairs
+
+
+def _store_arguments(node: Mapping, where: str, shape: tuple[int, int] | None) -> dict:
+    """A module's arguments, every one its constructor declares and in that order; a ``None`` one by omission."""
+    declared = _declared_arguments(node.get('module'), where)
+    pairs = _argument_pairs(node, where)
+    if tuple(name for name, _ in pairs) != declared:
+        refuse(f'{where} names {[name for name, _ in pairs]}, while its module declares {list(declared)}')
+    kept = [[name, value] for name, value in pairs if value is not None]
+    return {'dict': [[name, _store_tree(value, f'{where}[{name!r}]', shape)] for name, value in kept]}
+
+
+def _restore_arguments(node: Mapping, where: str, shape: tuple[int, int] | None) -> dict:
+    """Every declared argument in declared order: an absent one ``None``, an undeclared one refused by name."""
+    declared = _declared_arguments(node.get('module'), where)
+    given = dict(map(tuple, _argument_pairs(node, where)))
+    _undeclared(given, declared, where)
+    return {
+        'dict': [
+            [name, None if given.get(name) is None else _restore_tree(given[name], f'{where}[{name!r}]', shape)]
+            for name in declared
+        ]
+    }
 
 
 def _store_fixed(node: object, where: str, shape: tuple[int, int] | None) -> list[dict]:

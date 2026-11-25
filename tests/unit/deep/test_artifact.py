@@ -14,7 +14,7 @@ import pytest
 import tomlkit
 import torch
 
-from learn_lab import artifact
+from learn_lab import artifact, artifact_fields
 from learn_lab.deep.constitutive import MonotoneLaw
 from learn_lab.deep.diffusion import DiffusionField
 from learn_lab.deep.dynamics import NeuralODE
@@ -343,3 +343,24 @@ def test_reading_a_deep_manifest_imports_no_torch(tmp_path, verb, loads_torch) -
         [sys.executable, '-c', _PROBE, str(path), verb], capture_output=True, text=True, check=True, timeout=300
     )
     assert run.stdout.strip() == str(loads_torch), run.stdout + run.stderr
+
+
+def test_a_default_transolver_round_trips_its_absent_reference_as_none(tmp_path) -> None:
+    """``reference=None`` (no reference grid) is a module argument: absent on disk, None again in declared order.
+
+    PLANTED CONTROL: the table's transolver case (``reference=3``) stores the argument, so absence is the None's.
+    """
+    declaration = Transolver(width=4, heads=2, layers=1, slices=3, schedule=FEW, runtime=CPU64)
+    assert declaration.reference is None
+    fitted = declaration.fit(GRID[:, :, 0], COORDS, -GRID[:, :, 0])
+    path = artifact.save(fitted, tmp_path / 'default', declaration=declaration, data_identity=IDENTITY)
+    stored = dict(map(tuple, _raw(path)['state']['fields']['net']['arguments']['dict']))
+    assert 'reference' not in stored
+    pairs = artifact.manifest(path)['state']['fields']['net']['arguments']['dict']
+    assert [name for name, _ in pairs] == list(artifact_fields.MODULE_ARGUMENTS['TransolverNet'])
+    assert dict(map(tuple, pairs))['reference'] is None
+    loaded = artifact.load(path)
+    assert np.array_equal(loaded.predict(GRID[:2, :, 0], COORDS), fitted.predict(GRID[:2, :, 0], COORDS))
+    declared, fit, _, _ = CASES['transolver']
+    kept = artifact.save(fit(declared), tmp_path / 'kept', declaration=declared, data_identity=IDENTITY)
+    assert 'reference' in dict(map(tuple, _raw(kept)['state']['fields']['net']['arguments']['dict']))

@@ -3,13 +3,15 @@
 A :class:`Checkpoint` makes the whole fit resumable. Every ``every`` steps of either phase it writes, into its
 directory, ``weights.pt`` -- the parameters, the running optimizer's state and the torch RNG state, saved by
 ``torch.save`` and read back ONLY through ``torch.load(weights_only=True)`` (tensors and plain containers,
-never an arbitrary object) -- and ``checkpoint.json``: the step, the phase (``adam`` or ``lbfgs``), the loss
+never an arbitrary object) -- and ``checkpoint.toml``: the step, the phase (``adam`` or ``lbfgs``), the loss
 history, the config identity, the payload's SHA-256 and the record's own content hash (the scheme of
-:mod:`learn_lab.artifact`). A fit given a directory that holds a checkpoint resumes from it after verifying
-both hashes and that it was written by the SAME config (the caller's identity, the schedule, the parameter
-shapes and the SHA-256 of the training data); anything else is refused, and so is a phase that disagrees with
-the step. Under :meth:`Runtime.seeded`'s deterministic kernels the resumed fit ends on the uninterrupted fit's
-weights bit for bit, in either phase: the polish runs as one single-iteration L-BFGS call per step, whose
+:mod:`learn_lab.artifact`). Its fields are :data:`FIELDS`: an undeclared key is refused by name, and an absent one
+reads as ``None`` (TOML has no null). A ``checkpoint.json`` is refused by name, never read (FORMATS-MIGRATE-ONCE).
+A fit given a directory that holds a checkpoint resumes from it after verifying both hashes and that it was
+written by the SAME config (the caller's identity, the schedule, the parameter shapes and the SHA-256 of the
+training data); anything else is refused, and so is a phase that disagrees with the step. Under
+:meth:`Runtime.seeded`'s deterministic kernels the resumed fit ends on the uninterrupted fit's weights bit for
+bit, in either phase: the polish runs as one single-iteration L-BFGS call per step, whose
 curvature memory is optimizer state, so a step resumed from a checkpoint is the step the uninterrupted fit takes.
 
 The loss closure takes an index: ``loss(None)`` is the full objective, ``loss(index)`` the same mean over the
@@ -22,13 +24,14 @@ compares losses across trial points, which a fresh draw per evaluation would mak
 from __future__ import annotations
 
 import hashlib
-import json
 import math
+import tomllib
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
+import tomlkit
 import torch
 
 from learn_lab.artifact import canonical, sha256
@@ -38,7 +41,15 @@ __all__ = ['Checkpoint', 'Schedule', 'minimise', 'take']
 
 FORMAT = 'learn-lab fit checkpoint'
 VERSION = 1
-MANIFEST = 'checkpoint.json'
+MANIFEST = 'checkpoint.toml'
+#: Every field of the checkpoint record; an absent one is ``None``, an undeclared one is refused by name.
+FIELDS = ('format', 'version', 'config', 'step', 'phase', 'history', 'payload', 'content_hash')
+#: The retired JSON record: refused by name, never read (FORMATS-MIGRATE-ONCE).
+RETIRED_MANIFEST = 'checkpoint.json'
+MIGRATE_DOOR = (
+    'a checkpoint is the resume point of an interrupted fit, so fit again from step 0 in a fresh checkpoint '
+    'directory; this learn-lab writes checkpoint.toml'
+)
 WEIGHTS = 'weights.pt'
 DECAYS = ('constant', 'cosine')
 
@@ -171,20 +182,28 @@ def _write(checkpoint: Checkpoint, identity: str, phase: str, parameters, optimi
         'payload': {WEIGHTS: sha256((directory / WEIGHTS).read_bytes())},
     }
     record['content_hash'] = sha256(canonical(record))
-    (directory / f'{MANIFEST}.tmp').write_text(json.dumps(record, indent=1, sort_keys=True), encoding='utf-8')
+    present = {k: v for k, v in record.items() if v is not None}  # TOML has no null: absent reads back as None
+    text = tomlkit.dumps(present, sort_keys=True)
+    (directory / f'{MANIFEST}.tmp').write_text(text, encoding='utf-8', newline='\n')
     (directory / f'{MANIFEST}.tmp').replace(directory / MANIFEST)
 
 
 def _read(checkpoint: Checkpoint, identity: str, schedule: Schedule) -> tuple[dict, list[float]] | None:
     """The verified state and history in *checkpoint*'s directory; ``None`` when it holds no checkpoint."""
     path = checkpoint.directory / MANIFEST
+    if (checkpoint.directory / RETIRED_MANIFEST).exists():
+        retired = checkpoint.directory / RETIRED_MANIFEST
+        refuse(f'{retired} is a retired JSON checkpoint and is not read; {MIGRATE_DOOR}')
     if not path.exists():
         return None
     try:
-        record = json.loads(path.read_text(encoding='utf-8'))
+        record = tomllib.loads(path.read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
         refuse(f'{path} is not a readable checkpoint manifest: {exc}')
-    if not isinstance(record, dict) or record.get('format') != FORMAT or record.get('version') != VERSION:
+    if undeclared := sorted(set(record) - set(FIELDS)):
+        refuse(f'{path} holds undeclared field {undeclared[0]!r} (all: {undeclared}); a checkpoint holds {FIELDS}')
+    record = {name: record.get(name) for name in FIELDS}
+    if record['format'] != FORMAT or record['version'] != VERSION:
         refuse(f'{path} is not a {FORMAT} version {VERSION}')
     claimed = record.pop('content_hash', None)
     if claimed != sha256(canonical(record)):

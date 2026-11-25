@@ -496,9 +496,9 @@ openvino = [
     { name = "nncf" },
     { name = "onnx" },
     { name = "openvino" },
-    { name = "tomlkit" },
 ]
 torch = [
+    { name = "tomlkit" },
     { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' and sys_platform != 'win32'" },
 ]
@@ -520,7 +520,7 @@ requires-dist = [
     { name = "onnx", marker = "extra == 'openvino'" },
     { name = "openvino", marker = "extra == 'openvino'" },
     { name = "scipy" },
-    { name = "tomlkit", marker = "extra == 'openvino'" },
+    { name = "tomlkit", marker = "extra == 'torch'" },
     { name = "torch", marker = "(sys_platform == 'linux' and extra == 'torch') or (sys_platform == 'win32' and extra == 'torch')", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
     { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32' and extra == 'torch'", specifier = ">=2.7" },
 ]

@@ -2,9 +2,9 @@ version = 1
 revision = 5
 requires-python = ">=3.13, <3.15"
 resolution-markers = [
-    "python_full_version >= '3.14' and (sys_platform == 'linux' or sys_platform == 'win32')",
+    "(python_full_version >= '3.14' and sys_platform == 'linux') or (python_full_version >= '3.14' and sys_platform == 'win32')",
     "python_full_version >= '3.14' and sys_platform != 'linux' and sys_platform != 'win32'",
-    "python_full_version < '3.14' and (sys_platform == 'linux' or sys_platform == 'win32')",
+    "(python_full_version < '3.14' and sys_platform == 'linux') or (python_full_version < '3.14' and sys_platform == 'win32')",
     "python_full_version < '3.14' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 
@@ -496,6 +496,7 @@ openvino = [
     { name = "nncf" },
     { name = "onnx" },
     { name = "openvino" },
+    { name = "tomlkit" },
 ]
 torch = [
     { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -519,7 +520,8 @@ requires-dist = [
     { name = "onnx", marker = "extra == 'openvino'" },
     { name = "openvino", marker = "extra == 'openvino'" },
     { name = "scipy" },
-    { name = "torch", marker = "(sys_platform == 'linux' or sys_platform == 'win32') and extra == 'torch'", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
+    { name = "tomlkit", marker = "extra == 'openvino'" },
+    { name = "torch", marker = "(sys_platform == 'linux' and extra == 'torch') or (sys_platform == 'win32' and extra == 'torch')", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
     { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32' and extra == 'torch'", specifier = ">=2.7" },
 ]
 provides-extras = ["torch", "openvino"]
@@ -1520,8 +1522,8 @@ name = "torch"
 version = "2.14.1+cu130"
 source = { registry = "https://download.pytorch.org/whl/cu130" }
 resolution-markers = [
-    "python_full_version >= '3.14' and (sys_platform == 'linux' or sys_platform == 'win32')",
-    "python_full_version < '3.14' and (sys_platform == 'linux' or sys_platform == 'win32')",
+    "(python_full_version >= '3.14' and sys_platform == 'linux') or (python_full_version >= '3.14' and sys_platform == 'win32')",
+    "(python_full_version < '3.14' and sys_platform == 'linux') or (python_full_version < '3.14' and sys_platform == 'win32')",
 ]
 dependencies = [
     { name = "cuda-bindings", marker = "sys_platform != 'win32'" },

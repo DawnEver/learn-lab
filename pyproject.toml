@@ -25,8 +25,9 @@ dependencies = [
 [project.optional-dependencies]
 torch = ["torch>=2.7"]
 # Inference export (learn_lab.deep.export): ONNX through torch, post-training quantization and the CPU/iGPU/NPU
-# runtime through OpenVINO + NNCF. Inference only; training stays on torch.
-openvino = ["onnx", "openvino", "nncf"]
+# runtime through OpenVINO + NNCF. Inference only; training stays on torch. The export's manifest is TOML (family
+# ruling 2026-11-25), written by tomlkit -- the family's TOML writer (lab-commons[io]) -- and read by stdlib tomllib.
+openvino = ["onnx", "openvino", "nncf", "tomlkit"]
 
 [dependency-groups]
 dev = [

@@ -3,14 +3,16 @@
 The consumer owns the runtime; learn-lab exports and offers :func:`learn_lab.equivalence.equivalence`.
 
 - :func:`to_onnx` writes ONE new directory: ``model.onnx`` (float32, one STATIC input shape, the standardisers
-  folded into the graph so it maps raw inputs to raw outputs) and ``manifest.json`` -- the format and version,
+  folded into the graph so it maps raw inputs to raw outputs) and ``manifest.toml`` -- the format and version,
   the family and its schema (the artifact's, :func:`learn_lab.deep.artifact.schema`), the input and output
   names and shapes, the SHA-256 of every payload file and ``content_hash`` over the rest. The envelope is NOT in
   the graph: the consumer checks it against the schema before calling. No file is pickled.
 - :func:`quantize` writes a sibling directory ``<name>.<precision>`` holding ``model.xml``/``model.bin``:
   ``'f16'`` compresses the weights, ``'int8'`` is NNCF post-training quantization on caller-given calibration
   inputs. Whether that precision is ADMITTED is not decided here: judge it per model with ``equivalence``.
-- :func:`manifest` returns a directory's verified manifest; one changed byte is refused.
+- :func:`manifest` returns a directory's verified manifest; one changed byte is refused. Manifests are TOML (family
+  ruling 2026-11-25): a directory holding a ``manifest.json`` is refused by name with its migration, never read
+  (FORMATS-MIGRATE-ONCE).
 
 A family whose graph does not export cleanly is refused by name (:data:`EXPORTABLE` lists those that do). ONNX
 holds no complex tensor, so an FNO's ``torch.fft`` layers are exported as their exact real-arithmetic twin on the
@@ -19,12 +21,13 @@ one static grid: the kept-mode DFT and its inverse are fixed cosine/sine matrice
 
 from __future__ import annotations
 
-import json
+import tomllib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final, Literal
 
 import numpy as np
+import tomlkit
 import torch
 from torch import nn
 
@@ -45,7 +48,13 @@ __all__ = ['EXPORTABLE', 'FORMAT', 'VERSION', 'manifest', 'quantize', 'to_onnx']
 
 FORMAT: Final = 'learn-lab-inference'
 VERSION: Final = 1
-MANIFEST: Final = 'manifest.json'
+MANIFEST: Final = 'manifest.toml'
+#: The retired JSON manifest: refused by name, never read (FORMATS-MIGRATE-ONCE).
+RETIRED_MANIFEST: Final = 'manifest.json'
+MIGRATE_DOOR: Final = (
+    're-export it with learn_lab.deep.export.to_onnx (then quantize) from its fitted artifact, to a new directory: '
+    'an export manifest is manifest.toml'
+)
 ONNX: Final = 'model.onnx'
 IR: Final = ('model.xml', 'model.bin')
 INPUT, OUTPUT = 'x', 'y'
@@ -227,15 +236,17 @@ def _seal(path: Path, record: dict, files: list[str]) -> Path:
     record = {'format': FORMAT, 'version': VERSION, **record}
     record['payload'] = {name: sha256((path / name).read_bytes()) for name in files}
     record['content_hash'] = sha256(canonical(record))
-    (path / MANIFEST).write_text(json.dumps(record, indent=1, sort_keys=True), encoding='utf-8')
+    (path / MANIFEST).write_text(tomlkit.dumps(record, sort_keys=True), encoding='utf-8', newline='\n')
     return path
 
 
 def manifest(path: str | Path) -> dict:
     """The verified manifest of the export at *path*: its format known, its hash and every payload file's intact."""
     path = Path(path)
+    if (path / RETIRED_MANIFEST).exists():
+        refuse(f'{path / RETIRED_MANIFEST} is a retired JSON export manifest and is not read; {MIGRATE_DOOR}')
     try:
-        record = json.loads((path / MANIFEST).read_text(encoding='utf-8'))
+        record = tomllib.loads((path / MANIFEST).read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
         refuse(f'{path / MANIFEST} is not a readable export manifest: {exc}')
     if not isinstance(record, dict) or record.get('format') != FORMAT or record.get('version') != VERSION:

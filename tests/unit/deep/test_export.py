@@ -5,10 +5,12 @@ Every runtime here is OpenVINO on the CPU; torch trains and answers on the CPU i
 
 import copy
 import json
+import tomllib
 from dataclasses import replace
 
 import numpy as np
 import pytest
+import tomlkit
 import torch
 
 pytest.importorskip('openvino', reason='export needs the [openvino] extra')
@@ -16,7 +18,9 @@ pytest.importorskip('openvino', reason='export needs the [openvino] extra')
 import nncf
 import openvino as ov
 
+from learn_lab.artifact import canonical, sha256
 from learn_lab.deep import export
+from learn_lab.deep.artifact import schema
 from learn_lab.deep.field import FieldModel
 from learn_lab.deep.fit import Schedule
 from learn_lab.deep.operator import FNO, DeepONet
@@ -81,22 +85,75 @@ def test_the_onnx_graph_answers_raw_inputs_as_the_fit_does(fitted, exported, que
 def test_a_changed_byte_an_existing_path_and_a_stranger_example_are_refused(fitted, exported, queries, tmp_path):
     copy = tmp_path / 'copy'
     copy.mkdir()
-    for name in ('model.onnx', 'manifest.json'):
+    for name in ('model.onnx', 'manifest.toml'):
         (copy / name).write_bytes((exported / name).read_bytes())
     data = bytearray((copy / 'model.onnx').read_bytes())
     data[-1] ^= 1
     (copy / 'model.onnx').write_bytes(bytes(data))
     with pytest.raises(Refused, match='does not match its hash'):
         export.manifest(copy)
-    record = json.loads((exported / 'manifest.json').read_text(encoding='utf-8'))
+    record = tomllib.loads((exported / 'manifest.toml').read_text(encoding='utf-8'))
     record['opset'] = 11
-    (copy / 'manifest.json').write_text(json.dumps(record), encoding='utf-8')
+    (copy / 'manifest.toml').write_text(tomlkit.dumps(record), encoding='utf-8')
     with pytest.raises(Refused, match='content hash'):
         export.manifest(copy)
     with pytest.raises(Refused, match='exists'):
         export.to_onnx(fitted, exported, example=queries[:BATCH])
     with pytest.raises(Refused, match='out_of_domain'):
         export.to_onnx(fitted, tmp_path / 'far', example=10 * queries[:BATCH])
+
+
+def test_an_export_writes_its_manifest_as_toml_and_no_json(exported):
+    """Manifests are TOML (family ruling 2026-11-25); a consumer's output folder admits no ``.json``."""
+    assert sorted(p.name for p in exported.iterdir()) == ['manifest.toml', 'model.onnx']
+
+
+def test_the_manifest_round_trips_every_field(fitted, exported):
+    """Every field read back equals what the export computed, independently re-derived here."""
+    on_disk = tomllib.loads((exported / 'manifest.toml').read_text(encoding='utf-8'))
+    record = export.manifest(exported)
+    assert record == on_disk
+    rest = {k: v for k, v in record.items() if k != 'content_hash'}
+    assert record == {
+        'format': 'learn-lab-inference',
+        'version': 1,
+        'family': 'field_model',
+        'schema': schema('field_model', fitted),
+        'precision': 'f32',
+        'input': {'name': 'x', 'shape': [BATCH, 1, GRID, GRID], 'dtype': 'float32'},
+        'output': {'name': 'y', 'shape': [BATCH, 1, GRID, GRID], 'dtype': 'float32'},
+        'opset': export.OPSET,
+        'payload': {'model.onnx': sha256((exported / 'model.onnx').read_bytes())},
+        'content_hash': sha256(canonical(rest)),
+    }
+
+
+def test_a_tampered_payload_fails_its_sha256(exported, tmp_path):
+    """PLANTED CONTROL: the untouched copy is accepted, so the refusal is the one changed byte's."""
+    copy = tmp_path / 'copy'
+    copy.mkdir()
+    for name in ('model.onnx', 'manifest.toml'):
+        (copy / name).write_bytes((exported / name).read_bytes())
+    assert export.manifest(copy) == export.manifest(exported)
+    data = bytearray((copy / 'model.onnx').read_bytes())
+    data[len(data) // 2] ^= 1
+    (copy / 'model.onnx').write_bytes(bytes(data))
+    with pytest.raises(Refused, match=r'model\.onnx is missing or does not match its hash'):
+        export.manifest(copy)
+
+
+def test_a_json_manifest_is_refused_by_name_with_its_migration_not_read(exported, tmp_path):
+    """FORMATS-MIGRATE-ONCE: a ``manifest.json`` export is never read, even one whose every hash still holds."""
+    old = tmp_path / 'old'
+    old.mkdir()
+    (old / 'model.onnx').write_bytes((exported / 'model.onnx').read_bytes())
+    record = export.manifest(exported)
+    (old / 'manifest.json').write_text(json.dumps(record, indent=1, sort_keys=True), encoding='utf-8')
+    with pytest.raises(Refused, match=r'manifest\.json.*re-export it with learn_lab\.deep\.export\.to_onnx'):
+        export.manifest(old)
+    (old / 'manifest.toml').write_bytes((exported / 'manifest.toml').read_bytes())
+    with pytest.raises(Refused, match=r'manifest\.json'):  # beside a TOML manifest too: the folder admits no .json
+        export.manifest(old)
 
 
 def test_a_family_that_does_not_export_is_refused_by_name(tmp_path):
@@ -208,7 +265,7 @@ def test_int8_calibrates_asymmetric_activations_on_7_bit_weights_every_cpu_runs_
     monkeypatch.setattr(nncf, 'quantize', spy)
     copy_dir = tmp_path / 'unet'
     copy_dir.mkdir()
-    for name in ('model.onnx', 'manifest.json'):
+    for name in ('model.onnx', 'manifest.toml'):
         (copy_dir / name).write_bytes((exported / name).read_bytes())
     export.quantize(copy_dir, queries, precision='int8')
     assert seen.get('preset') == nncf.QuantizationPreset.MIXED, seen

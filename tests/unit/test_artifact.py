@@ -5,13 +5,16 @@ give the same bits, so a tolerance would only hide a lost field. ``test_the_comp
 planted control that the comparison can say no.
 """
 
+import copy
 import hashlib
 import json
+import tomllib
 import zipfile
 from pathlib import Path
 
 import numpy as np
 import pytest
+import tomlkit
 
 from learn_lab import artifact
 from learn_lab.equation import Library, SparseRegression, polynomial_library
@@ -151,14 +154,25 @@ def test_the_manifest_records_what_an_audit_needs(tmp_path) -> None:
     assert set(record['payload']) == {artifact.ARRAYS}
 
 
+def _raw(path: Path) -> dict:
+    return tomllib.loads((path / artifact.MANIFEST).read_text(encoding='utf-8'))
+
+
+def _write_raw(path: Path, raw: dict) -> None:
+    (path / artifact.MANIFEST).write_text(tomlkit.dumps(raw), encoding='utf-8')
+
+
 def _rehash(path: Path, edit) -> None:
-    """Edit the manifest and re-seal it: the hostile artifact a hash alone cannot refuse."""
-    record = json.loads((path / artifact.MANIFEST).read_text(encoding='utf-8'))
+    """Edit the stored manifest and re-seal it: the hostile artifact a hash alone cannot refuse.
+
+    The seal is over the record the reader restores (absent declared fields as ``None``), as the writer's is.
+    """
+    raw = _raw(path)
+    edit(raw)
+    record = artifact._restored(raw, path)  # the reader's own restoration, to forge a valid seal
     record.pop('content_hash')
-    edit(record)
-    canonical = json.dumps(record, sort_keys=True, separators=(',', ':')).encode()
-    record['content_hash'] = 'sha256:' + hashlib.sha256(canonical).hexdigest()
-    (path / artifact.MANIFEST).write_text(json.dumps(record), encoding='utf-8')
+    raw['content_hash'] = artifact.sha256(artifact.canonical(record))
+    _write_raw(path, raw)
 
 
 @pytest.fixture
@@ -194,21 +208,13 @@ def test_an_unknown_format_version_is_refused(saved) -> None:
         artifact.load(saved)
 
 
-def test_a_class_outside_learn_lab_is_never_resolved(saved) -> None:
-    def hostile(record) -> None:
-        record['state']['dataclass'] = 'subprocess:Popen'
-
-    _rehash(saved, hostile)
-    with pytest.raises(Refused, match='only learn_lab classes'):
-        artifact.load(saved)
-
-
-def test_a_learn_lab_name_that_is_not_a_dataclass_is_never_called(saved) -> None:
-    def hostile(record) -> None:
-        record['state']['dataclass'] = 'learn_lab.errors:refuse'
-
-    _rehash(saved, hostile)
-    with pytest.raises(Refused, match='neither a dataclass nor an enum'):
+@pytest.mark.parametrize('name', ['subprocess:Popen', 'learn_lab.errors:refuse'])
+def test_a_class_that_is_not_a_declared_learn_lab_dataclass_is_never_resolved(saved, name) -> None:
+    """Refused while the manifest is read -- before any import -- because no field set is declared for it."""
+    raw = _raw(saved)
+    raw['state']['dataclass'] = name
+    _write_raw(saved, raw)
+    with pytest.raises(Refused, match=f'names {name!r}, which is not a learn_lab dataclass'):
         artifact.load(saved)
 
 
@@ -268,3 +274,96 @@ def test_a_law_on_a_callable_term_is_refused_naming_it(tmp_path) -> None:
     with pytest.raises(Refused, match=r'library\.terms\[0\] is a function'):
         artifact.save(law, tmp_path / 'law', declaration=declaration, data_identity=IDENTITY)
     assert not (tmp_path / 'law').exists()
+
+
+# --- the manifest is TOML (family ruling 2026-11-25): absent means None, undeclared is refused by name ---
+
+FREE = CASES['power_law'][0]  # PowerLaw(fixed=((None, 1.0), (1.0, None))): a None inside the table
+
+
+@pytest.fixture
+def power(tmp_path) -> Path:
+    return artifact.save(FREE.fit(X, Y), tmp_path / 'power', declaration=FREE, data_identity=IDENTITY)
+
+
+def test_an_artifact_writes_its_manifest_as_toml_and_no_json(saved) -> None:
+    assert sorted(p.name for p in saved.iterdir()) == [artifact.ARRAYS, 'manifest.toml']
+    assert 'null' not in (saved / artifact.MANIFEST).read_text(encoding='utf-8')
+
+
+def test_the_stored_fixed_table_lists_only_the_fixed_exponents(power) -> None:
+    """An unlisted cell is free; the table's shape is the record's declared (outputs, inputs) widths."""
+    stored = _raw(power)['declaration']['fields']['fixed']
+    assert stored == [{'output': 0, 'input': 1, 'exponent': 1.0}, {'output': 1, 'input': 0, 'exponent': 1.0}]
+    record = artifact.manifest(power)
+    assert (record['schema']['outputs']['width'], record['schema']['inputs']['width']) == (2, 2)
+    assert record['declaration']['fields']['fixed'] == {'tuple': [{'tuple': [None, 1.0]}, {'tuple': [1.0, None]}]}
+    assert artifact.load(power).exponents.tolist() == FREE.fit(X, Y).exponents.tolist()
+
+
+def test_absent_fields_read_back_as_none_and_the_seal_is_the_records(power) -> None:
+    """The record ``manifest`` returns is the one the writer sealed: its Nones restored, its hash re-derived."""
+    raw = _raw(power)
+    assert {'seed', 'runtime'}.isdisjoint(raw)
+    record = artifact.manifest(power)
+    assert record['seed'] is None and record['runtime'] is None
+    assert set(record) == set(artifact.FIELDS)
+    rest = {k: v for k, v in record.items() if k != 'content_hash'}
+    assert record['content_hash'] == raw['content_hash'] == artifact.sha256(artifact.canonical(rest))
+
+
+def test_a_none_inside_a_list_anywhere_else_is_refused_on_save_by_path(tmp_path) -> None:
+    """PLANTED: a declaration holding a tuple with a None -- TOML cannot hold it, so nothing is written.
+
+    The unedited declaration saves (every round-trip test), so the refusal is the planted None's.
+    """
+    declaration = Polynomial(degree=2)
+    hostile = copy.copy(declaration)
+    object.__setattr__(hostile, 'degree', (None, 2))
+    with pytest.raises(Refused, match=r'declaration\.fields\.degree\.tuple\[0\] is None inside a list'):
+        artifact.save(declaration.fit(X, Y), tmp_path / 'n', declaration=hostile, data_identity=IDENTITY)
+    assert not (tmp_path / 'n').exists()
+
+
+def test_a_fixed_table_off_the_declared_widths_is_refused_on_save(tmp_path) -> None:
+    """The stored table needs its shape from the record; a declaration of another shape cannot be stored."""
+    narrow = PowerLaw(fixed=((None,), (1.0,)))
+    with pytest.raises(Refused, match=r'fixed table is \(2, 1\).*declares \(2, 2\)'):
+        artifact.save(FREE.fit(X, Y), tmp_path / 'w', declaration=narrow, data_identity=IDENTITY)
+    assert not (tmp_path / 'w').exists()
+
+
+@pytest.mark.parametrize(
+    ('where', 'key'),
+    [((), 'sead'), (('schema', 'inputs'), 'widht'), (('declaration', 'fields'), 'degre')],
+    ids=['record', 'schema', 'dataclass'],
+)
+def test_an_undeclared_key_is_refused_by_name(saved, where, key) -> None:
+    """Absence means None, so a typo must not pass as absence: the extra key is refused before any hash."""
+    raw = _raw(saved)
+    _write_raw(saved, raw)
+    artifact.manifest(saved)  # PLANTED CONTROL: the rewrite alone is accepted, so the refusal is the key's
+    node = raw
+    for step in where:
+        node = node[step]
+    node[key] = 1
+    _write_raw(saved, raw)
+    with pytest.raises(Refused, match=f'undeclared field {key!r}'):
+        artifact.manifest(saved)
+
+
+def test_a_fixed_cell_outside_the_table_is_refused_by_name(power) -> None:
+    raw = _raw(power)
+    raw['declaration']['fields']['fixed'][0]['output'] = 5
+    _write_raw(power, raw)
+    with pytest.raises(Refused, match=r'fixed\[0\] names cell \(5, 1\) outside the \(2, 2\) table'):
+        artifact.manifest(power)
+
+
+def test_a_json_manifest_is_refused_by_name_with_its_migration_not_read(power) -> None:
+    """FORMATS-MIGRATE-ONCE: a ``manifest.json`` artifact is never read, even one whose every hash still holds."""
+    record = artifact.manifest(power)
+    (power / artifact.MANIFEST).unlink()
+    (power / 'manifest.json').write_text(json.dumps(record, indent=1, sort_keys=True), encoding='utf-8')
+    with pytest.raises(Refused, match=r'manifest\.json is a retired JSON artifact manifest.*artifact\.save'):
+        artifact.load(power)

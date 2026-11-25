@@ -5,14 +5,16 @@ dtype -> exact equality (``np.array_equal``); CUDA -> CPU in float32 -> within :
 output's own scale (different kernels sum in a different order; the bits may move, the answer may not).
 """
 
-import hashlib
-import json
+import subprocess
+import sys
+import tomllib
 
 import numpy as np
 import pytest
+import tomlkit
 import torch
 
-from learn_lab import artifact
+from learn_lab import artifact, artifact_fields
 from learn_lab.deep.constitutive import MonotoneLaw
 from learn_lab.deep.diffusion import DiffusionField
 from learn_lab.deep.dynamics import NeuralODE
@@ -189,6 +191,10 @@ CASES = {
 }
 
 
+def _raw(path):
+    return tomllib.loads((path / artifact.MANIFEST).read_text(encoding='utf-8'))
+
+
 def test_the_cases_cover_every_deep_family() -> None:
     deep = {name for name, (_, fitted) in artifact.FAMILIES.items() if fitted.startswith('learn_lab.deep.')}
     assert set(CASES) == deep
@@ -217,6 +223,9 @@ def test_a_reloaded_deep_model_answers_bit_for_bit_and_refuses_the_same_stranger
     assert record['family'] == family
     assert record['runtime'] == {'device': 'cpu', 'dtype': declaration.runtime.dtype, 'seed': 0}
     assert set(record['payload']) == {artifact.ARRAYS, artifact.WEIGHTS}
+    # TOML has no null: the schedule's unset batch is absent on disk and None in the record.
+    assert record['declaration']['fields']['schedule']['fields']['batch'] is None
+    assert 'batch' not in _raw(path)['declaration']['fields']['schedule']['fields']
 
 
 def test_the_identified_parameter_survives_the_round_trip(tmp_path) -> None:
@@ -277,13 +286,13 @@ def test_a_module_outside_the_table_is_never_built(tmp_path) -> None:
     """A re-sealed manifest naming torch's own Sequential: the hash passes, the module table refuses."""
     declaration, fit, _, _ = CASES['monotone_law']
     path = artifact.save(fit(declaration), tmp_path / 'law', declaration=declaration, data_identity=IDENTITY)
-    record = json.loads((path / artifact.MANIFEST).read_text(encoding='utf-8'))
+    raw = _raw(path)
+    assert raw['state']['fields']['net']['module'] == 'MonotoneScalar'
+    raw['state']['fields']['net']['module'] = 'Sequential'
+    record = artifact._restored(raw, path)  # the reader's own restoration, to forge a valid seal
     record.pop('content_hash')
-    assert record['state']['fields']['net']['module'] == 'MonotoneScalar'
-    record['state']['fields']['net']['module'] = 'Sequential'
-    canonical = json.dumps(record, sort_keys=True, separators=(',', ':')).encode()
-    record['content_hash'] = 'sha256:' + hashlib.sha256(canonical).hexdigest()
-    (path / artifact.MANIFEST).write_text(json.dumps(record), encoding='utf-8')
+    raw['content_hash'] = artifact.sha256(artifact.canonical(record))
+    (path / artifact.MANIFEST).write_text(tomlkit.dumps(raw), encoding='utf-8')
     with pytest.raises(Refused, match="module is one of .*got 'Sequential'"):
         artifact.load(path)
 
@@ -302,3 +311,56 @@ def test_a_monotone_law_records_the_loss_it_was_fitted_with(tmp_path) -> None:
         declaration = MonotoneLaw(hidden=4, schedule=FEW, runtime=CPU64, loss=loss)
         path = artifact.save(fit(declaration), tmp_path / loss, declaration=declaration, data_identity=IDENTITY)
         assert artifact.manifest(path)['declaration']['fields']['loss'] == loss
+
+
+def test_a_point_family_schema_reads_its_absent_grid_back_as_none(tmp_path) -> None:
+    """A declared schema key that is None (points carry no grid) is absent on disk and None in the record."""
+    declaration, fit, _, _ = CASES['transformer_operator']
+    path = artifact.save(fit(declaration), tmp_path / 'op', declaration=declaration, data_identity=IDENTITY)
+    assert 'grid' not in _raw(path)['schema']['inputs']['functions']
+    record = artifact.manifest(path)
+    assert record['schema']['inputs']['functions']['grid'] is None
+    assert record['state']['fields']['envelope']['fields']['shape'] is None
+
+
+_PROBE = (
+    'import sys\n'
+    'from learn_lab import artifact\n'
+    'getattr(artifact, sys.argv[2])(sys.argv[1])\n'
+    'print("torch" in sys.modules)'
+)
+
+
+@pytest.mark.parametrize(('verb', 'loads_torch'), [('manifest', False), ('load', True)])
+def test_reading_a_deep_manifest_imports_no_torch(tmp_path, verb, loads_torch) -> None:
+    """``manifest`` restores the record from declared data, not by importing the classes it names.
+
+    PLANTED CONTROL: ``load`` of the same artifact does import torch, so the probe can say yes.
+    """
+    declaration, fit, _, _ = CASES['monotone_law']
+    path = artifact.save(fit(declaration), tmp_path / 'law', declaration=declaration, data_identity=IDENTITY)
+    run = subprocess.run(
+        [sys.executable, '-c', _PROBE, str(path), verb], capture_output=True, text=True, check=True, timeout=300
+    )
+    assert run.stdout.strip() == str(loads_torch), run.stdout + run.stderr
+
+
+def test_a_default_transolver_round_trips_its_absent_reference_as_none(tmp_path) -> None:
+    """``reference=None`` (no reference grid) is a module argument: absent on disk, None again in declared order.
+
+    PLANTED CONTROL: the table's transolver case (``reference=3``) stores the argument, so absence is the None's.
+    """
+    declaration = Transolver(width=4, heads=2, layers=1, slices=3, schedule=FEW, runtime=CPU64)
+    assert declaration.reference is None
+    fitted = declaration.fit(GRID[:, :, 0], COORDS, -GRID[:, :, 0])
+    path = artifact.save(fitted, tmp_path / 'default', declaration=declaration, data_identity=IDENTITY)
+    stored = dict(map(tuple, _raw(path)['state']['fields']['net']['arguments']['dict']))
+    assert 'reference' not in stored
+    pairs = artifact.manifest(path)['state']['fields']['net']['arguments']['dict']
+    assert [name for name, _ in pairs] == list(artifact_fields.MODULE_ARGUMENTS['TransolverNet'])
+    assert dict(map(tuple, pairs))['reference'] is None
+    loaded = artifact.load(path)
+    assert np.array_equal(loaded.predict(GRID[:2, :, 0], COORDS), fitted.predict(GRID[:2, :, 0], COORDS))
+    declared, fit, _, _ = CASES['transolver']
+    kept = artifact.save(fit(declared), tmp_path / 'kept', declaration=declared, data_identity=IDENTITY)
+    assert 'reference' in dict(map(tuple, _raw(kept)['state']['fields']['net']['arguments']['dict']))

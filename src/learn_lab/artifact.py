@@ -4,10 +4,11 @@
 a fitted model whose every answer equals the original's bit for bit on the same device; :func:`manifest` returns
 the verified record for an audit without building the model. The directory holds:
 
-- ``manifest.json`` -- the format and its version, the learn-lab version and git commit that wrote it, the
+- ``manifest.toml`` -- the format and its version, the learn-lab version and git commit that wrote it, the
   family (its :data:`FAMILIES` name), the declaration it was fitted from (its constructor settings), the input
   and output schema (a response family's inputs carry the ENVELOPE its fit answers in), the seed, the runtime,
-  the caller's data identity and metrics, the fitted STATE as a tagged tree, the SHA-256 of each payload file, and ``content_hash`` -- the SHA-256 of the rest of itself;
+  the caller's data identity and metrics, the fitted STATE as a tagged tree, the SHA-256 of each payload file,
+  and ``content_hash`` -- the SHA-256 of the rest of itself;
 - ``arrays.npz`` -- every numpy array of the fit, read back with ``allow_pickle=False``;
 - ``weights.pt`` -- a deep family's torch state as one flat ``{name: tensor}`` dict, read back with
   ``weights_only=True`` (only present for a deep family; written and read by :mod:`learn_lab.deep.artifact`).
@@ -20,6 +21,16 @@ so its own checks run on what was read; a torch module only from the declared ta
 A fit that holds something else -- a caller's own callable term in an equation library -- is refused at save,
 naming where it sits. The format version is checked first: :data:`VERSION` is the only one ever issued, and any
 other is refused (there is no older schema to read).
+
+Manifests are TOML (family ruling 2026-11-25), and TOML has no null. The file is a lossless projection of the
+record :func:`manifest` returns, which is sealed by ``content_hash`` exactly as written: every table is DECLARED
+-- the record (:data:`FIELDS`), each family's schema (:data:`SCHEMA_FIELDS`), each dataclass node
+(:data:`learn_lab.artifact_fields.DATACLASS_FIELDS`, data, so reading imports no model module) -- so a ``None``
+field is absent on disk and an absent declared field reads back as ``None``, while an undeclared key is refused
+by name. ``PowerLaw.fixed`` (``None`` = a free exponent) is stored as the list of its FIXED cells, ``{output,
+input, exponent}``, the table's shape being the schema's (outputs, inputs) widths. A ``None`` inside any other
+list is refused at save, naming its path. A ``manifest.json`` is refused by name, never read
+(FORMATS-MIGRATE-ONCE).
 """
 
 from __future__ import annotations
@@ -31,6 +42,7 @@ import importlib
 import json
 import shutil
 import subprocess
+import tomllib
 from collections.abc import Callable, Mapping
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
@@ -39,15 +51,51 @@ from types import ModuleType
 from typing import Final
 
 import numpy as np
+import tomlkit
 
+from learn_lab.artifact_fields import DATACLASS_FIELDS, MODULE_ARGUMENTS
 from learn_lab.errors import refuse
 from learn_lab.validity import BoxEnvelope, HullEnvelope
 
-__all__ = ['FAMILIES', 'FORMAT', 'VERSION', 'canonical', 'family_of', 'load', 'manifest', 'save', 'sha256']
+__all__ = [
+    'FAMILIES',
+    'FIELDS',
+    'FORMAT',
+    'SCHEMA_FIELDS',
+    'VERSION',
+    'canonical',
+    'family_of',
+    'load',
+    'manifest',
+    'save',
+    'sha256',
+]
 
 FORMAT: Final = 'learn-lab-artifact'
 VERSION: Final = 1
-MANIFEST: Final = 'manifest.json'
+MANIFEST: Final = 'manifest.toml'
+#: The retired JSON manifest: refused by name, never read (FORMATS-MIGRATE-ONCE).
+RETIRED_MANIFEST: Final = 'manifest.json'
+MIGRATE_DOOR: Final = (
+    'fit the declaration it names again and artifact.save the fit with this learn-lab, to a new directory: an '
+    'artifact manifest is manifest.toml'
+)
+#: Every field of the record; an absent one is ``None``, an undeclared one is refused by name.
+FIELDS: Final = (
+    'format',
+    'version',
+    'learn_lab',
+    'family',
+    'declaration',
+    'schema',
+    'seed',
+    'runtime',
+    'data_identity',
+    'metrics',
+    'state',
+    'payload',
+    'content_hash',
+)
 ARRAYS: Final = 'arrays.npz'
 WEIGHTS: Final = 'weights.pt'
 
@@ -177,6 +225,88 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
         'outputs': {'kind': 'rate', 'targets': list(f.targets)},
     },
 }
+
+
+#: A declared table: each key maps to ``None`` (a value) or to the declared table it holds. An absent key reads as
+#: ``None``; a key the table does not declare is refused by name.
+type Table = Mapping[str, Table | None]
+
+
+def _keys(*values: str, **tables: Table) -> dict[str, Table | None]:
+    return dict.fromkeys(values) | tables
+
+
+_WIDTH: Final = _keys('kind', 'width')
+_VECTOR_INPUTS: Final = _keys('kind', 'width', envelope=_keys('lower', 'upper'))
+_HULL: Final = _keys('origin', 'basis', 'normals', 'offsets', 'slack')
+_BOX: Final = _keys('kind', 'width', 'lower', 'upper')  # the deep codec's ``_box``
+_CHANNELS: Final = _keys('kind', 'channels', 'grid', 'lower', 'upper')  # its ``_channels``; grid None off a grid
+_CHANNELS_OUT: Final = _keys('kind', 'channels')
+_ON_POINTS: Final = _keys(inputs=_keys(functions=_CHANNELS, points=_BOX), outputs=_CHANNELS_OUT)
+#: The schema of an ensemble of fits is its first member's: :func:`_schema_table` reads which family that is.
+_MEMBERS: Final = 'the first member family'
+
+#: Every family's declared schema table (the numpy families' :data:`_SCHEMAS`, the deep codec's ``_SCHEMAS``),
+#: as data so reading a manifest imports no model module. A save whose schema strays from it is refused by name.
+SCHEMA_FIELDS: Final[dict[str, Table | str]] = {
+    **dict.fromkeys(
+        [
+            'polynomial',
+            'power_law',
+            'law_residual',
+            'radial_basis',
+            'gaussian_process',
+            'gradient_enhanced_kriging',
+            'multi_output_kriging',
+            'co_kriging',
+            'nearest_neighbours',
+            'regression_tree',
+            'forest',
+            'multilayer_perceptron',
+            'chaos_expansion',
+        ],
+        _keys(inputs=_VECTOR_INPUTS, outputs=_WIDTH),
+    ),
+    'clough_tocher': _keys(inputs=_keys('kind', 'width', envelope=_keys(hull=_HULL)), outputs=_WIDTH),
+    'ensemble': _MEMBERS,
+    'bagging': _MEMBERS,
+    **dict.fromkeys(
+        ['nearest_neighbours_classifier', 'classification_tree', 'logistic_regression'],
+        _keys(inputs=_VECTOR_INPUTS, outputs=_keys('kind', 'classes')),
+    ),
+    'sparse_regression': _keys(inputs=_keys('kind', 'variables'), outputs=_keys('kind', 'targets')),
+    'deep_ensemble': _keys(inputs=_BOX, outputs=_WIDTH),
+    'physics_informed_field': _keys(inputs=_BOX, outputs=_WIDTH),
+    'monotone_law': _keys(inputs=_BOX, outputs=_keys('kind')),
+    'play_hysteresis': _keys(inputs=_BOX, outputs=_keys('kind', 'plays')),
+    'field_model': _keys(inputs=_CHANNELS, outputs=_CHANNELS_OUT),
+    'deep_onet': _keys(inputs=_keys(sensors=_CHANNELS, points=_BOX), outputs=_keys('kind')),
+    'fno': _keys(inputs=_CHANNELS, outputs=_CHANNELS_OUT),
+    'transformer_operator': _ON_POINTS,
+    'transolver': _ON_POINTS,
+    'graph_model': _keys(inputs=_keys(nodes=_CHANNELS, edges=_CHANNELS), outputs=_CHANNELS_OUT),
+    'graph_operator': _ON_POINTS,
+    'learned_preconditioner': _keys(inputs=_keys('kind', nodes=_CHANNELS, entries=_CHANNELS), outputs=_keys('kind')),
+    'neural_ode': _keys(inputs=_BOX, outputs=_WIDTH),
+    'diffusion_field': _keys(inputs=_BOX, outputs=_keys('kind', 'channels', 'grid')),
+    'pde_net': _keys(inputs=_BOX, outputs=_keys('kind', 'terms')),
+}
+_LEARN_LAB: Final = _keys('version', git=_keys('sha', 'dirty'))
+_RUNTIME: Final = _keys('device', 'dtype', 'seed')
+#: The declared keys of each tagged node of a state tree (its tag first).
+_TAG_FIELDS: Final[dict[str, tuple[str, ...]]] = {
+    'array': ('array',),
+    'scalar': ('scalar',),
+    'enum': ('enum', 'value'),
+    'tuple': ('tuple',),
+    'frozenset': ('frozenset',),
+    'dict': ('dict',),
+    'dataclass': ('dataclass', 'fields'),
+    'module': ('module', 'arguments', 'state'),
+}
+#: The one table whose ``None`` cells are stored by omission: a free exponent (:class:`PowerLaw`).
+_POWER_LAW: Final = f'{_RESPONSE}power_law:PowerLaw'
+_CELL: Final = ('output', 'input', 'exponent')
 
 
 def _path_of(cls: type) -> str:
@@ -331,6 +461,261 @@ def canonical(record: Mapping[str, object]) -> bytes:
     return json.dumps(record, sort_keys=True, separators=(',', ':'), allow_nan=True).encode()
 
 
+# --- the record <-> its TOML projection: None by omission from a declared table, never inside a list ---
+
+
+def _undeclared(node: Mapping, declared: object, where: str) -> None:
+    if extra := sorted(set(node) - set(declared)):
+        refuse(f'{where} holds undeclared field {extra[0]!r} (all: {extra}); it declares {sorted(declared)}')
+
+
+def _table_node(node: object, where: str) -> Mapping:
+    if not isinstance(node, Mapping):
+        refuse(f'{where} is a table, got {node!r}')
+    return node
+
+
+def _schema_table(family: object, state: object, where: str = 'schema') -> Table:
+    """The declared schema table of *family*; an ensemble's is its first member's, read off *state*."""
+    table = SCHEMA_FIELDS.get(family) if isinstance(family, str) else None
+    if table is None:
+        refuse(f'{where} belongs to family {family!r}, which is not one of {list(FAMILIES)}')
+    if table != _MEMBERS:
+        return table
+    try:
+        first = state['fields']['members']['tuple'][0]
+        member = next(name for name, (_, fitted) in FAMILIES.items() if fitted == first['dataclass'])
+    except (KeyError, IndexError, TypeError, StopIteration):
+        refuse(f'{where} of a {family} is its first member family, which its state does not name')
+    return _schema_table(member, first, where)
+
+
+def _fixed_shape(schema: object) -> tuple[int, int] | None:
+    """(outputs, inputs) of a vector schema: the shape of every ``PowerLaw.fixed`` table in its record."""
+    try:
+        shape = (schema['outputs']['width'], schema['inputs']['width'])
+    except (KeyError, TypeError):
+        return None
+    return shape if all(isinstance(n, int) and not isinstance(n, bool) for n in shape) else None
+
+
+def _store_value(value: object, where: str) -> object:
+    """A value with no declared table under it: it holds no ``None`` anywhere, which TOML could not write."""
+    if value is None:
+        refuse(f'{where} is None inside a list, which a TOML manifest cannot hold')
+    if isinstance(value, list):
+        return [_store_value(v, f'{where}[{i}]') for i, v in enumerate(value)]
+    if isinstance(value, Mapping):
+        return {k: _store_value(v, f'{where}.{k}') for k, v in value.items()}
+    return value
+
+
+def _store_table(node: object, table: Table, where: str) -> dict:
+    stored = {}
+    _undeclared(_table_node(node, where), table, where)
+    for key, value in node.items():
+        if value is not None:
+            sub = table[key]
+            here = f'{where}.{key}'
+            stored[key] = _store_value(value, here) if sub is None else _store_table(value, sub, here)
+    return stored
+
+
+def _restore_table(node: object, table: Table, where: str) -> dict:
+    _undeclared(_table_node(node, where), table, where)
+    restored = {}
+    for key, sub in table.items():
+        value = node.get(key)
+        restored[key] = value if value is None or sub is None else _restore_table(value, sub, f'{where}.{key}')
+    return restored
+
+
+def _tagged(node: object, where: str) -> tuple[str, tuple[str, ...]]:
+    """The tag of a state-tree table and its declared keys; an untagged table is refused."""
+    if isinstance(node, Mapping):
+        tag = next((tag for tag in _TAG_FIELDS if tag in node), None)
+        if tag is not None:
+            _undeclared(node, _TAG_FIELDS[tag], where)
+            return tag, _TAG_FIELDS[tag]
+    return refuse(f'{where} is a state-tree table with none of the tags {list(_TAG_FIELDS)}: {node!r}')
+
+
+def _declared_fields(path: object, where: str) -> tuple[str, ...]:
+    fields = DATACLASS_FIELDS.get(path) if isinstance(path, str) else None
+    if fields is None:
+        refuse(f'{where} names {path!r}, which is not a learn_lab dataclass an artifact declares')
+    return fields
+
+
+def _store_tree(node: object, where: str, shape: tuple[int, int] | None) -> object:
+    if isinstance(node, list):
+        stored = []
+        for i, value in enumerate(node):
+            if value is None:
+                refuse(f'{where}[{i}] is None inside a list, which a TOML manifest cannot hold')
+            stored.append(_store_tree(value, f'{where}[{i}]', shape))
+        return stored
+    if not isinstance(node, Mapping):
+        return node
+    tag, keys = _tagged(node, where)
+    if tag == 'module':
+        return {**node, 'arguments': _store_arguments(node, f'{where}.arguments', shape)}
+    if tag != 'dataclass':
+        return {k: _store_tree(node[k], f'{where}.{k}', shape) for k in keys if node.get(k) is not None}
+    path = node['dataclass']
+    fields = _table_node(node.get('fields'), f'{where}.fields')
+    _undeclared(fields, _declared_fields(path, where), f'{where}.fields')
+    stored = {}
+    for name, value in fields.items():
+        here = f'{where}.fields.{name}'
+        if value is None:
+            continue
+        if (path, name) == (_POWER_LAW, 'fixed'):
+            stored[name] = _store_fixed(value, here, shape)
+        else:
+            stored[name] = _store_tree(value, here, shape)
+    return {'dataclass': path, 'fields': stored}
+
+
+def _restore_tree(node: object, where: str, shape: tuple[int, int] | None) -> object:
+    if isinstance(node, list):
+        return [_restore_tree(v, f'{where}[{i}]', shape) for i, v in enumerate(node)]
+    if not isinstance(node, Mapping):
+        return node
+    tag, keys = _tagged(node, where)
+    if tag == 'module':
+        restored = {k: node.get(k) for k in keys}
+        return {**restored, 'arguments': _restore_arguments(node, f'{where}.arguments', shape)}
+    if tag != 'dataclass':
+        return {k: None if node.get(k) is None else _restore_tree(node[k], f'{where}.{k}', shape) for k in keys}
+    path = node['dataclass']
+    declared = _declared_fields(path, where)
+    fields = _table_node(node.get('fields', {}), f'{where}.fields')
+    _undeclared(fields, declared, f'{where}.fields')
+    restored = {}
+    for name in declared:
+        here = f'{where}.fields.{name}'
+        value = fields.get(name)
+        if value is None:
+            restored[name] = None
+        elif (path, name) == (_POWER_LAW, 'fixed'):
+            restored[name] = _restore_fixed(value, here, shape)
+        else:
+            restored[name] = _restore_tree(value, here, shape)
+    return {'dataclass': path, 'fields': restored}
+
+
+def _declared_arguments(module: object, where: str) -> tuple[str, ...]:
+    arguments = MODULE_ARGUMENTS.get(module) if isinstance(module, str) else None
+    if arguments is None:
+        refuse(f'{where} belongs to module {module!r}, which is not one an artifact declares')
+    return arguments
+
+
+def _argument_pairs(node: Mapping, where: str) -> list:
+    pairs = _table_node(node.get('arguments'), where).get('dict')
+    if not isinstance(pairs, list) or not all(isinstance(p, list) and len(p) == 2 for p in pairs):
+        refuse(f'{where} is the module arguments as [name, value] pairs, got {node.get("arguments")!r}')
+    return pairs
+
+
+def _store_arguments(node: Mapping, where: str, shape: tuple[int, int] | None) -> dict:
+    """A module's arguments, every one its constructor declares and in that order; a ``None`` one by omission."""
+    declared = _declared_arguments(node.get('module'), where)
+    pairs = _argument_pairs(node, where)
+    if tuple(name for name, _ in pairs) != declared:
+        refuse(f'{where} names {[name for name, _ in pairs]}, while its module declares {list(declared)}')
+    kept = [[name, value] for name, value in pairs if value is not None]
+    return {'dict': [[name, _store_tree(value, f'{where}[{name!r}]', shape)] for name, value in kept]}
+
+
+def _restore_arguments(node: Mapping, where: str, shape: tuple[int, int] | None) -> dict:
+    """Every declared argument in declared order: an absent one ``None``, an undeclared one refused by name."""
+    declared = _declared_arguments(node.get('module'), where)
+    given = dict(map(tuple, _argument_pairs(node, where)))
+    _undeclared(given, declared, where)
+    return {
+        'dict': [
+            [name, None if given.get(name) is None else _restore_tree(given[name], f'{where}[{name!r}]', shape)]
+            for name in declared
+        ]
+    }
+
+
+def _store_fixed(node: object, where: str, shape: tuple[int, int] | None) -> list[dict]:
+    """``PowerLaw.fixed`` -- ``{'tuple': [{'tuple': row}, ...]}``, ``None`` = free -- as its FIXED cells only."""
+    try:
+        rows = [row['tuple'] for row in node['tuple']]
+    except (KeyError, TypeError):
+        refuse(f'{where} is a table of exponent rows, got {node!r}')
+    table = (len(rows), len(rows[0]) if rows else 0)
+    if shape is None or table != shape or any(len(row) != shape[1] for row in rows):
+        refuse(f'{where}: the fixed table is {table}, while its record declares {shape} (outputs, inputs)')
+    return [
+        {'output': i, 'input': j, 'exponent': _store_tree(x, f'{where}[{i}][{j}]', shape)}
+        for i, row in enumerate(rows)
+        for j, x in enumerate(row)
+        if x is not None
+    ]
+
+
+def _restore_fixed(cells: object, where: str, shape: tuple[int, int] | None) -> dict:
+    """The full ``PowerLaw.fixed`` table: every listed cell fixed, every unlisted one free (``None``)."""
+    if shape is None:
+        refuse(f'{where} needs its record to declare (outputs, inputs) widths, and the schema does not')
+    if not isinstance(cells, list):
+        refuse(f'{where} is the list of fixed exponents, got {cells!r}')
+    rows: list[list[object]] = [[None] * shape[1] for _ in range(shape[0])]
+    for k, cell in enumerate(cells):
+        here = f'{where}[{k}]'
+        _undeclared(_table_node(cell, here), _CELL, here)
+        i, j = cell.get('output'), cell.get('input')
+        if not all(isinstance(n, int) and not isinstance(n, bool) for n in (i, j)):
+            refuse(f'{here} names its cell by integer output and input, got ({i!r}, {j!r})')
+        if not (0 <= i < shape[0] and 0 <= j < shape[1]):
+            refuse(f'{here} names cell ({i}, {j}) outside the {shape} table')
+        if rows[i][j] is not None or 'exponent' not in cell:
+            refuse(f'{here} names cell ({i}, {j}) twice or without its exponent')
+        rows[i][j] = _restore_tree(cell['exponent'], f'{here}.exponent', shape)
+    return {'tuple': [{'tuple': row} for row in rows]}
+
+
+def _stored(record: Mapping[str, object]) -> dict:
+    """The TOML projection of *record*: ``None`` by omission from its declared tables; refused where it cannot be."""
+    _undeclared(record, FIELDS, 'the record')
+    shape = _fixed_shape(record.get('schema'))
+    stored = {}
+    for name, value in record.items():
+        if value is None:
+            continue
+        if name in ('declaration', 'state'):
+            value = _store_tree(value, name, shape)
+        elif name == 'schema':
+            value = _store_table(value, _schema_table(record.get('family'), record.get('state')), name)
+        elif name in ('learn_lab', 'runtime'):
+            value = _store_table(value, _LEARN_LAB if name == 'learn_lab' else _RUNTIME, name)
+        else:
+            value = _store_value(value, name)
+        stored[name] = value
+    return stored
+
+
+def _restored(raw: Mapping[str, object], path: Path) -> dict:
+    """The record a TOML manifest at *path* stores: every declared absent field ``None``, undeclared refused."""
+    _undeclared(raw, FIELDS, str(path / MANIFEST))
+    record = {name: raw.get(name) for name in FIELDS}
+    if record['schema'] is not None:
+        record['schema'] = _restore_table(record['schema'], _schema_table(record['family'], record['state']), 'schema')
+    for name, table in (('learn_lab', _LEARN_LAB), ('runtime', _RUNTIME)):
+        if record[name] is not None:
+            record[name] = _restore_table(record[name], table, name)
+    shape = _fixed_shape(record['schema'])
+    for name in ('declaration', 'state'):
+        if record[name] is not None:
+            record[name] = _restore_tree(record[name], name, shape)
+    return record
+
+
 def _git_commit() -> dict | None:
     """The commit of the learn-lab source tree that wrote the artifact, and whether it had local edits."""
     git = shutil.which('git')
@@ -406,13 +791,6 @@ def save(
     state = writer.encode(fitted, 'the fit')
     settings = writer.encode(declaration, 'the declaration')
     runtime = state['fields'].get('runtime')
-    files: dict[str, bytes] = {}
-    path.mkdir(parents=True)
-    np.savez(path / ARRAYS, **writer.arrays)
-    files[ARRAYS] = (path / ARRAYS).read_bytes()
-    if writer.weights:
-        _torch_codec().write_weights(writer.weights, path / WEIGHTS)
-        files[WEIGHTS] = (path / WEIGHTS).read_bytes()
     record = {
         'format': FORMAT,
         'version': VERSION,
@@ -425,28 +803,43 @@ def save(
         'data_identity': data_identity,
         'metrics': metrics,
         'state': state,
-        'payload': {name: sha256(data) for name, data in files.items()},
     }
+    _stored(record)  # what TOML cannot hold is refused before anything is written
+    files: dict[str, bytes] = {}
+    path.mkdir(parents=True)
+    np.savez(path / ARRAYS, **writer.arrays)
+    files[ARRAYS] = (path / ARRAYS).read_bytes()
+    if writer.weights:
+        _torch_codec().write_weights(writer.weights, path / WEIGHTS)
+        files[WEIGHTS] = (path / WEIGHTS).read_bytes()
+    record['payload'] = {name: sha256(data) for name, data in files.items()}
     record['content_hash'] = sha256(canonical(record))
-    (path / MANIFEST).write_text(json.dumps(record, indent=1, sort_keys=True, allow_nan=True), encoding='utf-8')
+    text = tomlkit.dumps(_stored(record), sort_keys=True)
+    (path / MANIFEST).write_text(text, encoding='utf-8', newline='\n')
     return path
 
 
 def manifest(path: str | Path) -> dict:
-    """The verified manifest of the artifact at *path*: its version known, its hash and every payload file's intact."""
+    """The verified manifest of the artifact at *path*: its version known, its hash and every payload file's intact.
+
+    The record is restored from the TOML by its declared tables alone -- no model module is imported.
+    """
     path = Path(path)
+    if (path / RETIRED_MANIFEST).exists():
+        refuse(f'{path / RETIRED_MANIFEST} is a retired JSON artifact manifest and is not read; {MIGRATE_DOOR}')
     try:
-        record = json.loads((path / MANIFEST).read_text(encoding='utf-8'))
+        raw = tomllib.loads((path / MANIFEST).read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
         refuse(f'{path / MANIFEST} is not a readable artifact manifest: {exc}')
-    if not isinstance(record, dict) or record.get('format') != FORMAT:
+    if raw.get('format') != FORMAT:
         refuse(f'{path} is not a {FORMAT}')
-    if record.get('version') != VERSION:
-        refuse(f'{path} is {FORMAT} version {record.get("version")!r}; this learn-lab reads version {VERSION} only')
+    if raw.get('version') != VERSION:
+        refuse(f'{path} is {FORMAT} version {raw.get("version")!r}; this learn-lab reads version {VERSION} only')
+    record = _restored(raw, path)
     claimed = record.pop('content_hash', None)
     if claimed != sha256(canonical(record)):
         refuse(f'{path / MANIFEST} does not match its content hash: the manifest was changed after it was written')
-    payload = record.get('payload', {})
+    payload = record['payload'] or {}
     for name in (ARRAYS, WEIGHTS):
         present = (path / name).exists()
         if present != (name in payload):

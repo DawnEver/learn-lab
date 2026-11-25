@@ -16,16 +16,17 @@ authors = [{ name = "Mingyang Bao" }]
 # The public boundary speaks numpy only. torch is the [torch] extra, imported only inside learn_lab.deep
 # (tests/architecture/test_the_layers_point_one_way.py), so the response models never load it. The response
 # models solve through numerics-lab (the family's equation-solving engine) and read scipy.special only.
+# Every learn-lab record -- an artifact's manifest, a fit checkpoint, an export's manifest -- is TOML (family ruling
+# 2026-11-25): written by tomlkit, the family's TOML writer (lab-commons[io]), read by stdlib tomllib.
 dependencies = [
     "numerics-lab @ git+https://github.com/DawnEver/numerics-lab.git",
     "numpy",
     "scipy",
+    "tomlkit",
 ]
 
 [project.optional-dependencies]
-# learn_lab.deep's records -- the fit checkpoint and the inference export's manifest -- are TOML (family ruling
-# 2026-11-25), written by tomlkit -- the family's TOML writer (lab-commons[io]) -- and read by stdlib tomllib.
-torch = ["torch>=2.7", "tomlkit"]
+torch = ["torch>=2.7"]
 # Inference export (learn_lab.deep.export): ONNX through torch, post-training quantization and the CPU/iGPU/NPU
 # runtime through OpenVINO + NNCF. Inference only; training stays on torch.
 openvino = ["onnx", "openvino", "nncf"]

@@ -480,8 +480,8 @@ wheels = [
 
 [[package]]
 name = "lab-commons"
-version = "0.3.1.dev1767+gfc92c217d"
-source = { git = "https://github.com/DawnEver/lab-commons.git#fc92c217da939540c47074bfd49e6c0512915771" }
+version = "0.3.1.dev1769+g78da6606a"
+source = { git = "https://github.com/DawnEver/lab-commons.git#78da6606ad6977bee9e8241e29f7e4ac7e7f07df" }
 
 [package.optional-dependencies]
 io = [
@@ -781,7 +781,7 @@ wheels = [
 [[package]]
 name = "numerics-lab"
 version = "0.1.0"
-source = { git = "https://github.com/DawnEver/numerics-lab.git#0a61d947ca8044df6384e9f48d9024f39ac014a9" }
+source = { git = "https://github.com/DawnEver/numerics-lab.git#0742db11ad886e6f7db3198ef68d9feb71afbace" }
 dependencies = [
     { name = "numpy" },
     { name = "scipy" },

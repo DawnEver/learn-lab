@@ -70,8 +70,11 @@ _MECHANISMS: Final = {
         TestPath('pyproject.toml'),
         TestPath('tests/architecture/test_the_ci_workflow_is_rendered.py'),
     ),
-    # November 2026, the founding month, is the first month this tree holds.
-    'MONTHLY-PLANS-CARRIED': (TestPath('tests/architecture/test_every_month_carries_its_plans.py'),),
+    # Adopted 2026-11-26 with the adopt-dev-lab-learn relock: verify's family checks read pyproject's
+    # [tool.dev_lab.placement.layout] (the tree and its formats) and [tool.dev_lab.env] (no read outside an entry).
+    'DECLARED-LAYOUT': (TestPath('pyproject.toml'),),
+    'ONE-FORMAT-PER-NEED': (TestPath('pyproject.toml'),),
+    'ENV-IS-READ-ONCE': (TestPath('pyproject.toml'),),
     # The agent guard ships in every family repo; the rendered
     # `.claude/hooks/deny-rules.json` refuses these, each by its own rule, and the test pins it live.
     **dict.fromkeys(
@@ -102,6 +105,10 @@ _MECHANISMS: Final = {
             # an image by a relative path.
             'WORKTREE-NAMES-ITS-TASK',
             'IMAGES-BY-ABSOLUTE-PATH',
+            # Adopted 2026-11-26 with the adopt-dev-lab-learn relock: the rendered deny rows refuse a ledger write
+            # past its door and a backup copy under output/ or scratch/.
+            'LEDGER-WRITES-THROUGH-ITS-DOOR',
+            'NO-BACKUP-COPIES',
         ),
         (TestPath('tests/architecture/test_the_agent_guard_is_live.py'),),
     ),
@@ -138,6 +145,14 @@ _ABSENT: Final = frozenset({
     # Hosts (gained 2026-11-22 with the dev-lab e8646709 relock): learn-lab deploys no host role, so it runs no
     # scheduler to restrict and declares no ssh endpoint whose key it could check.
     'SCHEDULER-ONLY-FOR-SERVING', 'SSH-HOST-KEY-DECLARED',
+    # Gained 2026-11-26 with the adopt-dev-lab-learn relock, none with a mechanism here yet. Opt-in declarations
+    # this repo does not make ([tool.dev_lab.layers], [tool.dev_lab.native], dependencies.toml):
+    'ZERO-CORE-CHANGE', 'NATIVE-FIRST', 'OWNER-DAG', 'NO-DETOUR',
+    # Forge- and host-side (the merge refuses an unmeasured crate; red integration is the forge's policy; machines
+    # meet through it): nothing in this tree carries them.
+    'MEASURE-BEFORE-PORTING', 'RED-INTEGRATION-MERGES', 'MACHINES-MEET-ONLY-THROUGH-THE-FORGE',
+    # No goldens rewritten with a quote, no config-key scan, secret-scan or prior-art hook wired here.
+    'BASELINE-REWRITE-QUOTED', 'CONFIG-VALUES-CARRY-UNITS', 'NEVER-LOG-SECRETS', 'PRIOR-ART-FIRST',
 })  # fmt: skip
 
 #: The size of the absent set at founding (2026-11-07); lowering it is the only legal edit.

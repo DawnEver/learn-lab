@@ -145,6 +145,12 @@ adoption = "scripts/deny_rules.py"
 [tool.dev_lab.review]
 judge_app = 5619495
 
+# ENV-IS-READ-ONCE (dev_lab.dev.envreads): learn-lab is a library with no entry module. Its one read is debt:
+# Runtime.seeded sets cuBLAS's workspace before the first CUDA call (deterministic kernels need it declared).
+[tool.dev_lab.env]
+entry = []
+pending = ["src/learn_lab/deep/runtime.py"]
+
 # DECLARED-LAYOUT (dev_lab.dev.layout): the WHOLE tree as an allow-list -- each directory pattern (one glob per
 # segment; the deepest matching row judges) and the formats a file there may be ('.suffix', an exact name, "" for
 # none, "*" for anything). Undeclared is refused. NO-BACKUP-COPIES: nothing under output/ or scratch/ is ever a

@@ -12,7 +12,7 @@ batch (throughput, samples/s), host array in and host array out. The torch devic
 ``cuda:<n>``; ``npu`` is the OpenVINO NPU, reached through :mod:`learn_lab.deep.export` (fp32 ONNX and int8 IR,
 static shapes, so each batch is its own export). A device that is not present is a row with status
 ``unavailable`` and its reason, never a fallback to another device; a family the export refuses is ``refused``.
-A CUDA row carries the GPU utilisation sampled when it starts and ``contended`` when another process held the GPU.
+A CUDA row carries the GPU utilization sampled when it starts and ``contended`` when another process held the GPU.
 """
 
 from __future__ import annotations
@@ -205,7 +205,7 @@ def _timed(call: Callable[[], object], warmup: int, repeats: int) -> list[float]
 
 
 def _gpu_sample() -> dict:
-    """GPU utilisation and compute processes now, from nvidia-smi; empty when it is absent."""
+    """GPU utilization and compute processes now, from nvidia-smi; empty when it is absent."""
     smi = shutil.which('nvidia-smi')
     if smi is None:
         return {}
@@ -217,7 +217,7 @@ def _gpu_sample() -> dict:
         for p in subprocess.run(apps, capture_output=True, text=True, check=True, timeout=30).stdout.splitlines()
         if p.strip() and p.strip() != str(os.getpid())
     ]
-    return {'utilisation_pct': int(util), 'memory_used_mib': int(memory), 'other_processes': others}
+    return {'utilization_pct': int(util), 'memory_used_mib': int(memory), 'other_processes': others}
 
 
 def _torch_device(device: str) -> str | None:
@@ -250,7 +250,7 @@ def _torch_rows(family: str, problem: Problem, device: str, dtype: str, steps: i
         base |= {
             'gpu_at_start': sample,
             'contended': bool(sample)
-            and (sample['utilisation_pct'] >= CONTENDED_AT or bool(sample['other_processes'])),
+            and (sample['utilization_pct'] >= CONTENDED_AT or bool(sample['other_processes'])),
         }
     rt = Runtime(device=device, dtype=dtype)
     fits: list[object] = []
@@ -406,7 +406,7 @@ def render(record: dict) -> str:
         if 'contended' in r:
             g = r['gpu_at_start']
             note = (
-                f'CONTENDED util {g["utilisation_pct"]}%' if r['contended'] else f'clean util {g["utilisation_pct"]}%'
+                f'CONTENDED util {g["utilization_pct"]}%' if r['contended'] else f'clean util {g["utilization_pct"]}%'
             )
         if 'compile_s' in r:
             note = f'compile {r["compile_s"]:.2f} s'

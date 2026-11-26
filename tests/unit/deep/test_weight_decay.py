@@ -13,6 +13,8 @@ from learn_lab.errors import Refused
 
 from .test_batch import FAMILIES, RT, Interrupted, N, _fit, _problem, calls  # noqa: F401 -- fixture
 
+pytestmark = pytest.mark.torch
+
 
 def _norm(net) -> float:
     return float(sum((p.detach() ** 2).sum() for p in net.parameters()))

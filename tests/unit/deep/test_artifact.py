@@ -32,6 +32,8 @@ from learn_lab.point_graph import mesh_graph
 
 from ._poisson import Poisson
 
+pytestmark = pytest.mark.torch
+
 FEW = Schedule(adam_steps=3, learning_rate=1e-2)
 CPU64, CPU32 = Runtime(device='cpu'), Runtime(device='cpu', dtype='float32')
 IDENTITY = 'sha256:planted-training-data'

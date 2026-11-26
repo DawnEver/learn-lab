@@ -14,6 +14,8 @@ from learn_lab.deep.operator import TransformerOperator
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 CPU64 = Runtime(device='cpu')
 TAU = 0.2  # s
 POINTS = 24

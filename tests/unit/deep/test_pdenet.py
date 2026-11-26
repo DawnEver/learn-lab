@@ -13,6 +13,8 @@ from learn_lab.deep.pdenet import PDENet
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 ALPHA, BETA = 0.5, 1.0  # m^2/s, m/s
 POINTS, LENGTH, DT = 64, 2 * np.pi, 1e-3
 BAR = 0.01  # relative error of each recovered coefficient, dimensionless

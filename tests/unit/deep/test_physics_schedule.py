@@ -11,6 +11,8 @@ from learn_lab.errors import Refused
 
 from ._poisson import Poisson
 
+pytestmark = pytest.mark.torch
+
 SHORT = Schedule(adam_steps=40, learning_rate=2e-3, lbfgs_steps=2)
 
 

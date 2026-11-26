@@ -10,6 +10,8 @@ import pytest
 from learn_lab.deep import bench
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 REPEATS = 3
 
 

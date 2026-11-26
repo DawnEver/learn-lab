@@ -91,7 +91,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --extra torch --extra openvino"
+          "run": "uv sync --frozen"
         },
         {
           "name": "Install the normal measurement hooks",
@@ -136,7 +136,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --extra torch --extra openvino"
+          "run": "uv sync --frozen"
         },
         {
           "id": "pending",
@@ -185,7 +185,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --extra torch --extra openvino"
+          "run": "uv sync --frozen"
         },
         {
           "name": "Sync the part's extras",
@@ -222,7 +222,9 @@
       },
       "needs": [
         "parts",
-        "part"
+        "part",
+        "part-openvino",
+        "part-torch"
       ],
       "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && ((inputs.measurement_paths == '' && inputs.measurement_sha == '') && (always() && needs.parts.result == 'success' && needs.parts.outputs.matrix != '')) }}",
       "runs-on": "ubuntu-latest",
@@ -243,7 +245,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --extra torch --extra openvino"
+          "run": "uv sync --frozen"
         },
         {
           "name": "Post every part no job settled",
@@ -279,7 +281,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --extra torch --extra openvino"
+          "run": "uv sync --frozen"
         },
         {
           "name": "tests/security",
@@ -315,7 +317,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --extra torch --extra openvino"
+          "run": "uv sync --frozen"
         },
         {
           "name": "head gates",
@@ -360,7 +362,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --extra torch --extra openvino"
+          "run": "uv sync --frozen"
         },
         {
           "id": "ready",
@@ -410,7 +412,7 @@
         },
         {
           "name": "Sync the environment",
-          "run": "uv sync --frozen --extra torch --extra openvino"
+          "run": "uv sync --frozen"
         },
         {
           "name": "Promote main",
@@ -426,6 +428,122 @@
         "contents": "write",
         "statuses": "write",
         "pull-requests": "write"
+      }
+    },
+    "part-openvino": {
+      "env": {
+        "GITHUB_TOKEN": "${{ github.token }}",
+        "LAB_COMMONS_BOX": "${{ github.workspace }}/../lab-commons/box.sqlite"
+      },
+      "needs": "parts",
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && ((inputs.measurement_paths == '' && inputs.measurement_sha == '') && (needs.parts.outputs.matrix != '')) }}",
+      "name": "tests/openvino",
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 90,
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ env.HEAD_SHA }}",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Install uv",
+          "uses": "astral-sh/setup-uv@v5",
+          "with": {
+            "enable-cache": true
+          }
+        },
+        {
+          "name": "Sync the environment",
+          "run": "uv sync --frozen"
+        },
+        {
+          "name": "Sync the part's extras",
+          "shell": "bash",
+          "run": "uv sync --frozen $(uv run --no-sync python -m dev_lab.dev.depneeds flags --part \"openvino\")"
+        },
+        {
+          "name": "Set up tests/openvino",
+          "run": "uv sync --frozen --group dev --extra openvino"
+        },
+        {
+          "name": "Produce and post the part",
+          "run": "uv run --no-sync python -m dev_lab.dev.jobparts produce openvino"
+        },
+        {
+          "name": "Keep the part's verify log",
+          "if": "${{ always() }}",
+          "uses": "actions/upload-artifact@v4",
+          "with": {
+            "name": "verify-log-openvino-${{ github.run_attempt }}",
+            "path": "**/verify/verify-*.log\n**/verify/verify-*.outcomes/**",
+            "if-no-files-found": "warn"
+          }
+        }
+      ],
+      "permissions": {
+        "contents": "write",
+        "statuses": "write"
+      }
+    },
+    "part-torch": {
+      "env": {
+        "GITHUB_TOKEN": "${{ github.token }}",
+        "LAB_COMMONS_BOX": "${{ github.workspace }}/../lab-commons/box.sqlite"
+      },
+      "needs": "parts",
+      "if": "${{ (!(github.event.pull_request.draft || startsWith(github.event.pull_request.title, 'WIP:') || startsWith(github.event.pull_request.title, '[WIP]'))) && ((inputs.measurement_paths == '' && inputs.measurement_sha == '') && (needs.parts.outputs.matrix != '')) }}",
+      "name": "tests/torch",
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 90,
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ env.HEAD_SHA }}",
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Install uv",
+          "uses": "astral-sh/setup-uv@v5",
+          "with": {
+            "enable-cache": true
+          }
+        },
+        {
+          "name": "Sync the environment",
+          "run": "uv sync --frozen"
+        },
+        {
+          "name": "Sync the part's extras",
+          "shell": "bash",
+          "run": "uv sync --frozen $(uv run --no-sync python -m dev_lab.dev.depneeds flags --part \"torch\")"
+        },
+        {
+          "name": "Set up tests/torch",
+          "run": "uv sync --frozen --group dev --extra torch"
+        },
+        {
+          "name": "Produce and post the part",
+          "run": "uv run --no-sync python -m dev_lab.dev.jobparts produce torch"
+        },
+        {
+          "name": "Keep the part's verify log",
+          "if": "${{ always() }}",
+          "uses": "actions/upload-artifact@v4",
+          "with": {
+            "name": "verify-log-torch-${{ github.run_attempt }}",
+            "path": "**/verify/verify-*.log\n**/verify/verify-*.outcomes/**",
+            "if-no-files-found": "warn"
+          }
+        }
+      ],
+      "permissions": {
+        "contents": "write",
+        "statuses": "write"
       }
     }
   }

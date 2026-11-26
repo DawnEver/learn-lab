@@ -7,6 +7,7 @@ The provider without features is the planted control: the same fit's outputs at 
 from dataclasses import dataclass
 
 import numpy as np
+import pytest
 import torch
 
 from learn_lab.deep.fit import Schedule
@@ -14,6 +15,8 @@ from learn_lab.deep.physics import PhysicsInformedField
 from learn_lab.deep.runtime import Runtime
 
 from ._poisson import Poisson
+
+pytestmark = pytest.mark.torch
 
 CPU = Runtime(device='cpu')  # float64
 SCHEDULE = Schedule(adam_steps=20, learning_rate=1e-3, lbfgs_steps=0)

@@ -16,6 +16,8 @@ from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 from learn_lab.point_graph import intervals, mesh_graph
 
+pytestmark = pytest.mark.torch
+
 MODES = np.arange(1, 4)
 CPU64 = Runtime(device='cpu', dtype='float64')
 #: The mixed fit's held coarse RMS error is at most this fraction of the fine-only fit's (u's unit cancels).

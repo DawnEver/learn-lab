@@ -21,6 +21,8 @@ from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
 
+pytestmark = pytest.mark.torch
+
 RT = Runtime(device='cpu', seed=3)
 SCHEDULE = Schedule(adam_steps=12, learning_rate=1e-2)
 SHORT = Schedule(adam_steps=4, learning_rate=1e-2)

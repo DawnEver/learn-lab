@@ -24,13 +24,17 @@ VARIANCE_BAR = 0.3  # relative error of the grid-averaged sample variance, dimen
 # The variance was the under-fit net, not the sampler: width 8 x 1000 steps read -0.409 / -0.330 relative (seeds 0 / 1,
 # posterior sampler; 'beta' -0.358 / -0.276), 200 noise steps -0.399 / -0.361. Width 16 x 3000 steps reads
 # -0.168 / -0.187 (mean 0.003 / 0.040 T); 'beta' -0.125 / -0.156, so the default sampler stays 'posterior'.
+# Each Adam step sees a minibatch of 128, not all 1024 samples: full-batch float64 cost 0.29 s/step on a 24-thread
+# box, so the module's two 3000-step fits (model and shuffled control) ran ~30 min there and walled the 2-core forge
+# part at 61 min (learn-lab #36). Batch 128 fits in 75..83 s and reads, seeds 0 / 1 / 2: mean 0.016 / 0.013 /
+# 0.006 T, variance -0.198 / -0.149 / -0.212 relative, shuffled control 0.382 / 0.386 / 0.379 T.
 QUERY, COUNT = 0.8, 128
 CPU64 = Runtime(device='cpu', dtype='float64')
 MODEL = DiffusionField(
     width=16,
     levels=1,
     noise_steps=50,
-    schedule=Schedule(adam_steps=3000, learning_rate=5e-3, decay='cosine'),
+    schedule=Schedule(adam_steps=3000, learning_rate=5e-3, decay='cosine', batch=128),
     runtime=CPU64,
     chunk=None,
 )

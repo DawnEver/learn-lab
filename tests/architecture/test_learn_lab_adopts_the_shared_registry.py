@@ -158,7 +158,9 @@ _ABSENT: Final = frozenset({
 })  # fmt: skip
 
 #: The size of the absent set at founding (2026-11-07); lowering it is the only legal edit.
-_ABSENT_CEILING: Final = 46
+#: 46 -> 57 on 2026-11-26 (user ruling): eleven rules the relock brought are declared absent with their reasons;
+#: the hard ones are lowered in the full learn-lab review.
+_ABSENT_CEILING: Final = 57
 
 
 def test_every_rule_is_enforced_or_declared_absent() -> None:

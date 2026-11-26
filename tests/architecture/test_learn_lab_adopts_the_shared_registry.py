@@ -18,7 +18,7 @@ from dev_lab.dev.rules import Adoption, LintRule, TestPath, assert_adopted
 
 _ROOT: Final = Path(__file__).resolve().parents[2]
 
-_PROFILE: Final = RepoProfile(app_name='learn_lab', package='learn_lab', root=_ROOT, lint_config=_ROOT / 'ruff.toml')
+_PROFILE: Final = RepoProfile(app_name='learn_lab', package='learn_lab', root=_ROOT, lint_config=_ROOT / 'pyproject.toml')
 
 _BRANCHES: Final = TestPath('tests/architecture/test_the_branches_are_the_declared_set.py')
 _HOOKS: Final = TestPath('tests/architecture/test_the_hooks_are_the_family_base.py')

@@ -19,6 +19,8 @@ from importlib import metadata
 from pathlib import Path
 from typing import Final
 
+from lab_commons.extras import declared
+
 ROOT: Final = Path(__file__).resolve().parents[1]
 #: The project itself, as a requirement of one of its own extras (``learn-lab[torch]``).
 _SELF: Final = re.compile(r'^\s*learn[-_]lab\[([^\]]+)\]', re.IGNORECASE)
@@ -33,8 +35,8 @@ def _manifest() -> dict:
 
 
 def need_extras() -> dict[str, str]:
-    """``[tool.dev_lab.dep] needs``: need -> the extra serving it."""
-    return dict(_manifest()['tool']['dev_lab']['dep'].get('needs', {}))
+    """``[tool.dev_lab.dep] needs``: need -> the extra serving it, as :func:`lab_commons.extras.declared` reads it."""
+    return dict(declared(_manifest()).needs)
 
 
 def _requirements(extra: str) -> list[str]:

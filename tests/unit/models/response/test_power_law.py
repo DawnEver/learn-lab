@@ -31,7 +31,7 @@ def test_planted_exponents_and_levels_are_recovered_on_exact_data() -> None:
     np.testing.assert_allclose(fitted.level, C, rtol=0, atol=EXACT)
 
 
-def test_fixed_exponents_are_honoured_and_only_the_level_is_fitted() -> None:
+def test_fixed_exponents_are_honored_and_only_the_level_is_fitted() -> None:
     noisy = law(X) * np.exp(RNG.normal(0.0, 0.05, (40, 2)))
     pinned = PowerLaw(fixed=((1.5, 2.0), (None, 1.0))).fit(X, noisy)
     assert pinned.exponents[:, 0].tolist() == [1.5, 2.0]

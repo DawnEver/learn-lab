@@ -1,4 +1,4 @@
-"""A provider's ``features(x)`` replaces the normalised coordinates as the net's input.
+"""A provider's ``features(x)`` replaces the normalized coordinates as the net's input.
 
 Periodic features make every net output periodic by construction, the seam an exactly periodic hard ansatz needs.
 The provider without features is the planted control: the same fit's outputs at the two ends differ.

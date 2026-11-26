@@ -4,8 +4,8 @@ With every output measured at the same points, the stacked data ``vec(Y)`` (outp
 output 1, then output 2, ...) is ``N(0, kron(B, R) + kron(diag(noise), I))``: ``R`` a kernel
 correlation over the points, ``B = W W^T + diag(kappa)`` the outputs' coregionalisation matrix (``W``
 is ``k x rank``), ``noise`` one variance per output. ``theta = [log l_1..l_d, W (row-major), log
-kappa_1..kappa_k, log noise_1..noise_k]`` maximises the likelihood
-of the NORMALISED columns; ``W`` is bounded to ``[-10, 10]`` (the columns have unit deviation).
+kappa_1..kappa_k, log noise_1..noise_k]`` maximizes the likelihood
+of the NORMALIZED columns; ``W`` is bounded to ``[-10, 10]`` (the columns have unit deviation).
 The kernel acts on the inputs mapped onto the unit box of the fit's envelope.
 :attr:`FittedMultiOutput.correlation` is ``B`` scaled to unit diagonal: how alike the outputs are.
 """
@@ -19,7 +19,7 @@ from numerics_lab.linear.dense import solve_triangular
 
 from learn_lab.errors import refuse
 from learn_lab.models.response.kernel import correlation, input_slopes, length_slopes, require_family
-from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximise_likelihood
+from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximize_likelihood
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
 from learn_lab.validity import BoxEnvelope
 
@@ -94,12 +94,12 @@ class MultiOutputKriging:
         _n, d = x.shape
         k = y.shape[1]
         level, scale = y.mean(axis=0), np.where(y.std(axis=0) > 0, y.std(axis=0), 1.0)
-        normalised = (y - level) / scale
+        normalized = (y - level) / scale
         size = d + k * self.rank + 2 * k
         lo, hi = np.full(size, np.log(1e-5)), np.full(size, np.log(1e5))
         lo[d : d + k * self.rank], hi[d : d + k * self.rank] = -10.0, 10.0
-        theta, _ = maximise_likelihood(
-            lambda t: self.log_likelihood(t, u, normalised),
+        theta, _ = maximize_likelihood(
+            lambda t: self.log_likelihood(t, u, normalized),
             self.initial(d, k),
             Box(lo, hi),
             restarts=self.restarts,
@@ -116,7 +116,7 @@ class MultiOutputKriging:
             lengths,
             w @ w.T + np.diag(kappa),
             chol.lower,
-            chol.solve(normalised.T.reshape(-1)),
+            chol.solve(normalized.T.reshape(-1)),
             level,
             scale,
             envelope,
@@ -125,7 +125,7 @@ class MultiOutputKriging:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class FittedMultiOutput:
-    """The fitted ICM: lengths, ``B``, the Cholesky factor, ``C^-1 vec(Y)`` and the column normalisation."""
+    """The fitted ICM: lengths, ``B``, the Cholesky factor, ``C^-1 vec(Y)`` and the column normalization."""
 
     family: str
     x: np.ndarray

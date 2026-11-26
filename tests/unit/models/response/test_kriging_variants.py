@@ -18,7 +18,7 @@ from learn_lab.validity import BoxEnvelope
 #: Relative: the same log-density computed two ways (Cholesky here, an eigendecomposition in scipy).
 DENSITY = 1e-9
 #: Relative: the same, for the value-and-gradient covariance, whose condition number reaches ~1e8 at
-#: these points, so two factorisations agree to ~1e-8 of the log-density.
+#: these points, so two factorizations agree to ~1e-8 of the log-density.
 GEK_DENSITY = 1e-7
 
 

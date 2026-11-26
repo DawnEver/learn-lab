@@ -25,7 +25,7 @@ BAR = 0.02  # max |y error| over a held-out history, fraction of the major loop'
 
 
 def _truth(x):
-    """A planted generalized Prandtl-Ishlinskii operator from the demagnetised state: 60 plays, saturating map."""
+    """A planted generalized Prandtl-Ishlinskii operator from the demagnetized state: 60 plays, saturating map."""
     p, out = np.zeros_like(R_TRUE), []
     for xi in x:
         p = np.clip(p, xi - R_TRUE, xi + R_TRUE)
@@ -101,7 +101,7 @@ def test_every_closed_cycle_dissipates_in_the_declared_orientation(case):
 
 
 def test_the_identified_loop_dissipates_the_planted_energy(case):
-    """The major loop's oint H dB is one number whichever variable drives it: each orientation's fit, measured in
+    """The major loop's ∮ H dB is one number whichever variable drives it: each orientation's fit, measured in
     its own declared orientation, reproduces the planted law's loss.
     """
     model, input_is = case
@@ -116,7 +116,7 @@ def test_the_identified_loop_dissipates_the_planted_energy(case):
 
 def test_the_effort_construction_driven_by_the_displacement_is_active_and_is_caught():
     """PLANTED CONTROL, the measured defect: a lagging bank fitted B -> H puts the rising branch below the falling
-    one, so oint H dB < 0. Measured in its declared (effort) orientation it looks passive -- the declaration lies;
+    one, so ∮ H dB < 0. Measured in its declared (effort) orientation it looks passive -- the declaration lies;
     measured as what it is, displacement-driven, :func:`dissipation` says no.
     """
     b, h = _data('displacement', TRAIN)

@@ -1,6 +1,6 @@
-"""Offline response surrogate: a deep ensemble ``x (n, d) -> y (n, k)`` honouring the L6 protocol.
+"""Offline response surrogate: a deep ensemble ``x (n, d) -> y (n, k)`` honoring the L6 protocol.
 
-``members`` MLPs are trained from different seeds on standardised data. The mean is their average; the
+``members`` MLPs are trained from different seeds on standardized data. The mean is their average; the
 variance is their spread (latent, of the mean function); the gradient is the autograd derivative of the
 mean. The training envelope travels with the fit: a query outside it is refused, never extrapolated.
 """
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize, take
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
@@ -56,7 +56,7 @@ class DeepEnsemble:
             net = MLP([x.shape[1], *self.hidden, y.shape[1]], activation='silu')
             net = net.to(rt.torch_device, rt.torch_dtype)
             histories.append(
-                minimise(
+                minimize(
                     net.parameters(),
                     lambda index, net=net: _squared(net, *take(index, xt, yt)),
                     self.schedule,
@@ -99,7 +99,7 @@ class FittedEnsemble:
         rt = self.runtime
         xt = rt.tensor((x - self.x_shift) / self.x_scale, grad=gradient)
         with torch.set_grad_enabled(gradient):
-            outs = torch.stack([net(xt) for net in self.nets])  # (members, n, k), standardised
+            outs = torch.stack([net(xt) for net in self.nets])  # (members, n, k), standardized
             mean_s = outs.mean(0)
             grad = None
             if gradient:

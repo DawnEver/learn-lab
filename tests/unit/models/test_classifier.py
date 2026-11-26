@@ -17,7 +17,7 @@ from learn_lab.models.classifier import (
     ClassificationTree,
     ClassPrediction,
     LogisticRegression,
-    NearestNeighboursClassifier,
+    NearestNeighborsClassifier,
 )
 from learn_lab.registry import CLASSIFIERS, classifier, family
 from learn_lab.validity import BoxEnvelope
@@ -30,8 +30,8 @@ SEPARABLE_ACCURACY = 0.9
 
 def _blobs(seed: int, n_per: int = 40) -> tuple[np.ndarray, np.ndarray]:
     rng = np.random.default_rng(seed)
-    centres = np.array([[0.2, 0.2], [0.8, 0.3], [0.5, 0.85]])
-    x = np.vstack([c + 0.05 * rng.standard_normal((n_per, 2)) for c in centres])
+    centers = np.array([[0.2, 0.2], [0.8, 0.3], [0.5, 0.85]])
+    x = np.vstack([c + 0.05 * rng.standard_normal((n_per, 2)) for c in centers])
     labels = np.repeat(np.array(['healthy', 'short', 'open']), n_per)
     return np.clip(x, 0.0, 1.0), labels
 
@@ -42,7 +42,7 @@ XQ, LQ = _blobs(2, 20)
 UNIT = BoxEnvelope(np.zeros(2), np.ones(2))
 
 MEMBERS = {
-    'nearest_neighbours_classifier': NearestNeighboursClassifier(k=5),
+    'nearest_neighbors_classifier': NearestNeighborsClassifier(k=5),
     'classification_tree': ClassificationTree(max_depth=4),
     'logistic_regression': LogisticRegression(alpha=1e-3),
 }
@@ -104,7 +104,7 @@ def test_integer_labels_keep_their_type() -> None:
 
 def test_knn_and_tree_match_sklearn_probabilities() -> None:
     """A kNN classifier is a vote of the k nearest; a Gini tree's leaves are class frequencies (scikit-learn, tests only)."""
-    ours = MEMBERS['nearest_neighbours_classifier'].fit(X, LABELS, domain=UNIT).predict(XQ).probabilities
+    ours = MEMBERS['nearest_neighbors_classifier'].fit(X, LABELS, domain=UNIT).predict(XQ).probabilities
     theirs = KNeighborsClassifier(n_neighbors=5).fit(X, LABELS).predict_proba(XQ)
     assert np.allclose(ours, theirs, rtol=0.0, atol=SUMS_TO_ONE)
     ours = MEMBERS['classification_tree'].fit(X, LABELS, domain=UNIT).predict(XQ).labels
@@ -128,6 +128,6 @@ def test_one_class_and_object_labels_are_refused() -> None:
 
 
 def test_a_query_outside_the_envelope_is_refused() -> None:
-    fitted = MEMBERS['nearest_neighbours_classifier'].fit(X, LABELS, domain=UNIT)
+    fitted = MEMBERS['nearest_neighbors_classifier'].fit(X, LABELS, domain=UNIT)
     with pytest.raises(Refused, match='out_of_domain'):
         fitted.predict(np.array([[5.0, 5.0]]))

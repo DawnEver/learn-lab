@@ -1,26 +1,26 @@
 """D46-D48 -- Gaussian process regression (Kriging): maximum-likelihood fit, closed-form LOO, mean/variance/gradient.
 
-Each output column is its own GP on the column NORMALISED to zero mean and unit standard deviation,
+Each output column is its own GP on the column NORMALIZED to zero mean and unit standard deviation,
 with covariance
 
     C = amplitude R(x, x'; lengths) + noise I,     theta = log[amplitude, length_1..length_d, noise]
 
 (``R`` a :mod:`~learn_lab.models.response.kernel` family) over the inputs mapped onto the unit box of
 the fit's envelope (:meth:`~learn_lab.validity.BoxEnvelope.unit`), so the lengths are fractions of the
-envelope and inputs of any physical magnitude share one start and one ``bounds``. ``theta`` maximises the log marginal likelihood
+envelope and inputs of any physical magnitude share one start and one ``bounds``. ``theta`` maximizes the log marginal likelihood
 inside ``bounds`` (each of amplitude, length and noise), from the declared start and *restarts*
-seeded draws (:func:`~learn_lab.models.response.likelihood.maximise_likelihood`).
+seeded draws (:func:`~learn_lab.models.response.likelihood.maximize_likelihood`).
 
 A prediction's ``variance`` is LATENT -- of the mean function, without the noise term -- and in the
 values' squared units. :meth:`FittedGaussianProcess.leave_one_out` is Dubrule's closed form at the
 fitted ``theta``: each point predicted from all the others, its variance that of the held-out
 OBSERVATION (noise included), without n refits.
 
-For model-based optimisation (P11) a fitted GP also gives the JOINT latent posterior
+For model-based optimization (P11) a fitted GP also gives the JOINT latent posterior
 (:meth:`FittedGaussianProcess.posterior_covariance`, :meth:`~FittedGaussianProcess.posterior`), joint
 draws from it under caller-held standard normals (:meth:`~FittedGaussianProcess.draw`, so a caller
 fixes its base samples), its observation noise, and :meth:`~FittedGaussianProcess.condition` -- the
-model with further points appended at the SAME hyperparameters and normalisation: a fantasy, never a
+model with further points appended at the SAME hyperparameters and normalization: a fantasy, never a
 refit.
 """
 
@@ -33,7 +33,7 @@ from numerics_lab.linear.dense import solve_triangular
 
 from learn_lab.errors import refuse
 from learn_lab.models.response.kernel import correlation, input_slopes, length_slopes, require_family
-from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximise_likelihood
+from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximize_likelihood
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
 from learn_lab.validity import BoxEnvelope
 
@@ -52,12 +52,12 @@ def covariance(family: str, theta: np.ndarray, x: np.ndarray) -> tuple[np.ndarra
 
 
 def log_likelihood(family: str, theta: np.ndarray, x: np.ndarray, values: np.ndarray) -> tuple[float, np.ndarray]:
-    """The log marginal likelihood of NORMALISED *values* ``(n,)`` at ``theta``, and its gradient."""
+    """The log marginal likelihood of NORMALIZED *values* ``(n,)`` at ``theta``, and its gradient."""
     c, slopes = covariance(require_family(family), np.asarray(theta, dtype=float), x)
     return gaussian_log_likelihood(c, values, slopes)
 
 
-def _normalise(y: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _normalize(y: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     level, scale = y.mean(axis=0), y.std(axis=0)
     scale = np.where(scale > 0, scale, 1.0)
     return (y - level) / scale, level, scale
@@ -84,14 +84,14 @@ class GaussianProcess:
     def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedGaussianProcess:
         x, y, envelope = training_data(x, y, domain)
         u = envelope.unit(x)
-        normalised, level, scale = _normalise(y)
+        normalized, level, scale = _normalize(y)
         d = x.shape[1]
         box = Box(np.full(d + 2, np.log(self.bounds[0])), np.full(d + 2, np.log(self.bounds[1])))
         start = np.log(np.r_[1.0, np.ones(d), 1e-2])
         columns = []
         for k in range(y.shape[1]):
-            column = normalised[:, k]
-            theta, _ = maximise_likelihood(
+            column = normalized[:, k]
+            theta, _ = maximize_likelihood(
                 lambda t, column=column: log_likelihood(self.family, t, u, column),
                 start,
                 box,
@@ -104,7 +104,7 @@ class GaussianProcess:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class GaussianProcessColumn:
-    """One fitted column: its ``theta``, the Cholesky factor of ``C``, ``alpha = C^-1 y`` and its normalisation."""
+    """One fitted column: its ``theta``, the Cholesky factor of ``C``, ``alpha = C^-1 y`` and its normalization."""
 
     family: str
     theta: np.ndarray
@@ -117,7 +117,7 @@ class GaussianProcessColumn:
 
     @classmethod
     def at(cls, family: str, theta: np.ndarray, x: np.ndarray, values: np.ndarray, *, level: float, scale: float):
-        """The column at a given ``theta``: factor, ``alpha`` and likelihood of the normalised *values*."""
+        """The column at a given ``theta``: factor, ``alpha`` and likelihood of the normalized *values*."""
         c, _ = covariance(family, theta, x)
         chol = factor(c)
         if chol is None:
@@ -148,7 +148,7 @@ class FittedGaussianProcess:
 
     @property
     def log_likelihood(self) -> tuple[float, ...]:
-        """Each column's maximised log marginal likelihood (of its normalised values)."""
+        """Each column's maximized log marginal likelihood (of its normalized values)."""
         return tuple(c.log_likelihood for c in self.columns)
 
     def _unit(self, x) -> np.ndarray:
@@ -219,7 +219,7 @@ class FittedGaussianProcess:
         return draws
 
     def condition(self, x, y) -> FittedGaussianProcess:
-        """The model with ``(x (p, d), y (p, k))`` appended at the same hyperparameters, normalisation, envelope."""
+        """The model with ``(x (p, d), y (p, k))`` appended at the same hyperparameters, normalization, envelope."""
         x, y, _ = training_data(x, y, self.envelope)
         if x.shape[1] != self.x.shape[1] or y.shape[1] != len(self.columns):
             refuse(f'conditioning data is (p, {self.x.shape[1]}) points and (p, {len(self.columns)}) values')

@@ -18,7 +18,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import KFold
 
 from learn_lab.errors import Refused
-from learn_lab.models.response import Ensemble, GaussianProcess, NearestNeighbours, Polynomial
+from learn_lab.models.response import Ensemble, GaussianProcess, NearestNeighbors, Polynomial
 from learn_lab.protocol import Prediction
 from learn_lab.validation import SCORES, calibration, cross_validate, folds, score
 from learn_lab.validity import BoxEnvelope
@@ -92,13 +92,13 @@ def test_draws_from_the_predicted_distribution_are_calibrated() -> None:
     # Absolute, dimensionless coverage fractions: four binomial standard errors at n = 4000.
     for nominal, observed in report.coverage.items():
         assert abs(observed - nominal) <= 4 * np.sqrt(nominal * (1 - nominal) / 4000)
-    assert abs(report.standardised_variance - 1.0) <= 0.1
+    assert abs(report.standardized_variance - 1.0) <= 0.1
     expected = -np.mean(norm.logpdf(measured, mean, sigma))
     assert abs(report.negative_log_density - expected) <= 1e-12 * abs(expected)
     # Planted control: a spread three times too narrow must read as over-confident.
     narrow = calibration(measured, Prediction(mean, (sigma / 3) ** 2))
     assert narrow.coverage[0.9] < 0.5
-    assert narrow.standardised_variance > 5
+    assert narrow.standardized_variance > 5
 
 
 def test_calibration_needs_a_variance() -> None:
@@ -108,7 +108,7 @@ def test_calibration_needs_a_variance() -> None:
 
 def test_the_ensemble_is_the_score_weighted_mean_of_its_members(data) -> None:
     x, y = data
-    members = (Polynomial(degree=2), NearestNeighbours(k=3))
+    members = (Polynomial(degree=2), NearestNeighbors(k=3))
     fitted = Ensemble(members, k=5).fit(x, y, domain=_cube_of(x))
     r2 = np.array([score('r2', y, cross_validate(m, x, y, k=5).mean) for m in members])
     weights = np.maximum(r2, 0) / np.maximum(r2, 0).sum()
@@ -125,7 +125,7 @@ def test_the_ensemble_is_the_score_weighted_mean_of_its_members(data) -> None:
 
 def test_the_ensemble_gives_only_what_every_member_gives(data) -> None:
     x, y = data
-    assert Ensemble((Polynomial(), NearestNeighbours())).gives == frozenset()
+    assert Ensemble((Polynomial(), NearestNeighbors())).gives == frozenset()
     both = Ensemble((GaussianProcess(), GaussianProcess('matern52'))).fit(x, y, domain=_cube_of(x))
     p = both.predict(x[:3], variance=True, gradient=True)
     assert p.variance.shape == (3, 2)
@@ -136,4 +136,4 @@ def test_an_ensemble_whose_every_member_scores_nothing_is_refused() -> None:
     rng = np.random.default_rng(20)
     x, y = rng.random((30, 1)), rng.standard_normal((30, 1))
     with pytest.raises(Refused, match='r2'):
-        Ensemble((NearestNeighbours(k=1), Polynomial(degree=1))).fit(x, y, domain=_cube_of(x))
+        Ensemble((NearestNeighbors(k=1), Polynomial(degree=1))).fit(x, y, domain=_cube_of(x))

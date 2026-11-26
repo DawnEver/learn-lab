@@ -2,9 +2,9 @@
 
 The symmetric scaling ``A_hat = D^-1/2 A D^-1/2`` (unit diagonal) is factored approximately inverse:
 ``G A_hat G^T ~ I`` with ``G = diag(exp(g)) (I + C)``, ``C`` strictly lower on ``A``'s own sparsity pattern
--- a factorised sparse approximate inverse (FSAI). A message-passing network over the matrix graph (nodes =
+-- a factorized sparse approximate inverse (FSAI). A message-passing network over the matrix graph (nodes =
 unknowns, edges = off-diagonal entries ``a_hat_ij``) predicts ``g`` and ``C``; it is fitted on matrices of the
-family by minimising ``||G A_hat G^T - I||_F^2`` (exactly, by block-identity probes; or on ``probes`` random
+family by minimizing ``||G A_hat G^T - I||_F^2`` (exactly, by block-identity probes; or on ``probes`` random
 columns). The preconditioner is
 
     ``M(r) = D^-1/2 G^T G D^-1/2 r``  (~ ``A^-1``),
@@ -28,7 +28,7 @@ import scipy.sparse as sp
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize
 from learn_lab.deep.graph import MessagePassing, owners, subgraph
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
@@ -166,7 +166,7 @@ class LearnedPreconditioner:
             nodes, kept, e = subgraph(index, owner, et)
             return residual(nt[nodes], e, vt[kept], wt[nodes], torch.nonzero(e[1] > e[0])[:, 0])
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,

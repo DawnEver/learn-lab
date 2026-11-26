@@ -1,4 +1,4 @@
-"""Per-channel standardisation of ``(n, c, *shape)`` samples (their envelope is :class:`learn_lab.validity.ChannelEnvelope`)."""
+"""Per-channel standardization of ``(n, c, *shape)`` samples (their envelope is :class:`learn_lab.validity.ChannelEnvelope`)."""
 
 from __future__ import annotations
 

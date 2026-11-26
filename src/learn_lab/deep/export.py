@@ -41,7 +41,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - the extra is the one re
 from learn_lab.artifact import canonical, family_of, sha256
 from learn_lab.deep.artifact import schema
 from learn_lab.deep.operator import SpectralConv
-from learn_lab.deep.standardise import Standardiser
+from learn_lab.deep.standardize import Standardiser
 from learn_lab.errors import refuse, require_finite
 
 __all__ = ['EXPORTABLE', 'FORMAT', 'VERSION', 'manifest', 'quantize', 'to_onnx']
@@ -81,7 +81,7 @@ class _Raw(nn.Module):
 
 
 def _grid(fitted: object) -> nn.Module:
-    """A grid family (U-Net, FNO): channels standardised per channel over a 2-D grid."""
+    """A grid family (U-Net, FNO): channels standardized per channel over a 2-D grid."""
     net = _float32_copy(fitted.net)
     return _Raw(net, fitted.inputs, fitted.outputs, len(fitted.envelope.shape))
 

@@ -109,7 +109,7 @@ def test_the_preconditioned_solution_is_the_unpreconditioned_one(fitted) -> None
 
 
 def test_an_untrained_network_is_jacobi_and_gives_no_reduction() -> None:
-    """PLANTED CONTROL: the zero-initialised heads make M = D^-1; one step at a vanishing rate stays there."""
+    """PLANTED CONTROL: the zero-initialized heads make M = D^-1; one step at a vanishing rate stays there."""
     untrained = LearnedPreconditioner(
         hidden=16, rounds=3, schedule=Schedule(adam_steps=1, learning_rate=1e-300), runtime=CPU64, margin=0.5
     ).fit(TRAIN)

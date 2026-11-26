@@ -1,4 +1,4 @@
-"""Every family config artefact is the live base plus learn-lab's declared delta -- a hand edit reds."""
+"""Every family config artifact is the live base plus learn-lab's declared delta -- a hand edit reds."""
 
 from __future__ import annotations
 
@@ -20,16 +20,16 @@ def test_every_family_base_is_declared() -> None:
     configrender.assert_every_base_is_accounted_for(deltas=DELTAS, repo=REPO)
 
 
-@pytest.mark.parametrize('artefact', sorted(DELTAS))
-def test_the_artefact_on_disk_is_the_base_plus_our_delta(artefact: str) -> None:
-    configrender.assert_artefact_is_rendered(
-        root=_ROOT, artefact=artefact, deltas=DELTAS, repo=REPO, rerender_hint=_HINT
+@pytest.mark.parametrize('artifact', sorted(DELTAS))
+def test_the_artifact_on_disk_is_the_base_plus_our_delta(artifact: str) -> None:
+    configrender.assert_artifact_is_rendered(
+        root=_ROOT, artifact=artifact, deltas=DELTAS, repo=REPO, rerender_hint=_HINT
     )
 
 
-@pytest.mark.parametrize('artefact', sorted(DELTAS))
-def test_our_delta_is_not_a_fork(artefact: str) -> None:
-    configrender.assert_delta_is_not_a_fork(artefact=artefact, deltas=DELTAS, repo=REPO)
+@pytest.mark.parametrize('artifact', sorted(DELTAS))
+def test_our_delta_is_not_a_fork(artifact: str) -> None:
+    configrender.assert_delta_is_not_a_fork(artifact=artifact, deltas=DELTAS, repo=REPO)
 
 
 def test_every_project_file_has_one_source() -> None:

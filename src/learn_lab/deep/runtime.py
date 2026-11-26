@@ -53,7 +53,7 @@ class Runtime:
         return out.requires_grad_(grad)
 
     def seeded(self) -> None:
-        """Make the fit reproducible: seed initialisation and select deterministic kernels.
+        """Make the fit reproducible: seed initialization and select deterministic kernels.
 
         A seed alone does not fix a CUDA result: scatter sums (``index_add_``) accumulate in a nondeterministic
         order, which moved a GNN's held-out error across its bar between runs. Deterministic kernels cost speed

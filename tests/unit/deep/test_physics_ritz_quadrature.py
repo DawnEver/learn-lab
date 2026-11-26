@@ -1,5 +1,5 @@
 """Deep Ritz on a DETERMINISTIC quadrature: Gauss-Legendre points and weights make the energy integral exact for
-polynomials up to the rule's order, so an L-BFGS polish minimises the true energy instead of one draw's noise.
+polynomials up to the rule's order, so an L-BFGS polish minimizes the true energy instead of one draw's noise.
 """
 
 import numpy as np

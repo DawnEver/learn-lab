@@ -1,7 +1,7 @@
 """D56 -- an ensemble: members fitted on the same data and combined by their cross-validated R2.
 
 Each member's weight is its k-fold R2 (:func:`~learn_lab.validation.cross_validate`, seeded
-by ``seed``), clamped at zero and normalised (``weighting='score'``), or all of it on the best member
+by ``seed``), clamped at zero and normalized (``weighting='score'``), or all of it on the best member
 (``weighting='best'``). An ensemble whose every member scores ``r2 <= 0`` is REFUSED: a uniform
 average then would be a mean, not a weight. The ensemble gives what EVERY member gives: the
 gradient is the weighted gradient, the variance the mixture's (law of total variance).

@@ -11,7 +11,7 @@ and the latent variance ``(n, k)`` and mean gradient ``(n, k, d)`` when asked fo
 * Kriging -- :class:`GaussianProcess` (kernels in :mod:`~learn_lab.models.response.kernel`, maximum likelihood,
   closed-form leave-one-out), :class:`GradientEnhancedKriging`, :class:`MultiOutputKriging` (ICM),
   :class:`CoKriging` (AR1 multi-fidelity);
-* learners -- :class:`NearestNeighbours`, :class:`RegressionTree`, :class:`Forest` (random forest,
+* learners -- :class:`NearestNeighbors`, :class:`RegressionTree`, :class:`Forest` (random forest,
   extra trees, bagging), :class:`MultilayerPerceptron`;
 * composition -- :class:`Ensemble`, :class:`Bagging`. Naming one and the settings it tunes is
   :mod:`learn_lab.registry`; scoring a setting for a search is :mod:`learn_lab.tuning`; judging one is
@@ -30,7 +30,7 @@ from learn_lab.models.response.gradient_enhanced import FittedGradientEnhanced, 
 from learn_lab.models.response.kernel import KERNEL_FAMILIES
 from learn_lab.models.response.law_residual import FittedLawResidual, LawResidual
 from learn_lab.models.response.multi_output import FittedMultiOutput, MultiOutputKriging
-from learn_lab.models.response.neighbours import NEIGHBOUR_WEIGHTS, FittedNeighbours, NearestNeighbours
+from learn_lab.models.response.neighbors import NEIGHBOR_WEIGHTS, FittedNeighbors, NearestNeighbors
 from learn_lab.models.response.neural import ACTIVATIONS, MultilayerPerceptron, Network
 from learn_lab.models.response.polynomial import FittedPolynomial, Lasso, Polynomial, Ridge
 from learn_lab.models.response.power_law import FittedPowerLaw, PowerLaw
@@ -40,7 +40,7 @@ from learn_lab.models.response.tree import SPLITTERS, FittedForest, FittedTree, 
 __all__ = [
     'ACTIVATIONS',
     'KERNEL_FAMILIES',
-    'NEIGHBOUR_WEIGHTS',
+    'NEIGHBOR_WEIGHTS',
     'RADIAL_KERNELS',
     'SPLITTERS',
     'WEIGHTINGS',
@@ -59,7 +59,7 @@ __all__ = [
     'FittedGradientEnhanced',
     'FittedLawResidual',
     'FittedMultiOutput',
-    'FittedNeighbours',
+    'FittedNeighbors',
     'FittedPolynomial',
     'FittedPowerLaw',
     'FittedRadialBasis',
@@ -71,7 +71,7 @@ __all__ = [
     'LawResidual',
     'MultiOutputKriging',
     'MultilayerPerceptron',
-    'NearestNeighbours',
+    'NearestNeighbors',
     'Network',
     'Polynomial',
     'PowerLaw',

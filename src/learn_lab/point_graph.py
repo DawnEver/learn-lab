@@ -2,14 +2,14 @@
 
 :func:`mesh_graph` turns a point set -- optionally with its cells -- into a :class:`PointGraph`: the directed
 edges a kernel integral sums over and the quadrature weight each edge carries, so
-``sum_j weight_ij * k(x_i, x_j) * v(x_j)`` approximates ``integral k(x_i, y) v(y) dy`` over the neighbourhood of
+``sum_j weight_ij * k(x_i, x_j) * v(x_j)`` approximates ``integral k(x_i, y) v(y) dy`` over the neighborhood of
 ``x_i`` on ANY point set of the domain. That is what makes a graph operator discretisation-invariant.
 
-- Edges (``source -> target``; every node also reaches itself): within ``radius``, or the ``neighbours``
+- Edges (``source -> target``; every node also reaches itself): within ``radius``, or the ``neighbors``
   nearest (self included), or -- with neither -- the pairs that share a cell.
 - Weights: with cells, the source node's lumped measure (each simplex's length/area/volume split equally
-  among its ``d + 1`` vertices) -- a quadrature of the integral over the neighbourhood; without cells,
-  ``1 / degree(target)`` -- the neighbourhood MEAN, the Monte-Carlo estimate on uniformly scattered points.
+  among its ``d + 1`` vertices) -- a quadrature of the integral over the neighborhood; without cells,
+  ``1 / degree(target)`` -- the neighborhood MEAN, the Monte-Carlo estimate on uniformly scattered points.
 - Edge features: the offset ``x_source - x_target`` and its length.
 
 A consumer's mesh IR goes through its own adapter into ``(points, cells)``; nothing here knows a mesh format.
@@ -83,15 +83,15 @@ def mesh_graph(
     cells: object | None = None,
     *,
     radius: float | None = None,
-    neighbours: int | None = None,
+    neighbors: int | None = None,
 ) -> PointGraph:
     """The :class:`PointGraph` of *points* ``(N, d)``; *cells* ``(M, d + 1)`` simplices give the weights."""
     x = require_finite(np.asarray(points, float), 'the graph points')
     if x.ndim != 2 or len(x) < 1:
         refuse(f'graph points are (N, d), got {x.shape}')
     simplices = None if cells is None else np.asarray(cells, int)
-    if radius is not None and neighbours is not None:
-        refuse('a graph is built within a radius OR from the nearest neighbours, not both')
+    if radius is not None and neighbors is not None:
+        refuse('a graph is built within a radius OR from the nearest neighbors, not both')
     tree = cKDTree(x)
     if radius is not None:
         if not radius > 0:
@@ -99,16 +99,16 @@ def mesh_graph(
         pairs = tree.query_pairs(radius, output_type='ndarray')
         n = np.arange(len(x))
         edges = np.concatenate([pairs.T, pairs[:, ::-1].T, np.stack([n, n])], axis=1)
-    elif neighbours is not None:
-        if not 1 <= neighbours <= len(x):
-            refuse(f'a graph takes 1 <= neighbours <= {len(x)} nearest points, got {neighbours!r}')
-        _, near = tree.query(x, k=neighbours)
-        near = np.asarray(near).reshape(len(x), neighbours)
-        edges = np.stack([near.ravel(), np.repeat(np.arange(len(x)), neighbours)])
+    elif neighbors is not None:
+        if not 1 <= neighbors <= len(x):
+            refuse(f'a graph takes 1 <= neighbors <= {len(x)} nearest points, got {neighbors!r}')
+        _, near = tree.query(x, k=neighbors)
+        near = np.asarray(near).reshape(len(x), neighbors)
+        edges = np.stack([near.ravel(), np.repeat(np.arange(len(x)), neighbors)])
     elif simplices is not None:
         edges = _cell_pairs(simplices, len(x))
     else:
-        refuse('a graph needs a radius, a neighbour count or cells to draw its edges from')
+        refuse('a graph needs a radius, a neighbor count or cells to draw its edges from')
     edges = edges.astype(np.int64)
     if simplices is not None:
         weights = _lumped(x, simplices)[edges[0]]

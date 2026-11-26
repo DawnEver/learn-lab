@@ -1,4 +1,4 @@
-"""How a setting of a model family scores: an :class:`Objective` to MINIMISE, for an optimiser to search.
+"""How a setting of a model family scores: an :class:`Objective` to MINIMIZE, for an optimizer to search.
 
 learn-lab states WHAT is tuned -- every family's default :class:`~learn_lab.space.Space`, beside its
 constructor in :mod:`learn_lab.registry` -- and how one point of it scores; the search is optimi-lab's.
@@ -50,7 +50,7 @@ class Evaluation:
 
 
 class Objective:
-    """``objective(settings) -> float`` to minimise, for family *name* on fixed data and folds."""
+    """``objective(settings) -> float`` to minimize, for family *name* on fixed data and folds."""
 
     def __init__(
         self,

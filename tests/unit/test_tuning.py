@@ -28,13 +28,13 @@ def quadratic(x: np.ndarray) -> np.ndarray:
 def test_the_objective_ranks_the_exact_degree_above_the_wrong_one():
     f = objective('polynomial', X, quadratic(X), k=5, seed=2)
     good, bad = f({'degree': 2}), f({'degree': 1})
-    assert good == pytest.approx(-1.0, abs=1e-9)  # r2 is maximised, so its negation is minimised
+    assert good == pytest.approx(-1.0, abs=1e-9)  # r2 is maximized, so its negation is minimized
     assert bad > -0.99
     assert good < bad
     assert [(e.settings, e.value) for e in f.evaluations] == [({'degree': 2}, good), ({'degree': 1}, bad)]
 
 
-def test_an_error_metric_is_minimised_as_it_stands():
+def test_an_error_metric_is_minimized_as_it_stands():
     f = objective('polynomial', X, quadratic(X), metric='rmse', seed=2)
     assert f({'degree': 2}) == pytest.approx(0.0, abs=1e-9)
     assert f({'degree': 1}) > 0.1

@@ -19,7 +19,7 @@ import pytest
 
 from learn_lab.calibration import conformal, jackknife, split_conformal
 from learn_lab.errors import Refused
-from learn_lab.models.response import GaussianProcess, NearestNeighbours
+from learn_lab.models.response import GaussianProcess, NearestNeighbors
 from learn_lab.protocol import Prediction
 from learn_lab.validity import BoxEnvelope
 
@@ -108,7 +108,7 @@ def test_too_few_rows_a_variance_mismatch_and_a_bad_coverage_are_refused() -> No
 
 def test_split_conformal_takes_a_model_without_a_variance_as_a_constant_band() -> None:
     x, y = _draw(np.random.default_rng(0), 60)
-    fitted, interval = split_conformal(NearestNeighbours(k=3), x, y, coverage=0.8, seed=2, domain=CUBE)
+    fitted, interval = split_conformal(NearestNeighbors(k=3), x, y, coverage=0.8, seed=2, domain=CUBE)
     lower, upper = interval.interval(fitted.predict(x))
     assert not interval.scaled
     np.testing.assert_allclose(upper - lower, 2 * interval.quantile[0], rtol=0, atol=1e-12)

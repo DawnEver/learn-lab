@@ -3,13 +3,13 @@
 The model is domain-free, so it DECLARES its causality -- which of two work-conjugate variables is its input --
 and that declaration decides both the construction and which integral is the cycle's loss. In bond-graph terms
 an *effort* (H, force, voltage) and a *displacement* (B, position, charge -- the time integral of a flow) are
-conjugate: the work into the element is ``oint effort d(displacement)``.
+conjugate: the work into the element is ``∮ effort d(displacement)``.
 
 - ``input_is='effort'``: ``y = F(a x + sum_k w_k p_k(x))`` -- a generalized Prandtl-Ishlinskii operator, plays
-  LAGGING their input. The loss is ``oint x dy``; each lagging play gives ``oint x dp = r oint |dp| >= 0``.
+  LAGGING their input. The loss is ``∮ x dy``; each lagging play gives ``∮ x dp = r ∮ |dp| >= 0``.
 - ``input_is='displacement'``: ``u = G(x)``, ``y = a u + sum_k w_k (u - p_k(u))`` -- ``u - p_k(u)`` is the
-  Prandtl STOP operator, which LEADS: ``+r`` on a long rise, ``-r`` on a long fall. The loss is ``oint y dx``;
-  each stop gives ``oint e du = r oint |dp| >= 0``. This is the exact INVERSE class of the effort form: on a
+  Prandtl STOP operator, which LEADS: ``+r`` on a long rise, ``-r`` on a long fall. The loss is ``∮ y dx``;
+  each stop gives ``∮ e du = r ∮ |dp| >= 0``. This is the exact INVERSE class of the effort form: on a
   branch, ``v = a x + sum w p_r(x)`` has slope ``a + sum_{moving} w``; inverting it, ``x`` has slope
   ``1 / (a + sum_{moving} w)`` in ``v``, steepest just after a reversal and flattening as plays engage --
   which is a stop bank in ``v`` (all stops elastic after a reversal, each saturating at its own threshold),
@@ -29,7 +29,7 @@ with a single ``G`` inverts it and more stops plateau rather than converge. Two 
   implicit tangent). Its loop is the effort bank's loop, so passivity carries over exactly.
 
 Using the effort construction with the displacement as input -- a lagging bank fed B and asked for H -- puts
-the ascending branch BELOW the descending one, so ``oint H dB < 0``: an active material. :func:`dissipation`
+the ascending branch BELOW the descending one, so ``∮ H dB < 0``: an active material. :func:`dissipation`
 measures the declared integral, so it says no to exactly that.
 
 ``r_k >= 0``, ``w_k >= 0`` and ``a > 0`` through softplus, ``F``/``G`` a
@@ -47,8 +47,8 @@ The state is the play outputs, carried by the caller: :meth:`FittedHysteresis.st
 ``(state, x) -> (state, y)``, so a classical time-stepper owns time and hands back the converged state.
 :meth:`~FittedHysteresis.value` and :meth:`~FittedHysteresis.derivative` are the same step as the two
 callables a Newton solve on ``x`` takes (the HYBRID seam). Training is backpropagation through the play
-recursion over whole input histories, each starting from the demagnetised state (every play at 0). The model
-is valid on the input range it was trained on; ``odd`` makes ``y(-x) = -y(x)`` exact from the demagnetised
+recursion over whole input histories, each starting from the demagnetized state (every play at 0). The model
+is valid on the input range it was trained on; ``odd`` makes ``y(-x) = -y(x)`` exact from the demagnetized
 state, so that range is symmetric.
 """
 
@@ -62,7 +62,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize, take
 from learn_lab.deep.networks import MonotoneScalar
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse, require_finite
@@ -98,8 +98,8 @@ def play(state: torch.Tensor, x: torch.Tensor, thresholds: torch.Tensor) -> torc
 def dissipation(step: Step, state: np.ndarray, cycle: np.ndarray, *, input_is: Causality) -> float:
     """The energy one closed input *cycle* dissipates; >= 0 for a passive model of the declared causality.
 
-    ``oint effort d(displacement)``: ``oint x dy`` when the input is the effort, ``oint y dx`` when it is the
-    displacement (``oint x dy = -oint y dx`` on a closed cycle, so measuring the wrong one flips the verdict).
+    ``∮ effort d(displacement)``: ``∮ x dy`` when the input is the effort, ``∮ y dx`` when it is the
+    displacement (``∮ x dy = -∮ y dx`` on a closed cycle, so measuring the wrong one flips the verdict).
     The cycle is run twice from *state* and measured on the second pass, once the first has carried the state
     onto the cycle. Unit: input unit times output unit (A/m * T = J/m^3 for H and B, either way round).
     """
@@ -226,7 +226,7 @@ class PlayBank(nn.Module):
         return play(state, h.detach(), self.thresholds), h
 
     def histories(self, x: torch.Tensor) -> torch.Tensor:
-        """The play outputs ``(m, T, K)`` along input histories ``x (m, T)`` from the demagnetised state.
+        """The play outputs ``(m, T, K)`` along input histories ``x (m, T)`` from the demagnetized state.
 
         The play recursion unrolled exactly: every play output is either 0 (never moved) or
         ``x[tau] - sigma r`` with ``tau`` the last step it moved and ``sigma`` its direction. Which branch and
@@ -274,7 +274,7 @@ class PlayHysteresis:
     def fit(
         self, inputs: Sequence[np.ndarray], outputs: Sequence[np.ndarray], *, checkpoint: Checkpoint | None = None
     ) -> FittedHysteresis:
-        """Input histories and the outputs measured along them, each from the demagnetised state."""
+        """Input histories and the outputs measured along them, each from the demagnetized state."""
         xs = [require_finite(np.asarray(x, float).ravel(), 'an input history') for x in inputs]
         ys = [require_finite(np.asarray(y, float).ravel(), 'an output history') for y in outputs]
         if not xs or len(xs) != len(ys) or any(x.shape != y.shape or x.size < 2 for x, y in zip(xs, ys, strict=True)):
@@ -306,7 +306,7 @@ class PlayHysteresis:
             u = bank.played(d)
             return (((bank.output_of(u, bank.histories(u)) - m) ** 2) * k).sum() / k.sum()
 
-        history = minimise(
+        history = minimize(
             bank.parameters(),
             loss,
             self.schedule,
@@ -346,7 +346,7 @@ class FittedHysteresis:
         return numpy(self.bank.thresholds) * scale
 
     def initial_state(self, points: int = 1) -> np.ndarray:
-        """The demagnetised state of *points* independent material points: ``(points, plays)``, every play at 0."""
+        """The demagnetized state of *points* independent material points: ``(points, plays)``, every play at 0."""
         return np.zeros((points, self.bank.raw_thresholds.numel()))
 
     def _forward(
@@ -381,7 +381,7 @@ class FittedHysteresis:
         return numpy(slope) * self.y_scale / self.x_scale
 
     def respond(self, x: np.ndarray) -> np.ndarray:
-        """``y (T,)`` along the input history ``x (T,)`` from the demagnetised state."""
+        """``y (T,)`` along the input history ``x (T,)`` from the demagnetized state."""
         state, out = self.initial_state(), []
         for xi in np.asarray(x, float).ravel():
             state, y = self.step(state, np.array([xi]))

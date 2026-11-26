@@ -1,4 +1,4 @@
-"""The mesh-to-graph encoder: edges by radius, neighbours or cells, and weights that integrate on any point set.
+"""The mesh-to-graph encoder: edges by radius, neighbors or cells, and weights that integrate on any point set.
 
 The integral check is the encoder's whole purpose: ``sum_j weight_ij v(x_j)`` over a full-radius graph is the
 integral of ``v`` over the domain at EVERY node, on a coarse and on a fine point set alike. PLANTED CONTROL:
@@ -43,13 +43,13 @@ def test_cell_edges_join_exactly_the_vertices_that_share_a_cell() -> None:
     assert pairs == {(0, 0), (1, 1), (2, 2), (0, 1), (1, 0), (1, 2), (2, 1)}
 
 
-def test_radius_and_neighbour_edges_with_mean_weights() -> None:
+def test_radius_and_neighbor_edges_with_mean_weights() -> None:
     points = np.random.default_rng(0).uniform(0, 1, (30, 2))
     graph = mesh_graph(points, radius=0.3)
     lengths = graph.edge_features[:, -1]
     assert lengths.max() <= 0.3
-    assert np.allclose(np.bincount(graph.edges[1], graph.weights), 1.0)  # the neighbourhood mean
-    knn = mesh_graph(points, neighbours=5)
+    assert np.allclose(np.bincount(graph.edges[1], graph.weights), 1.0)  # the neighborhood mean
+    knn = mesh_graph(points, neighbors=5)
     assert np.array_equal(np.bincount(knn.edges[1]), np.full(30, 5))
     assert graph.edge_features.shape == (graph.edges.shape[1], 3)  # offset (2) and its length
 
@@ -58,4 +58,4 @@ def test_an_encoder_without_a_rule_for_edges_is_refused() -> None:
     with pytest.raises(Refused, match='radius'):
         mesh_graph(np.zeros((3, 1)))
     with pytest.raises(Refused, match='not both'):
-        mesh_graph(np.zeros((3, 1)), radius=1.0, neighbours=2)
+        mesh_graph(np.zeros((3, 1)), radius=1.0, neighbors=2)

@@ -1,7 +1,7 @@
 """What a model family tunes: a :class:`Space` of named dimensions, and the :class:`Family` that declares one.
 
 A dimension is :class:`Real` (optionally on a log scale), :class:`Integer` or :class:`Choice`; each is checked
-when built, so a space that cannot be searched never exists. The search over a space is the optimiser's
+when built, so a space that cannot be searched never exists. The search over a space is the optimizer's
 (optimi-lab); learn-lab states what is searched (:mod:`learn_lab.registry`) and how a point scores
 (:mod:`learn_lab.tuning`).
 """

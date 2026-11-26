@@ -93,18 +93,18 @@ class Satisfied(Poisson):
         return terms
 
 
-def test_the_anchored_balance_holds_its_reference_at_one_where_the_normalised_one_starves_it():
+def test_the_anchored_balance_holds_its_reference_at_one_where_the_normalized_one_starves_it():
     schedule = Schedule(adam_steps=60, learning_rate=2e-3)
     anchored = PhysicsInformedField(
         hidden=(8, 8), schedule=schedule, balance=Balance('anchored_gradient', 'pde', alpha=1.0, cap=50.0)
     ).fit(Satisfied())
     assert anchored.weights['pde'] == 1.0
     assert all(w <= 50.0 for w in anchored.weights.values()), anchored.weights
-    # Planted control: the normalised rule pushes the satisfied term up and the reference toward zero.
-    normalised = PhysicsInformedField(
-        hidden=(8, 8), schedule=schedule, balance=Balance('normalised_gradient', 'pde', alpha=1.0)
+    # Planted control: the normalized rule pushes the satisfied term up and the reference toward zero.
+    normalized = PhysicsInformedField(
+        hidden=(8, 8), schedule=schedule, balance=Balance('normalized_gradient', 'pde', alpha=1.0)
     ).fit(Satisfied())
-    assert normalised.weights['pde'] < 0.1, normalised.weights
+    assert normalized.weights['pde'] < 0.1, normalized.weights
 
 
 def test_the_anchored_balance_still_fits_the_under_fitted_boundary():

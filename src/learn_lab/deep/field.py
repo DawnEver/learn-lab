@@ -1,6 +1,6 @@
 """Grid -> grid field model: a small U-Net mapping ``(n, c_in, H, W) -> (n, c_out, H, W)``.
 
-Channels are standardised on the training set. The envelope is the input channels' value box AND the grid
+Channels are standardized on the training set. The envelope is the input channels' value box AND the grid
 shape the model was trained on: another shape is INVALID (the convolutions would run, the answer would not
 be the trained one), a value outside the box is OUT_OF_DOMAIN. ``levels`` halvings need ``H`` and ``W``
 divisible by ``2**levels``; at the bottom every cell sees the whole grid when ``H / 2**levels <= 3``.
@@ -20,9 +20,9 @@ import torch
 from torch import nn
 from torch.utils.checkpoint import checkpoint as recomputed
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize, take
 from learn_lab.deep.runtime import Runtime, numpy
-from learn_lab.deep.standardise import Standardiser
+from learn_lab.deep.standardize import Standardiser
 from learn_lab.errors import refuse, require_finite
 from learn_lab.validity import ChannelEnvelope
 
@@ -97,7 +97,7 @@ class FieldModel:
             )
             return torch.stack(list(parts)).sum() / yb.numel()
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,

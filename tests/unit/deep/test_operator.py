@@ -94,7 +94,7 @@ def test_a_chunked_fno_fit_equals_the_one_pass_fit():
         ).fit(x, x[:, :1] ** 2)
         for chunk in (None, 3)
     ]
-    assert fits[0].history == pytest.approx(fits[1].history, rel=1e-10, abs=1e-12)  # standardised loss, dimensionless
+    assert fits[0].history == pytest.approx(fits[1].history, rel=1e-10, abs=1e-12)  # standardized loss, dimensionless
     np.testing.assert_allclose(fits[1].predict(x), fits[0].predict(x), rtol=1e-9, atol=1e-12)
     with pytest.raises(Refused, match='chunk'):
         FNO(chunk=0)

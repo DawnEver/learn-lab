@@ -62,7 +62,7 @@ def test_the_gradient_is_the_derivative_of_the_mean(data, kernel) -> None:
         step = np.zeros(2)
         step[j] = h
         central = (fitted.predict(q + step).mean - fitted.predict(q - step).mean) / (2 * h)
-        # Absolute, target units per unit input; the kinked kernels (linear) are smooth away from centres.
+        # Absolute, target units per unit input; the kinked kernels (linear) are smooth away from centers.
         assert np.max(np.abs(analytic[:, :, j] - central)) <= 1e-5
 
 

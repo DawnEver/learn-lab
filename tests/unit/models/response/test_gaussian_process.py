@@ -23,7 +23,7 @@ from learn_lab.validity import BoxEnvelope
 SAME_POINT = 1e-9
 #: Absolute, target units: the same posterior algebra at the same hyperparameters.
 PREDICT = 1e-8
-#: Relative: our maximised log-likelihood may not fall below sklearn's L-BFGS-B optimum by more.
+#: Relative: our maximized log-likelihood may not fall below sklearn's L-BFGS-B optimum by more.
 NOT_WORSE = 1e-6
 
 
@@ -51,7 +51,7 @@ def data():
     return x, y, rng.random((10, 2))
 
 
-def _normalised(y):
+def _normalized(y):
     std = np.std(y, axis=0)
     return (y - y.mean(axis=0)) / np.where(std > 0, std, 1.0)
 
@@ -62,7 +62,7 @@ def test_the_log_likelihood_and_its_gradient_equal_sklearns_at_the_same_point(da
     theta = np.log([1.7, 0.3, 0.8, 1e-2])
     sk = GaussianProcessRegressor(_kernel(family, 2), normalize_y=True, optimizer=None, alpha=0.0).fit(x, y)
     value, gradient = sk.log_marginal_likelihood(theta, eval_gradient=True)
-    ours, our_gradient = log_likelihood(family, theta, x, _normalised(y)[:, 0])
+    ours, our_gradient = log_likelihood(family, theta, x, _normalized(y)[:, 0])
     assert abs(ours - value) <= SAME_POINT * abs(value)
     assert np.max(np.abs(our_gradient - gradient)) <= SAME_POINT * max(1.0, np.max(np.abs(gradient)))
 
@@ -122,8 +122,8 @@ def test_closed_form_leave_one_out_equals_refitting_without_each_point(data) -> 
     kernel = _kernel('squared_exponential', 2).clone_with_theta(theta)
     for i in range(0, len(x), 6):
         keep = np.arange(len(x)) != i
-        # The normalisation is the full data's, as in the closed form: only the point is left out.
-        sk = GaussianProcessRegressor(kernel, optimizer=None, alpha=0.0).fit(x[keep], _normalised(y)[keep])
+        # The normalization is the full data's, as in the closed form: only the point is left out.
+        sk = GaussianProcessRegressor(kernel, optimizer=None, alpha=0.0).fit(x[keep], _normalized(y)[keep])
         mean, std = sk.predict(x[i : i + 1], return_std=True)
         scale = np.std(y)
         assert abs(loo.mean[i, 0] - (mean[0] * scale + y.mean())) <= PREDICT
@@ -150,7 +150,7 @@ def test_the_fit_beats_a_planted_wrong_hyperparameter_and_loo_flags_a_planted_ou
     x, y, _ = data
     fitted = GaussianProcess('squared_exponential').fit(x, y, domain=_cube_of(x))
     wrong = fitted.hyperparameters[0] + np.array([0.0, 3.0, 3.0, 0.0])  # lengths 20x too long
-    assert log_likelihood('squared_exponential', wrong, x, _normalised(y)[:, 0])[0] < fitted.log_likelihood[0] - 1
+    assert log_likelihood('squared_exponential', wrong, x, _normalized(y)[:, 0])[0] < fitted.log_likelihood[0] - 1
     corrupted = y.copy()
     corrupted[7] += 5 * np.std(y)
     loo = GaussianProcess('squared_exponential').fit(x, corrupted, domain=_cube_of(x)).leave_one_out()

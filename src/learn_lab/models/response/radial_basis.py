@@ -117,11 +117,11 @@ class RadialBasis:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class FittedRadialBasis:
-    """The centres, their weights ``(n, k)``, and the tail's exponents and coefficients ``(terms, k)``."""
+    """The centers, their weights ``(n, k)``, and the tail's exponents and coefficients ``(terms, k)``."""
 
     kernel: str
     epsilon: float
-    centres: np.ndarray
+    centers: np.ndarray
     weights: np.ndarray
     exponents: np.ndarray
     tail: np.ndarray
@@ -135,7 +135,7 @@ class FittedRadialBasis:
         require_gives(self.gives, variance=variance, gradient=gradient, what='a radial basis surface')
         x = query_points(x, self.envelope)
         phi, slope, _ = _KERNELS[self.kernel]
-        offset = x[:, None, :] - self.centres[None, :, :]
+        offset = x[:, None, :] - self.centers[None, :, :]
         s = self.epsilon * np.linalg.norm(offset, axis=2)
         mean = phi(s) @ self.weights + _tail(x, self.exponents) @ self.tail
         if not gradient:

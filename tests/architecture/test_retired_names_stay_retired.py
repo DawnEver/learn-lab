@@ -18,7 +18,7 @@ RETIRED: dict[str, str] = {
     # 2026-11-08: a fitted neural ODE holds its net and time span, not a closure over them.
     'rate_net': 'FittedDynamics.net and FittedDynamics.time_scale',
     # 2026-11-08, user ruling: learn-lab states what is tuned; optimi-lab owns the search.
-    'tuning import tune': 'tuning import objective (an Objective for optimi-lab to minimise)',
+    'tuning import tune': 'tuning import objective (an Objective for optimi-lab to minimize)',
     'Trial(': 'Evaluation (one recorded Objective call)',
     # 2026-11-17, the domain boundary: learn-lab is generic; a loss law belongs to its domain, a run analysis to optimi-lab.
     'loss_law': 'LawResidual (any law as the mean, a learned residual); the loss law itself is its domain library',
@@ -28,6 +28,17 @@ RETIRED: dict[str, str] = {
     # 2026-11-17: quadrature rules are numerics-lab's; learn-lab converts them with Runtime.tensor.
     'physics import gauss_legendre': 'numerics_lab.quadrature.gauss_legendre_box',
     'simplex_rule(': 'numerics_lab.quadrature.simplex_rule (numpy), then Runtime.tensor',
+    # 2026-11-26, US-SPELLING-IS-CHECKED: the public names move to US spelling with no alias.
+    # spelling-off
+    'learn_lab.deep.standardise': 'learn_lab.deep.standardize',
+    'response.neighbours': 'learn_lab.models.response.neighbors',
+    'nearest_neighbours': 'nearest_neighbors (the registry family key; nearest_neighbors_classifier likewise)',
+    'NearestNeighbours': 'NearestNeighbors (NearestNeighborsClassifier likewise)',
+    'FittedNeighbours': 'FittedNeighbors (FittedNeighborsClassifier likewise)',
+    'NEIGHBOUR_WEIGHTS': 'NEIGHBOR_WEIGHTS',
+    'minimise': 'minimize',
+    'maximise_likelihood': 'maximize_likelihood',
+    # spelling-on
 }
 
 

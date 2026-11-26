@@ -1,11 +1,11 @@
 """The maximum-likelihood machinery every Kriging model shares: one Gaussian log-likelihood and one fit.
 
 * :func:`gaussian_log_likelihood` -- ``log N(values; 0, C)`` and its gradient
-  ``0.5 tr((alpha alpha^T - C^-1) dC/dtheta_i)`` for each slope ``dC/dtheta_i``; the factorisation
+  ``0.5 tr((alpha alpha^T - C^-1) dC/dtheta_i)`` for each slope ``dC/dtheta_i``; the factorization
   is numerics-lab's jittered Cholesky, and a matrix it cannot factor has likelihood ``-inf``.
 * :class:`Box` -- ``theta = lo + (hi - lo) sigmoid(u)``, so an unconstrained ``u`` is a bounded
   ``theta``; its slope converts a gradient in ``theta`` to one in ``u``.
-* :func:`maximise_likelihood` -- the multi-start fit: numerics-lab's ``minimize_lbfgs`` on ``-log L``
+* :func:`maximize_likelihood` -- the multi-start fit: numerics-lab's ``minimize_lbfgs`` on ``-log L``
   in ``u``, from the declared start and *restarts* seeded draws from the box, keeping the best. A
   start that stops unconverged (line search or budget) still offers the point it reached.
 """
@@ -21,7 +21,7 @@ from numerics_lab.linear.cholesky import JitteredCholesky, jittered_cholesky
 from numerics_lab.minimize import minimize_lbfgs
 from scipy.special import expit
 
-__all__ = ['Box', 'factor', 'gaussian_log_likelihood', 'maximise_likelihood']
+__all__ = ['Box', 'factor', 'gaussian_log_likelihood', 'maximize_likelihood']
 
 _LOG_2PI = float(np.log(2 * np.pi))
 
@@ -66,7 +66,7 @@ class Box:
         return np.log(p / (1 - p))
 
 
-def maximise_likelihood(
+def maximize_likelihood(
     log_likelihood: Objective, start: np.ndarray, box: Box, *, restarts: int, seed: int
 ) -> tuple[np.ndarray, float]:
     """The best ``(theta, log-likelihood)`` over *start* and *restarts* seeded uniform draws inside *box*."""

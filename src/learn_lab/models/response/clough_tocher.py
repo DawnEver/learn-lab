@@ -1,7 +1,7 @@
 """The Clough-Tocher interpolant: a piecewise-cubic C1 surface THROUGH the samples of a two-input response.
 
 The nodes are Delaunay-triangulated and each triangle split into three cubic patches (Clough-Tocher), with the
-nodal gradients estimated by minimising the surface's curvature (``tolerance`` and ``max_iterations`` steer that
+nodal gradients estimated by minimizing the surface's curvature (``tolerance`` and ``max_iterations`` steer that
 estimate). It reproduces every sample exactly and every plane everywhere -- the bend a low-degree polynomial
 cannot hold -- and it is defined only inside the convex hull of its nodes.
 

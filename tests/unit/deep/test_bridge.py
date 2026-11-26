@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from learn_lab.deep.bridge import check_vjp, classical_op
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Schedule, minimize
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
@@ -90,5 +90,5 @@ def test_a_network_upstream_of_the_classical_op_trains_end_to_end():
     def loss(_index=None):
         return ((torch.stack([op(row) for row in net(z)]) - target) ** 2).mean()
 
-    history = minimise(net.parameters(), loss, Schedule(adam_steps=300, learning_rate=1e-2))
+    history = minimize(net.parameters(), loss, Schedule(adam_steps=300, learning_rate=1e-2))
     assert history[-1] < 1e-2 * history[0]  # dimensionless: two decades; measured 1.6e-3

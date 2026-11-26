@@ -11,7 +11,7 @@
   uniformly over the output columns: ``r2``, ``mse``, ``rmse`` (the column RMSEs averaged),
   ``mae``, ``median_absolute_error``.
 * :func:`calibration` -- how far a predicted Gaussian ``N(mean, variance)`` is borne out: the
-  observed coverage of each central interval, the variance of the standardised residuals (1 when
+  observed coverage of each central interval, the variance of the standardized residuals (1 when
   calibrated, above when over-confident) and the mean negative log predictive density.
 * :func:`scored_fit` -- a model fitted on all rows beside every one of :data:`SCORES` of its
   out-of-fold predictions; :func:`box_predictions` -- such a fit's predictions at uniform points of
@@ -188,10 +188,10 @@ def cross_validate(
 
 @dataclass(frozen=True, slots=True)
 class Calibration:
-    """Observed coverage per nominal central level, standardised-residual variance, mean NLPD."""
+    """Observed coverage per nominal central level, standardized-residual variance, mean NLPD."""
 
     coverage: dict[float, float]
-    standardised_variance: float
+    standardized_variance: float
     negative_log_density: float
 
 

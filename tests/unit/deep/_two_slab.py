@@ -83,7 +83,7 @@ class TwoSlab:
 
 @dataclass(frozen=True)
 class EveryColumnEverywhere(TwoSlab):
-    """The planted control: a provider claiming every column owns every point -- the defect's behaviour."""
+    """The planted control: a provider claiming every column owns every point -- the defect's behavior."""
 
     def owns(self, name, points):
         return np.ones((points.shape[0], self.outputs), bool)

@@ -1,4 +1,4 @@
-"""D52 -- k nearest neighbours regression (Euclidean distance).
+"""D52 -- k nearest neighbors regression (Euclidean distance).
 
 ``uniform`` averages the k nearest values; ``distance`` weights each by ``1 / distance`` and, at a
 query that coincides with training points, returns the mean of those points' values alone. The
@@ -16,15 +16,15 @@ from learn_lab.errors import refuse
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
 from learn_lab.validity import BoxEnvelope
 
-__all__ = ['NEIGHBOUR_WEIGHTS', 'FittedNeighbours', 'NearestNeighbours']
+__all__ = ['NEIGHBOR_WEIGHTS', 'FittedNeighbors', 'NearestNeighbors']
 
 #: The declared weightings.
-NEIGHBOUR_WEIGHTS: Final = ('uniform', 'distance')
+NEIGHBOR_WEIGHTS: Final = ('uniform', 'distance')
 
 
 @dataclass(frozen=True, slots=True)
-class NearestNeighbours:
-    """The mean of the *k* nearest measured values, weighted per :data:`NEIGHBOUR_WEIGHTS`."""
+class NearestNeighbors:
+    """The mean of the *k* nearest measured values, weighted per :data:`NEIGHBOR_WEIGHTS`."""
 
     k: int = 5
     weights: str = 'uniform'
@@ -32,23 +32,23 @@ class NearestNeighbours:
     def __post_init__(self) -> None:
         if not isinstance(self.k, int) or self.k < 1:
             refuse(f'k is an integer >= 1, got {self.k!r}')
-        if self.weights not in NEIGHBOUR_WEIGHTS:
-            refuse(f'neighbour weights are one of {list(NEIGHBOUR_WEIGHTS)}, got {self.weights!r}')
+        if self.weights not in NEIGHBOR_WEIGHTS:
+            refuse(f'neighbor weights are one of {list(NEIGHBOR_WEIGHTS)}, got {self.weights!r}')
 
     @property
     def gives(self) -> frozenset[Give]:
         return frozenset()
 
-    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedNeighbours:
+    def fit(self, x, y, *, domain: BoxEnvelope | None = None) -> FittedNeighbors:
         x, y, envelope = training_data(x, y, domain)
         if self.k > len(x):
-            refuse(f'{self.k} neighbours were asked for and only {len(x)} points were measured')
-        return FittedNeighbours(self.k, self.weights, x, y, envelope)
+            refuse(f'{self.k} neighbors were asked for and only {len(x)} points were measured')
+        return FittedNeighbors(self.k, self.weights, x, y, envelope)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
-class FittedNeighbours:
-    """The measured points and values the neighbours are drawn from."""
+class FittedNeighbors:
+    """The measured points and values the neighbors are drawn from."""
 
     k: int
     weights: str
@@ -61,7 +61,7 @@ class FittedNeighbours:
         return frozenset()
 
     def predict(self, x, *, variance: bool = False, gradient: bool = False) -> Prediction:
-        require_gives(self.gives, variance=variance, gradient=gradient, what='nearest neighbours')
+        require_gives(self.gives, variance=variance, gradient=gradient, what='nearest neighbors')
         q = query_points(x, self.envelope)
         distance = np.sqrt(np.maximum(np.sum((q[:, None, :] - self.x[None, :, :]) ** 2, axis=2), 0.0))
         nearest = np.argsort(distance, axis=1, kind='stable')[:, : self.k]

@@ -32,7 +32,7 @@ def imported_roots(source: str) -> set[str]:
     return found
 
 
-def offences(source: str, *, in_deep: bool) -> set[str]:
+def offenses(source: str, *, in_deep: bool) -> set[str]:
     roots = imported_roots(source)
     return (roots & _CONSUMERS) | (set() if in_deep else roots & _DEEP_ONLY)
 
@@ -47,17 +47,17 @@ def _is_deep(path: Path) -> bool:
     return path.relative_to(_PACKAGE).parts[0] == 'deep'
 
 
-def test_the_scan_sees_planted_offences() -> None:
+def test_the_scan_sees_planted_offenses() -> None:
     planted = 'import torch.nn as nn\nfrom optimi_lab.x import y\nfrom motronics import z\nimport numpy\n'
-    assert offences(planted, in_deep=False) == {'torch', 'optimi_lab', 'motronics'}
-    assert offences(planted, in_deep=True) == {'optimi_lab', 'motronics'}
+    assert offenses(planted, in_deep=False) == {'torch', 'optimi_lab', 'motronics'}
+    assert offenses(planted, in_deep=True) == {'optimi_lab', 'motronics'}
 
 
 def test_no_module_imports_a_consumer_or_torch_outside_deep() -> None:
     found = {
         path.relative_to(_PACKAGE).as_posix(): bad
         for path in _modules()
-        if (bad := offences(path.read_text(encoding='utf-8'), in_deep=_is_deep(path)))
+        if (bad := offenses(path.read_text(encoding='utf-8'), in_deep=_is_deep(path)))
     }
     assert found == {}
 

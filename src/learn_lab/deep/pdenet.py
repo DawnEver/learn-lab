@@ -8,7 +8,7 @@ is ``u_t = sum_i c_i term_i`` over the PDE-FIND library ``u^p * d^k u`` (:func:`
 same names), so the identified law is read off its coefficients (:meth:`FittedPDENet.terms`).
 
 ``fit(before, after, dt=, dx=)`` trains on snapshot pairs ``after = u(t + dt)``, advancing ``before`` by one RK4
-step of the learned rate: phase one penalises ``sparsity * |c|_1``, then every coefficient below ``threshold`` (in
+step of the learned rate: phase one penalizes ``sparsity * |c|_1``, then every coefficient below ``threshold`` (in
 the coefficient's unit) is masked to zero and the survivors are refitted without the penalty for ``refit_steps``.
 ``constrained=False`` frees every moment: the planted control, where a coefficient and its stencil's scale trade
 off and the PDE's coefficients are not identified. The envelope is the box of ``u`` values the fit saw.
@@ -23,7 +23,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize, take
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.equation import pde_library
 from learn_lab.errors import refuse, require_finite
@@ -154,19 +154,19 @@ class PDENet:
         x0, x1 = rt.tensor(u0), rt.tensor(u1)
         # The residual is a rate: the one-step change over dt, so its scale is the data's, not dt's.
         rate = (x1 - x0) / dt
-        # The normaliser is the FULL data's, so a batch's misfit is an unbiased estimate of the full one.
-        normaliser = (rate**2).mean()
+        # The normalizer is the FULL data's, so a batch's misfit is an unbiased estimate of the full one.
+        normalizer = (rate**2).mean()
 
         def misfit(index: torch.Tensor | None) -> torch.Tensor:
             u, r = take(index, x0, rate)
-            return (((_rk4(net, u, dt) - u) / dt - r) ** 2).mean() / normaliser
+            return (((_rk4(net, u, dt) - u) / dt - r) ** 2).mean() / normalizer
 
-        def penalised(index: torch.Tensor | None) -> torch.Tensor:
+        def penalized(index: torch.Tensor | None) -> torch.Tensor:
             return misfit(index) + self.sparsity * net.coefficients.abs().sum()
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
-            penalised,
+            penalized,
             self.schedule,
             samples=len(x0),
             seed=rt.seed,
@@ -179,7 +179,7 @@ class PDENet:
             net.coefficients.mul_(net.mask)
         if self.refit_steps:
             refit = replace(self.schedule, adam_steps=self.refit_steps, lbfgs_steps=0)
-            history += minimise(
+            history += minimize(
                 net.parameters(),
                 misfit,
                 refit,

@@ -5,8 +5,8 @@ Level 0 is a :class:`~learn_lab.models.response.gaussian_process.GaussianProcess
     y_t(x) = scale_t * mu_{t-1}(x) + offset_t + delta_t(x),     delta_t ~ GP(0, amplitude R + noise I)
 
 fitted recursively (Le Gratiet): ``mu_{t-1}`` is the level below's predictive mean at level t's
-points, ``(scale_t, offset_t)`` its generalised-least-squares estimate at each candidate kernel
-``theta``, and ``theta`` maximises the resulting likelihood (by the envelope theorem its gradient is
+points, ``(scale_t, offset_t)`` its generalized-least-squares estimate at each candidate kernel
+``theta``, and ``theta`` maximizes the resulting likelihood (by the envelope theorem its gradient is
 the likelihood gradient at the GLS coefficients). The designs need not be nested. A prediction
 chains the levels: ``mu_t = scale_t mu_{t-1} + offset_t + delta_t``, ``var_t = scale_t^2 var_{t-1}
 + var(delta_t)``, and the gradient likewise.
@@ -26,7 +26,7 @@ from learn_lab.models.response.gaussian_process import (
     covariance,
 )
 from learn_lab.models.response.kernel import require_family
-from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximise_likelihood
+from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximize_likelihood
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
 from learn_lab.validity import BoxEnvelope
 
@@ -102,7 +102,7 @@ class CoKriging:
 
         d = x.shape[1]
         box = Box(np.full(d + 2, np.log(self.bounds[0])), np.full(d + 2, np.log(self.bounds[1])))
-        theta, _ = maximise_likelihood(
+        theta, _ = maximize_likelihood(
             likelihood, np.log(np.r_[1.0, np.ones(d), 1e-2]), box, restarts=self.restarts, seed=self.seed
         )
         coefficients, residual = _gls(covariance(self.family, theta, u)[0], trend, v)

@@ -35,10 +35,10 @@ import torch
 from torch import nn
 from torch.utils.checkpoint import checkpoint as recomputed
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize, take
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
-from learn_lab.deep.standardise import Standardiser
+from learn_lab.deep.standardize import Standardiser
 from learn_lab.errors import refuse, require_finite
 from learn_lab.point_graph import PointGraph
 from learn_lab.validity import BoxEnvelope, ChannelEnvelope, channel_entries
@@ -60,7 +60,7 @@ __all__ = [
 
 
 def _scalar(s: Standardiser, a: np.ndarray, *, back: bool = False) -> np.ndarray:
-    """One scalar channel standardised: every entry of ``a`` shares the shift and scale."""
+    """One scalar channel standardized: every entry of ``a`` shares the shift and scale."""
     flat = a.reshape(-1, 1)
     return (s.back(flat) if back else s.forward(flat)).reshape(a.shape)
 
@@ -119,7 +119,7 @@ class DeepONet:
             ub, gb = take(index, ut, gt)
             return ((net(ub, yt) - gb) ** 2).mean()
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,
@@ -281,7 +281,7 @@ class FNO:
             )
             return torch.stack(list(parts)).sum() / yb.numel()
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,
@@ -474,7 +474,7 @@ class TransformerOperator:
             )
             return torch.stack(list(parts)).sum() / yb.numel()
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,
@@ -663,7 +663,7 @@ def _measure(measure: np.ndarray | None, x: np.ndarray, what: str) -> np.ndarray
 class Transolver:
     """Transolver (Wu et al., ICML 2024): Physics-Attention over any point set, cost linear in the points.
 
-    A token is one point's input channels and box-normalised coordinates (plus, with ``reference=r``, its
+    A token is one point's input channels and box-normalized coordinates (plus, with ``reference=r``, its
     distances to an ``r^d`` grid of the training box: the paper's unified position). Each of ``layers``
     pre-norm blocks groups the points into ``slices`` learned soft slices per head, attends among the slice
     tokens and scatters back (:class:`_PhysicsAttention`), then applies a ``mlp_ratio`` MLP. ``temperature`` is
@@ -784,7 +784,7 @@ class Transolver:
             )
             return torch.stack(list(parts)).sum() / yb.numel()
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,
@@ -884,7 +884,7 @@ class GraphOperator:
     """A graph neural operator: kernel-integral layers over a :class:`~learn_lab.point_graph.PointGraph`.
 
     Each layer is ``h_i <- W h_i + sum_j weight_ij K(x_i, x_j) h_j`` with ``K`` a ``width x width`` matrix from
-    an MLP of the two (box-normalised) positions and their offset; the sum is the graph's quadrature of the
+    an MLP of the two (box-normalized) positions and their offset; the sum is the graph's quadrature of the
     kernel integral, so the trained weights hold on ANY point set of the domain: fit on one mesh, evaluate on
     another (a finer one included). A query's points are refused outside the training points' box and its
     input values outside the per-channel value box.
@@ -947,7 +947,7 @@ class GraphOperator:
                 total = total + ((net(xb, *structure) - yb) ** 2).mean() * (len(xb) / drawn)
             return total
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,

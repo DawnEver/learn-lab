@@ -1,6 +1,6 @@
 """Every fitted response model answers only inside its envelope: the declared domain, else the training span.
 
-The search case is the reason for the declared domain: an optimiser fits on the points it has and asks
+The search case is the reason for the declared domain: an optimizer fits on the points it has and asks
 about candidates anywhere in its design space, so its envelope is that space, never the samples' span.
 """
 
@@ -22,7 +22,7 @@ from learn_lab.models.response import (
     LawResidual,
     MultilayerPerceptron,
     MultiOutputKriging,
-    NearestNeighbours,
+    NearestNeighbors,
     Polynomial,
     PowerLaw,
     RadialBasis,
@@ -49,13 +49,13 @@ FITS = {
     ),
     'multi_output_kriging': lambda d: MultiOutputKriging(restarts=0).fit(X, Y, domain=d),
     'co_kriging': lambda d: CoKriging(restarts=0).fit(X, Y, np.arange(24) % 2, domain=d),
-    'nearest_neighbours': lambda d: NearestNeighbours(k=3).fit(X, Y, domain=d),
+    'nearest_neighbors': lambda d: NearestNeighbors(k=3).fit(X, Y, domain=d),
     'regression_tree': lambda d: RegressionTree(max_depth=3).fit(X, Y, domain=d),
     'forest': lambda d: Forest(n_trees=3).fit(X, Y, domain=d),
     'multilayer_perceptron': lambda d: MultilayerPerceptron((4,), max_iterations=20).fit(X, Y, domain=d),
     'chaos_expansion': lambda d: ChaosExpansion(degree=2).fit(X, Y, domain=d),
     'clough_tocher': lambda d: CloughTocher().fit(X, Y, domain=d),
-    'ensemble': lambda d: Ensemble((Polynomial(degree=1), NearestNeighbours(k=3)), k=3).fit(X, Y, domain=d),
+    'ensemble': lambda d: Ensemble((Polynomial(degree=1), NearestNeighbors(k=3)), k=3).fit(X, Y, domain=d),
     'bagging': lambda d: Bagging(Polynomial(degree=1), n_members=3, seed=1).fit(X, Y, domain=d),
 }
 

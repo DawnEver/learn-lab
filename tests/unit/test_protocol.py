@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from learn_lab.errors import Refused
-from learn_lab.models.response import NearestNeighbours, Polynomial
+from learn_lab.models.response import NearestNeighbors, Polynomial
 from learn_lab.protocol import Give, Prediction, query_points, training_data
 from learn_lab.registry import SURROGATES
 from learn_lab.validity import BoxEnvelope
@@ -83,8 +83,8 @@ def test_a_query_outside_the_envelope_or_not_finite_is_refused() -> None:
 
 def test_asking_a_model_for_what_it_does_not_give_is_refused_naming_what_it_gives() -> None:
     x = np.random.default_rng(0).random((12, 2))
-    fitted = NearestNeighbours(k=3).fit(x, x[:, :1])
-    assert NearestNeighbours(k=3).gives == frozenset()
+    fitted = NearestNeighbors(k=3).fit(x, x[:, :1])
+    assert NearestNeighbors(k=3).gives == frozenset()
     with pytest.raises(Refused, match='variance'):
         fitted.predict(x, variance=True)
     with pytest.raises(Refused, match='gradient'):
@@ -95,7 +95,7 @@ def test_asking_a_model_for_what_it_does_not_give_is_refused_naming_what_it_give
 
 def test_every_registered_surrogate_declares_what_it_gives() -> None:
     """The registry is the declared set of L6 models; every row names a ``gives`` that is a set of ``Give``."""
-    assert {'polynomial', 'radial_basis', 'gaussian_process', 'nearest_neighbours', 'regression_tree', 'forest'} <= set(
+    assert {'polynomial', 'radial_basis', 'gaussian_process', 'nearest_neighbors', 'regression_tree', 'forest'} <= set(
         SURROGATES
     )
     for name, row in SURROGATES.items():

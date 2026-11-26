@@ -7,7 +7,7 @@ the joint covariance of a value and the derivatives is ``k`` differentiated in e
     cov(df(a)/da_i, df(b)/db_j)    =  k (delta_ij / l_i^2 - D_i D_j / (l_i^2 l_j^2))
 
 The data vector stacks the n values, then the n x d gradients point by point. ``theta = log[
-amplitude, l_1..l_d]`` maximises the likelihood of the NORMALISED data (values to zero mean and unit
+amplitude, l_1..l_d]`` maximizes the likelihood of the NORMALIZED data (values to zero mean and unit
 deviation, gradients divided by the same deviation), over the inputs mapped onto the unit box of the fit's
 envelope (gradients times its span; predicted gradients divided by it, back in the raw inputs' units); a nugget of ``1e-8 amplitude`` on the diagonal
 keeps the notoriously ill-conditioned matrix factorable. Predictions give the mean, its gradient
@@ -23,7 +23,7 @@ import numpy as np
 from numerics_lab.linear.dense import solve_triangular
 
 from learn_lab.errors import refuse
-from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximise_likelihood
+from learn_lab.models.response.likelihood import Box, factor, gaussian_log_likelihood, maximize_likelihood
 from learn_lab.protocol import Give, Prediction, query_points, require_gives, training_data
 from learn_lab.validity import BoxEnvelope
 
@@ -106,7 +106,7 @@ class GradientEnhancedKriging:
         columns = []
         for c in range(y.shape[1]):
             values, slopes = (y[:, c] - level[c]) / scale[c], g[:, c, :] * envelope.span / scale[c]
-            theta, _ = maximise_likelihood(
+            theta, _ = maximize_likelihood(
                 lambda t, v=values, s=slopes: self.log_likelihood(t, u, v, s),
                 np.zeros(d + 1),
                 box,

@@ -29,7 +29,7 @@ from learn_lab.models.response import (
     LawResidual,
     MultilayerPerceptron,
     MultiOutputKriging,
-    NearestNeighbours,
+    NearestNeighbors,
     Polynomial,
     PowerLaw,
     RadialBasis,
@@ -58,7 +58,7 @@ CASES = {
     'gradient_enhanced_kriging': (GradientEnhancedKriging(restarts=1), lambda m: m.fit(X, Y[:, :1], SLOPES)),
     'multi_output_kriging': (MultiOutputKriging(restarts=1), lambda m: m.fit(X, Y)),
     'co_kriging': (CoKriging(restarts=1), lambda m: m.fit(X, Y, np.arange(len(X)) % 2)),
-    'nearest_neighbours': (NearestNeighbours(k=3, weights='distance'), lambda m: m.fit(X, Y)),
+    'nearest_neighbors': (NearestNeighbors(k=3, weights='distance'), lambda m: m.fit(X, Y)),
     'regression_tree': (RegressionTree(max_depth=4), lambda m: m.fit(X, Y)),
     'forest': (Forest(n_trees=4, seed=3), lambda m: m.fit(X, Y)),
     'multilayer_perceptron': (MultilayerPerceptron(hidden=(6,), max_iterations=40), lambda m: m.fit(X, Y)),
@@ -68,7 +68,7 @@ CASES = {
         CloughTocher(tolerance=1e-8),
         lambda m: m.fit(np.vstack([X, [[0, 0], [0, 1], [1, 0], [1, 1]]]), np.vstack([Y, np.zeros((4, 2))])),
     ),
-    'ensemble': (Ensemble((Polynomial(degree=2), NearestNeighbours(k=3)), k=3), lambda m: m.fit(X, Y)),
+    'ensemble': (Ensemble((Polynomial(degree=2), NearestNeighbors(k=3)), k=3), lambda m: m.fit(X, Y)),
     'bagging': (Bagging(GaussianProcess(restarts=0), n_members=3, seed=5), lambda m: m.fit(X, Y)),
 }
 

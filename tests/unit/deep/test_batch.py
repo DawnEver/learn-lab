@@ -13,7 +13,7 @@ import pytest
 import scipy.sparse as sp
 import torch
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize, take
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.physics import PhysicsInformedField
 from learn_lab.deep.preconditioner import LearnedPreconditioner
@@ -55,7 +55,7 @@ def _problem(rows: list[int | None], *, stop_after: int | None = None):
 def _fit(schedule, rows=None, **kwargs):
     rows = [] if rows is None else rows
     net, loss, x = _problem(rows, stop_after=kwargs.pop('stop_after', None))
-    history = minimise(net.parameters(), loss, schedule, samples=N, seed=7, data=[x], **kwargs)
+    history = minimize(net.parameters(), loss, schedule, samples=N, seed=7, data=[x], **kwargs)
     return net, history, rows
 
 
@@ -86,7 +86,7 @@ def test_a_batched_adam_step_sees_batch_distinct_rows_drawn_afresh():
         seen.append(index)
         return (net(take(index, x)[0]) ** 2).mean()
 
-    minimise(net.parameters(), loss, Schedule(adam_steps=10, learning_rate=1e-2, batch=4), samples=N, seed=3)
+    minimize(net.parameters(), loss, Schedule(adam_steps=10, learning_rate=1e-2, batch=4), samples=N, seed=3)
     assert [len(i) for i in seen] == [4] * 10  # O(batch) rows per step, never N
     assert all(len(set(i.tolist())) == 4 and int(i.max()) < N for i in seen)
     assert len({tuple(i.tolist()) for i in seen}) > 1
@@ -135,10 +135,10 @@ def test_a_batch_is_a_positive_count(batch):
 
 def test_a_loss_without_a_sample_axis_refuses_a_batch():
     with pytest.raises(Refused, match='no sample axis'):
-        minimise([torch.zeros(1, requires_grad=True)], lambda _i: torch.zeros(()), Schedule(batch=2))
+        minimize([torch.zeros(1, requires_grad=True)], lambda _i: torch.zeros(()), Schedule(batch=2))
 
 
-# -- every family honours the batch or refuses it by name ------------------------------------------------------
+# -- every family honors the batch or refuses it by name ------------------------------------------------------
 
 _MODULES = ('constitutive', 'diffusion', 'dynamics', 'field', 'graph', 'hysteresis', 'operator', 'pdenet')
 _MODULES += ('preconditioner', 'surrogate')
@@ -146,7 +146,7 @@ _MODULES += ('preconditioner', 'surrogate')
 
 @pytest.fixture
 def calls(monkeypatch):
-    """Every family's ``minimise``, recording each fit's sample count and the rows of every closure call."""
+    """Every family's ``minimize``, recording each fit's sample count and the rows of every closure call."""
     record = []
 
     def spy(parameters, loss, schedule, *, samples=None, **kwargs):
@@ -164,12 +164,12 @@ def calls(monkeypatch):
             sizes.append(None if index is None else len(index))
             return loss(index)
 
-        history = minimise(parameters, counted, schedule, samples=samples, **kwargs)
+        history = minimize(parameters, counted, schedule, samples=samples, **kwargs)
         record.append({'samples': samples, 'sizes': sizes, 'schedule': schedule, 'pair': (permuted, full)})
         return history
 
     for name in _MODULES:
-        monkeypatch.setattr(importlib.import_module(f'learn_lab.deep.{name}'), 'minimise', spy)
+        monkeypatch.setattr(importlib.import_module(f'learn_lab.deep.{name}'), 'minimize', spy)
     return record
 
 
@@ -216,8 +216,8 @@ def test_every_registered_family_is_exercised():
     assert set(FAMILIES) == set(DEEP)
 
 
-def _honoured(calls, name, batch=2):
-    assert calls, f'{name} never reached minimise'
+def _honored(calls, name, batch=2):
+    assert calls, f'{name} never reached minimize'
     for call in calls:
         adam = call['schedule'].adam_steps
         assert call['samples'] > batch, (name, call['samples'])
@@ -229,13 +229,13 @@ def _honoured(calls, name, batch=2):
 
 
 @pytest.mark.parametrize('name', sorted(FAMILIES))
-def test_every_registered_family_honours_the_batch(name, calls):
+def test_every_registered_family_honors_the_batch(name, calls):
     x, y, settings = FAMILIES[name]
     model = DEEP[name].build(
         shapes=(x.shape[1:], y.shape[1:]), checkpoint=None, steps=3, learning_rate=1e-3, batch=2, **settings
     )
     model.fit(x.reshape(len(x), -1), y.reshape(len(y), -1))
-    _honoured(calls, name)
+    _honored(calls, name)
 
 
 def test_the_learned_preconditioner_batches_its_matrices(calls):
@@ -247,7 +247,7 @@ def test_the_learned_preconditioner_batches_its_matrices(calls):
     LearnedPreconditioner(hidden=4, rounds=1, schedule=schedule, runtime=RT).fit([
         matrix(n, k) for n, k in ((4, 0.1), (5, 0.5), (6, 1.0), (4, 2.0))
     ])
-    _honoured(calls, 'preconditioner')
+    _honored(calls, 'preconditioner')
 
 
 def test_a_physics_informed_field_refuses_a_batch_by_name():

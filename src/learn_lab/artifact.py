@@ -78,7 +78,7 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
         f'{_RESPONSE}multi_output:FittedMultiOutput',
     ),
     'co_kriging': (f'{_RESPONSE}co_kriging:CoKriging', f'{_RESPONSE}co_kriging:FittedCoKriging'),
-    'nearest_neighbours': (f'{_RESPONSE}neighbours:NearestNeighbours', f'{_RESPONSE}neighbours:FittedNeighbours'),
+    'nearest_neighbors': (f'{_RESPONSE}neighbors:NearestNeighbors', f'{_RESPONSE}neighbors:FittedNeighbors'),
     'regression_tree': (f'{_RESPONSE}tree:RegressionTree', f'{_RESPONSE}tree:FittedTree'),
     'forest': (f'{_RESPONSE}tree:Forest', f'{_RESPONSE}tree:FittedForest'),
     'multilayer_perceptron': (f'{_RESPONSE}neural:MultilayerPerceptron', f'{_RESPONSE}neural:Network'),
@@ -86,9 +86,9 @@ FAMILIES: Final[dict[str, tuple[str, str]]] = {
     'chaos_expansion': (f'{_RESPONSE}chaos:ChaosExpansion', f'{_RESPONSE}chaos:FittedChaos'),
     'ensemble': (f'{_RESPONSE}ensemble:Ensemble', f'{_RESPONSE}ensemble:FittedEnsemble'),
     'bagging': (f'{_RESPONSE}bagging:Bagging', f'{_RESPONSE}bagging:FittedBagging'),
-    'nearest_neighbours_classifier': (
-        'learn_lab.models.classifier:NearestNeighboursClassifier',
-        'learn_lab.models.classifier:FittedNeighboursClassifier',
+    'nearest_neighbors_classifier': (
+        'learn_lab.models.classifier:NearestNeighborsClassifier',
+        'learn_lab.models.classifier:FittedNeighborsClassifier',
     ),
     'classification_tree': (
         'learn_lab.models.classifier:ClassificationTree',
@@ -161,7 +161,7 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'gradient_enhanced_kriging': lambda f: _vector(f.envelope, len(f.columns)),
     'multi_output_kriging': lambda f: _vector(f.envelope, f.level.size),
     'co_kriging': lambda f: _vector(f.envelope, len(f.base.columns)),
-    'nearest_neighbours': lambda f: _vector(f.envelope, f.y.shape[1]),
+    'nearest_neighbors': lambda f: _vector(f.envelope, f.y.shape[1]),
     'regression_tree': lambda f: _vector(f.envelope, f.value.shape[1]),
     'forest': lambda f: _vector(f.envelope, f.trees[0].value.shape[1]),
     'multilayer_perceptron': lambda f: _vector(f.envelope, f.weights[-1].shape[1]),
@@ -169,7 +169,7 @@ _SCHEMAS: Final[dict[str, Callable[[object], dict]]] = {
     'chaos_expansion': lambda f: _vector(f.envelope, f.coefficients.shape[1]),
     'ensemble': lambda f: _schema(family_of(f.members[0]), f.members[0]),
     'bagging': lambda f: _schema(family_of(f.members[0]), f.members[0]),
-    'nearest_neighbours_classifier': lambda f: _classes(f.envelope, f.classes),
+    'nearest_neighbors_classifier': lambda f: _classes(f.envelope, f.classes),
     'classification_tree': lambda f: _classes(f.envelope, f.classes),
     'logistic_regression': lambda f: _classes(f.envelope, f.classes),
     'sparse_regression': lambda f: {

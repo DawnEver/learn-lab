@@ -20,7 +20,7 @@ warped coordinate, which tanh and softplus units fit poorly (measured, four-deca
 2500..3500 steps and learning rate 2.7e-3..3.3e-3: low-decade error 0.03..0.25 % at the half-decade knee,
 0.17..0.90 % at the smallest sample, 0.21..1.76 % unwarped). Under ``'linear'`` the lowest of four decades occupies
 ``[1e-4, 1e-3]``, far below every unit's initial knee: reaching it means driving weights up by ~1e3, and
-where the optimiser stops on that path decides the low-end fit (measured: 0.26 % on Windows CPU, over 1 % on
+where the optimizer stops on that path decides the low-end fit (measured: 0.26 % on Windows CPU, over 1 % on
 the Linux forge, same seed). The warp is part of the law, so ``derivative`` differentiates through it.
 """
 
@@ -32,7 +32,7 @@ from typing import Final
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize, take
 from learn_lab.deep.networks import MonotoneScalar
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
@@ -87,7 +87,7 @@ class MonotoneLaw:
         xt, yt = _warp(rt.tensor(x / x_scale), knee), rt.tensor(y / y_scale)
         w = _sample_weights(self.loss, y / y_scale)
         wt = rt.tensor(w / w.mean())
-        history = minimise(
+        history = minimize(
             net.parameters(),
             lambda index: _weighted(net, *take(index, xt, yt, wt)),
             self.schedule,

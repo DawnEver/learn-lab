@@ -2,7 +2,7 @@
 
 Training is multiple shooting: from every sample of every trajectory, integrate ``horizon`` steps of the
 sampling grid and match the samples reached -- short windows keep the gradient stable, full trajectories
-are only predicted. States are standardised per component. The envelope is the box of the training states:
+are only predicted. States are standardized per component. The envelope is the box of the training states:
 a start outside it is refused, and so is a prediction whose trajectory LEAVES it (the learned field was
 never trained there), naming the first time it did.
 """
@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize, take
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse, require_finite
@@ -78,7 +78,7 @@ class NeuralODE:
             (w,) = take(index, windows)
             return ((rk4(lambda s: net(s) / time_scale, w[:, 0], window_t) - w) ** 2).mean()
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,
@@ -110,7 +110,7 @@ class FittedDynamics:
     history: list[float]
 
     def _rate(self, s: torch.Tensor) -> torch.Tensor:
-        """The learned rate in standardised state per unit time: the net's output over the trained time span."""
+        """The learned rate in standardized state per unit time: the net's output over the trained time span."""
         return self.net(s) / self.time_scale
 
     def rate(self, x: np.ndarray) -> np.ndarray:

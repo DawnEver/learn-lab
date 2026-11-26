@@ -155,9 +155,9 @@ class HullEnvelope:
         if x.ndim != 2 or x.shape[1] != self.width:
             return np.full(x.shape[0] if x.ndim else 1, Validity.INVALID, dtype=object)
         finite = np.all(np.isfinite(x), axis=1)
-        centred = np.where(finite[:, None], x, 0.0) - self.origin
-        t = centred @ self.basis
-        outside = np.linalg.norm(centred - t @ self.basis.T, axis=1) > self.slack
+        centered = np.where(finite[:, None], x, 0.0) - self.origin
+        t = centered @ self.basis
+        outside = np.linalg.norm(centered - t @ self.basis.T, axis=1) > self.slack
         if self.offsets.size:
             outside |= np.max(t @ self.normals.T + self.offsets, axis=1) > self.slack
         out = np.where(outside, Validity.OUT_OF_DOMAIN, Validity.IN_DOMAIN).astype(object)

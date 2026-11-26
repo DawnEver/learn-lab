@@ -16,7 +16,7 @@ import torch
 from learn_lab import artifact
 from learn_lab.deep import fit
 from learn_lab.deep.constitutive import MonotoneLaw
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime
 from learn_lab.errors import Refused
@@ -61,7 +61,7 @@ def _fit(checkpoint=None, *, stop_after=None, config=CONFIG, schedule=SCHEDULE, 
         noisy = x + 0.1 * torch.randn(x.shape, dtype=x.dtype)
         return (net(noisy) ** 2).mean()
 
-    history = minimise(net.parameters(), loss, schedule, checkpoint=checkpoint, config=config, data=[x])
+    history = minimize(net.parameters(), loss, schedule, checkpoint=checkpoint, config=config, data=[x])
     return net, history
 
 
@@ -95,7 +95,7 @@ def test_a_checkpoint_of_other_training_data_is_refused(tmp_path):
 
 def test_a_checkpoint_without_training_data_is_refused(tmp_path):
     with pytest.raises(Refused, match='training data'):
-        minimise(
+        minimize(
             [torch.zeros(1, requires_grad=True)],
             lambda _index: torch.zeros(()),
             SHORT,
@@ -245,11 +245,11 @@ def test_a_cosine_schedule_anneals_adam_to_zero_and_a_constant_one_does_not(monk
     def loss(_index=None):
         return (net(x) ** 2).mean()
 
-    minimise(net.parameters(), loss, COSINE)
+    minimize(net.parameters(), loss, COSINE)
     expected = [1e-2 * (1 + np.cos(np.pi * k / 12)) / 2 for k in range(12)]
     np.testing.assert_allclose(rates, expected, rtol=0, atol=1e-15)  # 1/step: the half-cosine from lr to ~0
     rates.clear()
-    minimise(net.parameters(), loss, SCHEDULE)  # PLANTED CONTROL: the constant schedule keeps its rate
+    minimize(net.parameters(), loss, SCHEDULE)  # PLANTED CONTROL: the constant schedule keeps its rate
     assert rates == [1e-2] * 12
 
 

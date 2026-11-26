@@ -55,7 +55,7 @@ __all__ = ['FAMILIES', 'FORMAT', 'SIZES', 'measure', 'render', 'write']
 
 FORMAT: Final = 'learn-lab-bench/1'
 SIZES: Final = ('tiny', 'baseline')
-#: Utilisation (percent) at or above which another process is taken to hold the GPU.
+#: Utilization (percent) at or above which another process is taken to hold the GPU.
 CONTENDED_AT: Final = 10
 
 

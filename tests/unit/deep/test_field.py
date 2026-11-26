@@ -99,7 +99,7 @@ def test_chunking_trains_on_the_full_batch_gradient():
     few = Schedule(adam_steps=5, learning_rate=1e-2, lbfgs_steps=2)
     whole = FieldModel(width=4, levels=1, schedule=few, chunk=None).fit(x, y)
     chunked = FieldModel(width=4, levels=1, schedule=few, chunk=6).fit(x, y)
-    assert chunked.history == pytest.approx(whole.history, rel=1e-4, abs=1e-6)  # loss, standardised units
+    assert chunked.history == pytest.approx(whole.history, rel=1e-4, abs=1e-6)  # loss, standardized units
 
 
 def test_a_chunk_is_a_positive_sample_count():

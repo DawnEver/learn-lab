@@ -14,7 +14,7 @@ import importlib
 from typing import Final
 
 from learn_lab.errors import refuse
-from learn_lab.models.classifier import ClassificationTree, LogisticRegression, NearestNeighboursClassifier
+from learn_lab.models.classifier import ClassificationTree, LogisticRegression, NearestNeighborsClassifier
 from learn_lab.models.response.bagging import Bagging
 from learn_lab.models.response.chaos import ChaosExpansion
 from learn_lab.models.response.clough_tocher import CloughTocher
@@ -24,7 +24,7 @@ from learn_lab.models.response.gradient_enhanced import GradientEnhancedKriging
 from learn_lab.models.response.kernel import KERNEL_FAMILIES
 from learn_lab.models.response.law_residual import LawResidual
 from learn_lab.models.response.multi_output import MultiOutputKriging
-from learn_lab.models.response.neighbours import NEIGHBOUR_WEIGHTS, NearestNeighbours
+from learn_lab.models.response.neighbors import NEIGHBOR_WEIGHTS, NearestNeighbors
 from learn_lab.models.response.neural import ACTIVATIONS, MultilayerPerceptron
 from learn_lab.models.response.polynomial import Polynomial
 from learn_lab.models.response.power_law import PowerLaw
@@ -51,7 +51,7 @@ SURROGATES: Final = {
         MultiOutputKriging, Space({'rank': Integer(1, 8), 'family': Choice(KERNEL_FAMILIES), 'restarts': _RESTARTS})
     ),
     'co_kriging': Family(CoKriging, Space({'family': Choice(KERNEL_FAMILIES), 'restarts': _RESTARTS})),
-    'nearest_neighbours': Family(NearestNeighbours, Space({'k': Integer(1, 32), 'weights': Choice(NEIGHBOUR_WEIGHTS)})),
+    'nearest_neighbors': Family(NearestNeighbors, Space({'k': Integer(1, 32), 'weights': Choice(NEIGHBOR_WEIGHTS)})),
     'regression_tree': Family(
         RegressionTree,
         Space({
@@ -93,8 +93,8 @@ SURROGATES: Final = {
 
 #: Every classifier (:mod:`learn_lab.models.classifier`): fit on labels, predict the class and its probabilities.
 CLASSIFIERS: Final = {
-    'nearest_neighbours_classifier': Family(
-        NearestNeighboursClassifier, Space({'k': Integer(1, 32), 'weights': Choice(NEIGHBOUR_WEIGHTS)})
+    'nearest_neighbors_classifier': Family(
+        NearestNeighborsClassifier, Space({'k': Integer(1, 32), 'weights': Choice(NEIGHBOR_WEIGHTS)})
     ),
     'classification_tree': Family(
         ClassificationTree,

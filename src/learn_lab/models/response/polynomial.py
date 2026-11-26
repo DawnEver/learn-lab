@@ -1,7 +1,7 @@
 """D43 -- polynomial response surfaces: ordinary least squares, ridge, lasso.
 
 The basis is every monomial of total degree 1..``degree`` in the inputs; the intercept is fitted
-UNPENALISED by centring the basis and the values (so a penalty shrinks the shape, never the level).
+UNPENALISED by centering the basis and the values (so a penalty shrinks the shape, never the level).
 
 * no penalty -- the minimum-norm least-squares solution;
 * :class:`Ridge` -- ``|y - X w|^2 + alpha |w|^2``, solved as the augmented least-squares problem;
@@ -105,8 +105,8 @@ class Polynomial:
         x, y, envelope = training_data(x, y, domain)
         exponents = monomial_exponents(x.shape[1], self.degree)
         features = _features(x, exponents)
-        centre, level = features.mean(axis=0), y.mean(axis=0)
-        a, b = features - centre, y - level
+        center, level = features.mean(axis=0), y.mean(axis=0)
+        a, b = features - center, y - level
         if isinstance(self.penalty, Lasso):
             w = np.column_stack([_lasso(a, b[:, c], self.penalty) for c in range(y.shape[1])])
         elif isinstance(self.penalty, Ridge):
@@ -116,7 +116,7 @@ class Polynomial:
             )
         else:
             w = least_squares(a, b)
-        return FittedPolynomial(exponents, w, level - centre @ w, envelope)
+        return FittedPolynomial(exponents, w, level - center @ w, envelope)
 
 
 @dataclass(frozen=True, slots=True, eq=False)

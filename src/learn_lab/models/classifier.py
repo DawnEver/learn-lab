@@ -5,10 +5,10 @@ whose ``predict(x)`` returns a :class:`ClassPrediction` -- the probability of ev
 a distribution) and the most probable label per point. Labels are any non-object numpy dtype (integers,
 strings); the classes are their sorted distinct values and keep that dtype.
 
-* :class:`NearestNeighboursClassifier` -- the (distance-)weighted vote of the k nearest labels; its
-  probabilities ARE the response :class:`~learn_lab.models.response.NearestNeighbours` mean on one-hot labels;
+* :class:`NearestNeighborsClassifier` -- the (distance-)weighted vote of the k nearest labels; its
+  probabilities ARE the response :class:`~learn_lab.models.response.NearestNeighbors` mean on one-hot labels;
 * :class:`ClassificationTree` -- a CART tree on the Gini impurity; on one-hot labels the summed squared error a
-  regression tree minimises is ``n * Gini``, so it IS the response :class:`~learn_lab.models.response.RegressionTree`
+  regression tree minimizes is ``n * Gini``, so it IS the response :class:`~learn_lab.models.response.RegressionTree`
   grown on one-hot labels, and a leaf's mean is its class frequencies;
 * :class:`LogisticRegression` -- multinomial (softmax) logistic regression with an l2 penalty *alpha*, on inputs
   scaled to the unit box of the fit's envelope, trained by numerics-lab's ``minimize_lbfgs``.
@@ -27,21 +27,21 @@ from numerics_lab.minimize import minimize_lbfgs
 from scipy.special import log_softmax, softmax
 
 from learn_lab.errors import refuse, require_finite
-from learn_lab.models.response.neighbours import NEIGHBOUR_WEIGHTS, FittedNeighbours, NearestNeighbours
+from learn_lab.models.response.neighbors import NEIGHBOR_WEIGHTS, FittedNeighbors, NearestNeighbors
 from learn_lab.models.response.tree import SPLITTERS, FittedTree, RegressionTree
 from learn_lab.protocol import query_points, training_data
 from learn_lab.validity import BoxEnvelope
 
 __all__ = [
-    'NEIGHBOUR_WEIGHTS',
+    'NEIGHBOR_WEIGHTS',
     'SPLITTERS',
     'ClassPrediction',
     'ClassificationTree',
     'FittedClassificationTree',
     'FittedLogistic',
-    'FittedNeighboursClassifier',
+    'FittedNeighborsClassifier',
     'LogisticRegression',
-    'NearestNeighboursClassifier',
+    'NearestNeighborsClassifier',
     'training_labels',
 ]
 
@@ -97,27 +97,27 @@ def _one_hot(index: np.ndarray, c: int) -> np.ndarray:
 
 
 @dataclass(frozen=True, slots=True)
-class NearestNeighboursClassifier:
-    """The vote of the *k* nearest labels, weighted per :data:`NEIGHBOUR_WEIGHTS`."""
+class NearestNeighborsClassifier:
+    """The vote of the *k* nearest labels, weighted per :data:`NEIGHBOR_WEIGHTS`."""
 
     k: int = 5
     weights: str = 'uniform'
 
     def __post_init__(self) -> None:
-        NearestNeighbours(self.k, self.weights)
+        NearestNeighbors(self.k, self.weights)
 
-    def fit(self, x, labels, *, domain: BoxEnvelope | None = None) -> FittedNeighboursClassifier:
+    def fit(self, x, labels, *, domain: BoxEnvelope | None = None) -> FittedNeighborsClassifier:
         x, index, classes, envelope = training_labels(x, labels, domain)
-        votes = NearestNeighbours(self.k, self.weights).fit(x, _one_hot(index, len(classes)), domain=envelope)
-        return FittedNeighboursClassifier(classes, votes)
+        votes = NearestNeighbors(self.k, self.weights).fit(x, _one_hot(index, len(classes)), domain=envelope)
+        return FittedNeighborsClassifier(classes, votes)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
-class FittedNeighboursClassifier:
-    """The classes and the neighbours whose one-hot labels are averaged into probabilities."""
+class FittedNeighborsClassifier:
+    """The classes and the neighbors whose one-hot labels are averaged into probabilities."""
 
     classes: np.ndarray
-    votes: FittedNeighbours
+    votes: FittedNeighbors
 
     @property
     def envelope(self) -> BoxEnvelope:

@@ -20,10 +20,10 @@ import numpy as np
 import torch
 from torch import nn
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
-from learn_lab.deep.standardise import Standardiser
+from learn_lab.deep.standardize import Standardiser
 from learn_lab.errors import refuse, require_finite
 from learn_lab.validity import ChannelEnvelope
 
@@ -137,7 +137,7 @@ class GraphModel:
             features = None if inputs[2] is None else inputs[2][kept]
             return ((net(inputs[0][nodes], edges, features) - yt[nodes]) ** 2).mean()
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,

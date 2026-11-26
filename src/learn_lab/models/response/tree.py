@@ -5,7 +5,7 @@ outputs, and predicts a leaf's mean. A node stays a leaf when it is at ``max_dep
 ``min_samples_split`` points, cannot leave ``min_samples_leaf`` on each side, or is already pure.
 
 * ``splitter='best'`` -- every distinct midpoint of every candidate feature (CART);
-* ``splitter='random'`` -- one uniform threshold per candidate feature (extremely randomised trees).
+* ``splitter='random'`` -- one uniform threshold per candidate feature (extremely randomized trees).
 
 ``max_features`` is the fraction of the features drawn (without replacement) as candidates at each
 node. :class:`Forest` averages ``n_trees`` trees, each on a bootstrap resample when ``bootstrap``:

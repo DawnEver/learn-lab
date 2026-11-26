@@ -37,8 +37,10 @@ _SHIPPED: Final = frozenset({
     'GIT-STASH',
     'HEAVY-IS-THE-MAIN-SESSIONS',  # gained 2026-11-18 with the {python} relock
     'HPC-THROUGH-THE-DOOR',  # gained 2026-11-07 with dev-lab 83c4f29
+    'LEDGER-WRITES-THROUGH-ITS-DOOR',  # gained 2026-11-26 with the adopt-dev-lab-learn relock
     'MACHINE-FILE-IS-RENDERED',  # gained 2026-11-22 with the dev-lab e8646709 relock
     'MAIN-ONLY-DOOR',  # gained 2026-11-22 with the dev-lab 48085510 relock
+    'NO-BACKUP-COPIES',  # gained 2026-11-26 with the adopt-dev-lab-learn relock
     'OUTPUT-HOLDS-NO-CODE',  # gained 2026-11-22 with the dev-lab e8646709 relock
     'PUSH-FORCE',
     'PUSH-NO-VERIFY',
@@ -51,6 +53,7 @@ _SHIPPED: Final = frozenset({
     'SUBAGENT-NO-PUSH',
     'TRACKED-CITES-NO-EPHEMERAL',  # gained 2026-11-18 with the {python} relock
     'TREE-HAS-A-LIVE-RUN',
+    'USER-FROZEN-FILES',  # gained 2026-11-26 with the adopt-dev-lab-learn relock
     'WRITES-STAY-IN-THE-TREE',  # gained 2026-11-07 with dev-lab 83c4f29
     'WORKTREE-BASE-IS-EXPLICIT',
     'WORKTREE-NAMES-ITS-TASK',  # gained 2026-11-22 with the dev-lab 48085510 relock
@@ -110,7 +113,7 @@ def test_a_forbidden_shape_is_refused_by_the_rule_that_owns_it(command: str, rul
         './.venv/Scripts/python.exe -m dev_lab.dev.verify',
         'git push origin main',
         'git commit -m measured-work',
-        'git worktree add --detach .claude/worktrees/scratch 1a2b3c4',
+        'git worktree add --detach .claude/worktrees/review-fold 1a2b3c4',
         './.venv/Scripts/python.exe -m dev_lab.dev.forge issue create --title x --body y',
         'gh issue list --state open',
         'git add -- src/learn_lab/__init__.py',

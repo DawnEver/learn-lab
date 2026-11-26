@@ -1,4 +1,4 @@
-"""Deep Ritz: the field minimises the provider's ENERGY; learn-lab owns the quadrature sampling and the loop."""
+"""Deep Ritz: the field minimizes the provider's ENERGY; learn-lab owns the quadrature sampling and the loop."""
 
 import numpy as np
 import pytest
@@ -15,13 +15,13 @@ pytestmark = pytest.mark.torch
 #: Adam only, on a quadrature redrawn every 10 steps: an L-BFGS polish on one fixed Monte Carlo draw fits that
 #: draw's quadrature error (measured, 1024 points: 7.5e-2 redrawn then polished, 2.0e-2 never redrawn, 1.1e-2 Adam
 #: only). Deep Ritz's floor sits above the PINN's (2e-3 on this problem): the Monte Carlo integral of the energy
-#: and the penalised ends (u(0) ~ 3e-3 at penalty 100) bound it.
+#: and the penalized ends (u(0) ~ 3e-3 at penalty 100) bound it.
 FAST = Schedule(adam_steps=3000, learning_rate=1e-3, lbfgs_steps=0)
 BAR = 2e-2  # max |u - sin(pi x)|, unit of u (peak 1); measured 1.06e-2
 
 
 class PoissonEnergy(Poisson):
-    """``-k u'' = f`` as the minimiser of ``int k u'^2 / 2 - f u``; the ends ``u = 0`` are an essential condition."""
+    """``-k u'' = f`` as the minimizer of ``int k u'^2 / 2 - f u``; the ends ``u = 0`` are an essential condition."""
 
     sign = 1.0  # +1 the true energy; -1 the planted control (the load enters with the wrong sign)
 
@@ -47,7 +47,7 @@ def _error(provider, ritz):
     return float(np.max(np.abs(fitted.evaluate(x)[:, 0] - np.sin(np.pi * x[:, 0]))))
 
 
-def test_deep_ritz_minimises_the_planted_poisson_energy_to_its_solution():
+def test_deep_ritz_minimizes_the_planted_poisson_energy_to_its_solution():
     error = _error(PoissonEnergy(points=1024), Ritz(every=10))
     assert error < BAR, f'max|u - sin(pi x)| = {error:.3e}'
 

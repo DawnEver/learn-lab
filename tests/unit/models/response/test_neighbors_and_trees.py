@@ -1,6 +1,6 @@
-"""D52 nearest neighbours, D53 CART / forest / extra trees / bagging, against scikit-learn (tests only).
+"""D52 nearest neighbors, D53 CART / forest / extra trees / bagging, against scikit-learn (tests only).
 
-A deterministic model must agree EXACTLY (absolute, target units, to rounding). A randomised
+A deterministic model must agree EXACTLY (absolute, target units, to rounding). A randomized
 ensemble draws its own stream, so it is compared by held-out error, as a RELATIVE band on sklearn's
 RMSE at equal settings; and the deterministic limit of each ensemble (no resampling, every feature)
 must collapse to one tree exactly -- the planted structural control.
@@ -13,7 +13,7 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
 
 from learn_lab.errors import Refused
-from learn_lab.models.response import Forest, NearestNeighbours, RegressionTree
+from learn_lab.models.response import Forest, NearestNeighbors, RegressionTree
 from learn_lab.validity import BoxEnvelope
 
 #: Absolute, target units: the same arithmetic on the same points.
@@ -39,9 +39,9 @@ def data():
 
 @pytest.mark.parametrize('weights', ['uniform', 'distance'])
 @pytest.mark.parametrize('k', [1, 5])
-def test_nearest_neighbours_equal_sklearns(data, k, weights) -> None:
+def test_nearest_neighbors_equal_sklearns(data, k, weights) -> None:
     x, y, q, _ = data
-    ours = NearestNeighbours(k=k, weights=weights).fit(x, y, domain=_cube_of(x)).predict(q).mean
+    ours = NearestNeighbors(k=k, weights=weights).fit(x, y, domain=_cube_of(x)).predict(q).mean
     theirs = KNeighborsRegressor(n_neighbors=k, weights=weights).fit(x, y).predict(q)
     assert np.max(np.abs(ours - theirs)) <= EXACT
 
@@ -49,7 +49,7 @@ def test_nearest_neighbours_equal_sklearns(data, k, weights) -> None:
 def test_distance_weighting_returns_the_measured_value_at_a_measured_point(data) -> None:
     x, y, _, _ = data
     assert (
-        np.max(np.abs(NearestNeighbours(k=5, weights='distance').fit(x, y, domain=_cube_of(x)).predict(x).mean - y))
+        np.max(np.abs(NearestNeighbors(k=5, weights='distance').fit(x, y, domain=_cube_of(x)).predict(x).mean - y))
         <= EXACT
     )
 
@@ -104,7 +104,7 @@ def _rmse(prediction, truth):
     ],
     ids=['random-forest', 'extra-trees', 'bagging', 'feature-subsampled-forest'],
 )
-def test_each_randomised_ensemble_is_as_accurate_as_sklearns(data, ours, theirs) -> None:
+def test_each_randomized_ensemble_is_as_accurate_as_sklearns(data, ours, theirs) -> None:
     x, y, q, truth = data
     mine = _rmse(ours.fit(x, y, domain=_cube_of(x)).predict(q).mean, truth)
     reference = _rmse(theirs.fit(x, y).predict(q), truth)
@@ -122,20 +122,20 @@ def test_the_same_seed_is_the_same_forest_and_another_is_not(data) -> None:
 
 def test_bad_settings_are_refused() -> None:
     with pytest.raises(Refused):
-        NearestNeighbours(k=0)
+        NearestNeighbors(k=0)
     with pytest.raises(Refused, match='distance'):
-        NearestNeighbours(weights='cosine')
+        NearestNeighbors(weights='cosine')
     with pytest.raises(Refused):
         RegressionTree(min_samples_leaf=0)
     with pytest.raises(Refused, match='random'):
         Forest(splitter='greedy')
     with pytest.raises(Refused):
         Forest(max_features=1.5)
-    with pytest.raises(Refused, match='neighbours'):
-        NearestNeighbours(k=10).fit(np.zeros((3, 1)), np.zeros((3, 1)), domain=_cube_of(np.zeros((3, 1))))
+    with pytest.raises(Refused, match='neighbors'):
+        NearestNeighbors(k=10).fit(np.zeros((3, 1)), np.zeros((3, 1)), domain=_cube_of(np.zeros((3, 1))))
 
 
 def test_uniform_weighting_does_not_return_the_measured_value(data) -> None:
     """Planted control for the distance rule: without it the k nearest are averaged, measured point or not."""
     x, y, _, _ = data
-    assert np.max(np.abs(NearestNeighbours(k=5).fit(x, y, domain=_cube_of(x)).predict(x).mean - y)) > 1e-3
+    assert np.max(np.abs(NearestNeighbors(k=5).fit(x, y, domain=_cube_of(x)).predict(x).mean - y)) > 1e-3

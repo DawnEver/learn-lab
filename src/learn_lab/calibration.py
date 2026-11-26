@@ -13,7 +13,7 @@ them under-covers (the planted control in the tests).
 * :func:`split_conformal` -- fit on one seeded part of the data, calibrate on the rest: the split is made here,
   so the held-out rule cannot be broken by accident;
 * :func:`jackknife` -- for a Gaussian process, no data spent: the scores are its closed-form leave-one-out
-  residuals (each row predicted without itself) standardised by the held-out OBSERVATION sd. Its interval is
+  residuals (each row predicted without itself) standardized by the held-out OBSERVATION sd. Its interval is
   applied to the observation sd ``sqrt(latent variance + noise)``. The hyperparameters still saw every row, so
   this is the jackknife's approximate guarantee, not split-conformal's exact one;
 * :meth:`ConformalInterval.report` -- the calibration report on a further held-out set: empirical coverage

@@ -4,7 +4,7 @@
 1-D jump: ``u = U(x) sin(pi y)``, ``U`` the piecewise quadratic of :mod:`._jump` (continuous, with continuous flux
 ``k U'``), so ``f = (8 + k pi^2 U(x)) sin(pi y)`` per slab and the interface conditions hold exactly.
 
-``essential='penalty'``: the four sides and the interface continuity are penalised :class:`Term` s on Gauss-Legendre
+``essential='penalty'``: the four sides and the interface continuity are penalized :class:`Term` s on Gauss-Legendre
 lines. ``essential='hard'``: the ansatz ``u_s = d(x, y) (T + (x - 1/2) C_s)``, ``d = x(1-x) y(1-y)`` vanishing on the
 boundary and the trace ``T`` shared by both slabs, so every essential condition holds by construction.
 """

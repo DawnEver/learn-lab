@@ -11,7 +11,7 @@ A provider (the domain library's -- e.g. motronics hamilton for the magnetic vec
   derived quantity (a gradient, a curl) is computed from ``field`` with :func:`derivative`;
 - ``owns(name, points)``: ``(n, k)`` booleans, which components of that observable ARE it at each point. A
   single-field provider owns every component everywhere; a provider with one column per region owns only the
-  region's components, so an observation pins what it belongs to and never the neighbour's (ONE source of the
+  region's components, so an observation pins what it belongs to and never the neighbor's (ONE source of the
   region map: the provider that defines the regions);
 - ``collocation(runtime)``: the points per region (``'interior'``, ``'boundary'``, ...) as tensors;
 - ``residuals(field, points, parameters)``: one :class:`Term` per condition. ``field`` maps ``(n, dim)``
@@ -43,14 +43,14 @@ an extreme statistic besides); the weights only grow, since nothing renormalises
 the loss falls towards zero. Use it only where a side condition is demonstrably under-fitted at fixed weights (the
 planted stiff Poisson).
 
-DEEP RITZ (E & Yu 2018) is the same fit with another objective: given :class:`Ritz`, the field MINIMISES the
+DEEP RITZ (E & Yu 2018) is the same fit with another objective: given :class:`Ritz`, the field MINIMIZES the
 provider's ``energy(field, points, parameters)`` instead of squaring its residuals. The provider states the physics
 -- per region an :class:`Energy` density with the region's ``measure`` (its length/area/volume in coordinate units)
 and the energy's ``scale`` -- plus, as :class:`Term` s, the ESSENTIAL conditions the energy does not carry (a
 Dirichlet side); natural conditions and interface fluxes are the energy's own stationarity and are never stated.
 The quadrature is the provider's choice, carried by each :class:`Energy`. MONTE CARLO (a ``measure``):
 ``measure * mean(density)`` over the region's points, redrawn from the provider's own sampler under a fresh seed every
-``every`` Adam steps so the minimiser cannot fit one point set; an L-BFGS polish runs on the last draw and fits ITS
+``every`` Adam steps so the minimizer cannot fit one point set; an L-BFGS polish runs on the last draw and fits ITS
 quadrature error (measured, planted Poisson, 1024 points: 7.5e-2 polished against 1.1e-2 Adam only), so a Monte Carlo
 Ritz schedule is Adam only. DETERMINISTIC (``weights``, e.g. numerics-lab's ``quadrature.gauss_legendre_box`` per box
 region or ``quadrature.simplex_rule`` per polygon region, a material interface a cell boundary, converted with
@@ -58,13 +58,13 @@ region or ``quadrature.simplex_rule`` per polygon region, a material interface a
 energy to that order and an L-BFGS polish is sound (measured on the planted two-slab Poisson with a 1:4 jump in
 ``tests/unit/deep/test_physics_ritz_quadrature.py``, whose bars quote the numbers). An essential term enters as ``penalty * term.loss()``.
 
-A penalised essential condition biases the minimiser by O(1 / penalty) and stiffens it as the penalty grows, so no
+A penalized essential condition biases the minimizer by O(1 / penalty) and stiffens it as the penalty grows, so no
 penalty is right. A HARD ANSATZ removes both: with ``ansatz=True`` the network's ``latent`` raw columns are not the
 field; the provider's ``ansatz(x, raw)`` maps them to the ``(n, outputs)`` field so that the essential conditions
 hold by construction -- ``g(x) + d(x) * N(x)``, ``d`` vanishing on the Dirichlet set and ``g`` lifting its data; for
 one column per region a SHARED TRACE (one raw column common to both regions plus per-region corrections times a
 distance to the interface) makes interface continuity exact. The provider owns the geometry, so it supplies ``d`` and
-``g``, and stops returning the terms its ansatz enforces; any :class:`Term` it still returns is penalised as before.
+``g``, and stops returning the terms its ansatz enforces; any :class:`Term` it still returns is penalized as before.
 The ansatz is provider code, so a hard-ansatz :class:`FittedField` evaluates in process and is not an artifact.
 Measured in ``tests/unit/deep/test_physics_ritz_hard.py``, whose bars quote the numbers.
 
@@ -83,7 +83,7 @@ from typing import Protocol
 import numpy as np
 import torch
 
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.runtime import Runtime, numpy
 from learn_lab.errors import refuse
@@ -168,12 +168,12 @@ class Ritz:
             refuse(f'a Ritz redraw period is >= 0 Adam steps, got {self.every}')
 
 
-#: The balance rules: ``fixed``; ``gradient_norm`` (max/mean, unbounded); ``normalised_gradient`` (mean/mean
+#: The balance rules: ``fixed``; ``gradient_norm`` (max/mean, unbounded); ``normalized_gradient`` (mean/mean
 #: targets scaled to sum to the term count, so every weight stays in [0, N] -- but a condition the field already meets
 #: has a tiny gradient and a huge target, and the rescale then starves the REFERENCE: measured, motronics steel bar,
 #: pde 9.3e-5 against neumann 2.86); ``anchored_gradient`` (mean/mean, the reference held at 1, every other weight
 #: clipped to [1 / cap, cap], so neither the reference nor any term can be starved or run away).
-RULES = ('fixed', 'gradient_norm', 'normalised_gradient', 'anchored_gradient')
+RULES = ('fixed', 'gradient_norm', 'normalized_gradient', 'anchored_gradient')
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,8 +286,8 @@ class PhysicsInformedField:
     continuation: Sequence[Continuation] = ()
     resample: Resample | None = None
     input_scale: bool = False  # a learned per-coordinate input factor (networks.InputScale) before the first layer
-    ritz: Ritz | None = None  # minimise the provider's energy (deep Ritz) instead of its squared residuals
-    ansatz: bool = False  # the field is provider.ansatz(x, net(x)): essential conditions hard, not penalised
+    ritz: Ritz | None = None  # minimize the provider's energy (deep Ritz) instead of its squared residuals
+    ansatz: bool = False  # the field is provider.ansatz(x, net(x)): essential conditions hard, not penalized
 
     def fit(
         self,
@@ -342,7 +342,7 @@ class PhysicsInformedField:
         balancing = self.balance.rule != 'fixed'
         if self.ritz is not None:
             if not callable(getattr(provider, 'energy', None)):
-                refuse(f'a Ritz fit minimises an energy; {type(provider).__name__} declares no energy')
+                refuse(f'a Ritz fit minimizes an energy; {type(provider).__name__} declares no energy')
             if balancing or self.resample is not None:
                 refuse('a Ritz fit takes a fixed balance and no residual refinement: an energy is not a residual')
             if self.ritz.every and checkpoint is not None:
@@ -384,7 +384,7 @@ class PhysicsInformedField:
             return sum(weights[name] * value for name, value in terms.items())
 
         trainable = [*net.parameters(), *(params[name] for name in identify)]
-        history = minimise(
+        history = minimize(
             trainable,
             loss,
             self.schedule,
@@ -407,7 +407,7 @@ class PhysicsInformedField:
 
     def _terms(self, provider, field_at: Field, points: dict, params: Mapping, step: int) -> dict[str, torch.Tensor]:
         """Each condition's dimensionless loss: the squared residuals, or under :class:`Ritz` the energies and the
-        penalised essential terms on the current quadrature draw.
+        penalized essential terms on the current quadrature draw.
         """
         if self.ritz is None:
             return {name: term.loss() for name, term in provider.residuals(field_at, points, params).items()}
@@ -449,7 +449,7 @@ class PhysicsInformedField:
             ])
 
         b = self.balance
-        if b.rule == 'normalised_gradient':
+        if b.rule == 'normalized_gradient':
             means = {name: float(grads(value).mean()) for name, value in terms.items()}
             ref = means[b.reference]
             targets = {n: (ref / m if m > 0.0 else weights[n]) for n, m in means.items()}
@@ -508,7 +508,7 @@ class FittedField:
     weights: Mapping[str, float]  # each condition's final balance weight (all 1 under a fixed balance)
     weight_history: list[tuple[int, dict[str, float]]]  # (Adam step, weights after it) per balance update
     ansatz: Ansatz | None = None  # the provider's hard ansatz the net's raw columns pass through, if any
-    features: Features | None = None  # the provider's net input in place of the normalised coordinates, if any
+    features: Features | None = None  # the provider's net input in place of the normalized coordinates, if any
 
     def field_at(self, x: torch.Tensor) -> torch.Tensor:
         """The field at ``(n, dim)`` coordinates, differentiable."""

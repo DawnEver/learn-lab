@@ -1,6 +1,6 @@
 """k-fold and region-held-out splits partition the data as declared, and their per-split scores expose an overfit.
 
-PLANTED CONTROL: a 1-nearest-neighbour model reproduces every training row (in-sample error zero), so it scores
+PLANTED CONTROL: a 1-nearest-neighbor model reproduces every training row (in-sample error zero), so it scores
 worse on every held-out fold and on the held-out region than in sample; a fold set that dropped or repeated a
 row, or a region that leaked a row across its boundary, fails the partition checks.
 """
@@ -9,13 +9,13 @@ import numpy as np
 import pytest
 
 from learn_lab.errors import Refused
-from learn_lab.models.response.neighbours import NearestNeighbours
+from learn_lab.models.response.neighbors import NearestNeighbors
 from learn_lab.validation import kfold, region, split_scores
 
 RNG = np.random.default_rng(0)
 X = RNG.uniform(0, 1, (60, 2))
 Y = (np.sin(4 * X[:, 0]) + X[:, 1] + 0.1 * RNG.standard_normal(60))[:, None]
-#: The noise is 0.1 in y's unit; a held-out RMS below this would mean the noise was memorised.
+#: The noise is 0.1 in y's unit; a held-out RMS below this would mean the noise was memorized.
 NOISE = 0.1
 
 
@@ -46,11 +46,11 @@ def test_a_region_holding_every_row_or_none_is_refused() -> None:
 
 
 def test_an_overfit_model_scores_worse_held_out_than_in_sample() -> None:
-    overfit = NearestNeighbours(k=1)
+    overfit = NearestNeighbors(k=1)
     folds = split_scores(overfit, X, Y, kfold(len(X), 5, seed=1))
     assert len(folds) == 5
     for fold in folds:
-        assert fold.in_sample == pytest.approx(0.0, abs=1e-12)  # y's unit: it memorised its rows
+        assert fold.in_sample == pytest.approx(0.0, abs=1e-12)  # y's unit: it memorized its rows
         assert fold.held_out > NOISE
     (held,) = split_scores(overfit, X, Y, [region(X, [0.2, 0.5], [0.6, 1.0])])
     assert held.held_out > held.in_sample + NOISE
@@ -59,4 +59,4 @@ def test_an_overfit_model_scores_worse_held_out_than_in_sample() -> None:
 def test_a_split_that_tests_on_its_training_rows_is_refused() -> None:
     rows = np.arange(len(X))
     with pytest.raises(Refused, match='disjoint'):
-        split_scores(NearestNeighbours(k=1), X, Y, [(rows, rows[:5])])
+        split_scores(NearestNeighbors(k=1), X, Y, [(rows, rows[:5])])

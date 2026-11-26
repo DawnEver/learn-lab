@@ -1,4 +1,4 @@
-"""The benchmark record: its schema, devices that are not present, positive timings and honoured repeat counts.
+"""The benchmark record: its schema, devices that are not present, positive timings and honored repeat counts.
 
 No timing threshold: a timing is only checked to be a positive count of the asked repeats.
 """
@@ -51,7 +51,7 @@ def test_a_device_that_is_not_present_is_reported_unavailable_with_its_reason(re
     assert all(r['status'] == 'unavailable' and r['reason'] for r in absent)
 
 
-def test_timings_are_positive_and_the_repeat_count_is_honoured(record):
+def test_timings_are_positive_and_the_repeat_count_is_honored(record):
     for r in record['rows']:
         if r['status'] == 'measured':
             stats = r['per_step_s'] if r['phase'] == 'fit' else r['latency_s']

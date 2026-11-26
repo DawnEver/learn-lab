@@ -33,7 +33,7 @@ import pytest
 import torch
 from scipy.spatial import cKDTree
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Schedule, minimize
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.operator import Transolver
 from learn_lab.deep.runtime import Runtime
@@ -129,7 +129,7 @@ def _pointwise_control() -> float:
     def loss(_index=None):
         return ((net(xt) - yt) ** 2).mean()
 
-    minimise(net.parameters(), loss, FIT)
+    minimize(net.parameters(), loss, FIT)
     query = np.concatenate([TEST_POINTS, F_TEST[:, 0, :, None]], axis=-1).reshape(-1, 3)
     with torch.no_grad():
         guess = net(torch.as_tensor(query)).numpy().reshape(U_TEST.shape) * scale

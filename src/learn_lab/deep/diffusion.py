@@ -2,13 +2,13 @@
 
 ``fit(conditions (n, k), fields (n, c, H, W))`` trains a :class:`~learn_lab.deep.field.UNet` to predict the noise
 ``eps`` in ``z_t = sqrt(abar_t) y + sqrt(1 - abar_t) eps`` at a uniformly drawn step ``t`` of a linear schedule of
-``noise_steps`` steps (:func:`linear_betas`); the net sees the noisy field, the standardised condition as constant
+``noise_steps`` steps (:func:`linear_betas`); the net sees the noisy field, the standardized condition as constant
 channels and ``t / T`` as one more. :meth:`FittedDiffusionField.sample` runs the ancestral sampler from pure
 noise (posterior variance ``beta_t (1 - abar_{t-1}) / (1 - abar_t)``, or ``beta_t`` on request) and returns field
 samples; :meth:`~FittedDiffusionField.moments` their mean and variance per cell.
 
 The envelope is the conditions' box: a condition outside it is refused (OUT_OF_DOMAIN), another width is INVALID.
-Fields are standardised per channel. The loss draws fresh noise every step, so it is minimised by Adam only, on a
+Fields are standardized per channel. The loss draws fresh noise every step, so it is minimized by Adam only, on a
 cosine-annealed rate by default (a constant rate leaves the weights jittering on that noise): an
 L-BFGS polish of a stochastic loss is refused. ``chunk`` bounds peak memory as in :mod:`learn_lab.deep.field`;
 ``levels`` halvings need ``H`` and ``W`` divisible by ``2**levels``.
@@ -24,9 +24,9 @@ import torch
 from torch.utils.checkpoint import checkpoint as recomputed
 
 from learn_lab.deep.field import UNet
-from learn_lab.deep.fit import Checkpoint, Schedule, minimise, take
+from learn_lab.deep.fit import Checkpoint, Schedule, minimize, take
 from learn_lab.deep.runtime import Runtime, numpy
-from learn_lab.deep.standardise import Standardiser
+from learn_lab.deep.standardize import Standardiser
 from learn_lab.errors import refuse, require_finite
 from learn_lab.validity import BoxEnvelope
 
@@ -70,7 +70,7 @@ class DiffusionField:
         if self.noise_steps < 2:
             refuse(f'a diffusion takes >= 2 noise steps, got {self.noise_steps}')
         if self.schedule.lbfgs_steps:
-            refuse('a diffusion loss draws fresh noise every step: it is minimised by Adam only, lbfgs_steps=0')
+            refuse('a diffusion loss draws fresh noise every step: it is minimized by Adam only, lbfgs_steps=0')
 
     def fit(
         self, conditions: np.ndarray, fields: np.ndarray, *, checkpoint: Checkpoint | None = None
@@ -115,7 +115,7 @@ class DiffusionField:
             )
             return torch.stack(list(parts)).sum() / yb.numel()
 
-        history = minimise(
+        history = minimize(
             net.parameters(),
             loss,
             self.schedule,

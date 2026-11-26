@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import torch
 
-from learn_lab.deep.fit import Schedule, minimise
+from learn_lab.deep.fit import Schedule, minimize
 from learn_lab.deep.networks import MLP
 from learn_lab.deep.operator import GraphOperator, GraphSamples
 from learn_lab.deep.runtime import Runtime
@@ -76,7 +76,7 @@ def test_the_operator_learned_on_one_point_set_holds_on_a_finer_one(fitted) -> N
 
 
 def test_a_pointwise_network_without_message_passing_misses_the_bar() -> None:
-    """PLANTED CONTROL: same inputs (f and x at each point), no neighbourhood."""
+    """PLANTED CONTROL: same inputs (f and x at each point), no neighborhood."""
     rt = CPU64
     rt.seeded()
     rows = np.column_stack([F[:, 0].ravel(), np.tile(TRAIN, len(F))])
@@ -86,7 +86,7 @@ def test_a_pointwise_network_without_message_passing_misses_the_bar() -> None:
     def loss(_index=None) -> torch.Tensor:
         return ((net(xt) - yt) ** 2).mean()
 
-    minimise(net.parameters(), loss, Schedule(adam_steps=1500, learning_rate=3e-3))
+    minimize(net.parameters(), loss, Schedule(adam_steps=1500, learning_rate=3e-3))
     test_rows = rt.tensor(np.column_stack([F_TEST[:, 0].ravel(), np.tile(TEST, len(F_TEST))]))
     with torch.no_grad():
         predicted = net(test_rows).numpy().reshape(U_TEST.shape)

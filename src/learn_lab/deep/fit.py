@@ -37,7 +37,7 @@ import torch
 from learn_lab.artifact import canonical, sha256
 from learn_lab.errors import refuse
 
-__all__ = ['Checkpoint', 'Schedule', 'minimise', 'take']
+__all__ = ['Checkpoint', 'Schedule', 'minimize', 'take']
 
 FORMAT = 'learn-lab fit checkpoint'
 VERSION = 1
@@ -64,12 +64,12 @@ class Schedule:
     annealing settles them. The rate is a function of the step alone, so a resumed fit takes the same steps.
 
     ``batch`` is the number of samples each Adam step sees (``None``: all of them). A batch at least the sample
-    count is every sample, in a drawn order. The polish always sees every sample (see :func:`minimise`).
+    count is every sample, in a drawn order. The polish always sees every sample (see :func:`minimize`).
 
     ``weight_decay`` is the Adam phase's decoupled weight decay (AdamW): each step shrinks every parameter by
     ``rate(step) * weight_decay`` of itself, outside the adaptive gradient scaling, so it is one regulariser that
-    means the same thing for every family. ``0.0`` is plain Adam. The L-BFGS polish takes no decay: it minimises
-    the objective as given, and decoupled decay is a property of an optimiser's step, not of the objective.
+    means the same thing for every family. ``0.0`` is plain Adam. The L-BFGS polish takes no decay: it minimizes
+    the objective as given, and decoupled decay is a property of an optimizer's step, not of the objective.
     """
 
     adam_steps: int = 2000
@@ -226,7 +226,7 @@ def _read(checkpoint: Checkpoint, identity: str, schedule: Schedule) -> tuple[di
     return state, history
 
 
-def minimise(
+def minimize(
     parameters: Iterable[torch.Tensor],
     loss: Callable[[torch.Tensor | None], torch.Tensor],
     schedule: Schedule,
@@ -237,7 +237,7 @@ def minimise(
     config: str = '',
     data: Sequence[torch.Tensor | np.ndarray] = (),
 ) -> list[float]:
-    """Minimise ``loss(None)`` over *parameters*; return the loss after every step. A non-finite loss is refused.
+    """Minimize ``loss(None)`` over *parameters*; return the loss after every step. A non-finite loss is refused.
 
     *samples* is the length of the loss's sample axis (``None``: it has none, and a batched schedule is refused).
     Under ``schedule.batch`` every Adam step calls ``loss(index)`` on a fresh draw seeded by (*seed*, step), and

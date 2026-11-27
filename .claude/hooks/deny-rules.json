@@ -62,9 +62,10 @@
   },
   {
     "name": "MACHINE-FILE-IS-RENDERED",
-    "pattern": "(?:>[^\\n;&|]*[\\\\/]+config[\\\\/]+motronics\\.toml[\"\\']?(?![^\\s;&|])|\\btee\\b[^\\n;&|]*[\\\\/]+config[\\\\/]+motronics\\.toml[\"\\']?(?![^\\s;&|])|\\bsed\\b(?=[^\\n;&|]*\\s-[a-zA-Z]*i)[^\\n;&|]*[\\\\/]+config[\\\\/]+motronics\\.toml[\"\\']?(?![^\\s;&|])|(?:Set-Content|Out-File|Add-Content)[^\\n;&|]*[\\\\/]+config[\\\\/]+motronics\\.toml[\"\\']?(?![^\\s;&|])|\\b(?:cp|mv|Copy-Item|Move-Item)\\b[^\\n;&|]*[\\\\/]+config[\\\\/]+motronics\\.toml[\"\\']?(?![^\\s;&|])\\s*(?:$|[;&|)\\n]))",
+    "pattern": "(?:>[^\\n;&|]*[\\\\/]+[^\\\\/\\s\"';&|]+\\.toml[\"\\']?(?![^\\s;&|])|\\btee\\b[^\\n;&|]*[\\\\/]+[^\\\\/\\s\"';&|]+\\.toml[\"\\']?(?![^\\s;&|])|\\bsed\\b(?=[^\\n;&|]*\\s-[a-zA-Z]*i)[^\\n;&|]*[\\\\/]+[^\\\\/\\s\"';&|]+\\.toml[\"\\']?(?![^\\s;&|])|(?:Set-Content|Out-File|Add-Content)[^\\n;&|]*[\\\\/]+[^\\\\/\\s\"';&|]+\\.toml[\"\\']?(?![^\\s;&|])|\\b(?:cp|mv|Copy-Item|Move-Item)\\b[^\\n;&|]*[\\\\/]+[^\\\\/\\s\"';&|]+\\.toml[\"\\']?(?![^\\s;&|])\\s*(?:$|[;&|)\\n]))",
     "matches": "line",
-    "reason": "MACHINE-FILE-IS-RENDERED: the machine file is a render: a hand edit is lost at the next render or changes a fact unrecorded.\nfamily/host key: change family.toml or hosts/<machine>.toml by PR, then `{python} -m dev_lab.dev.devhost render --write`; local key: `{python} -m dev_lab.dev.devhost local set <table>.<key> <value>` (or local unset)\ndetails: docs-src/dev/refusals.md#machine-file-is-rendered (dev-lab)"
+    "reason": "MACHINE-FILE-IS-RENDERED: the machine file is a render: a hand edit is lost at the next render or changes a fact unrecorded.\nfamily/host key: change family.toml or hosts/<machine>.toml by PR, then `{python} -m dev_lab.dev.devhost render --write`; local key: `{python} -m dev_lab.dev.devhost local set <table>.<key> <value>` (or local unset)\ndetails: docs-src/dev/refusals.md#machine-file-is-rendered (dev-lab)",
+    "asks": "dev_lab.dev.machineguard"
   },
   {
     "name": "COMMIT-HOOKS-RUN",
@@ -148,6 +149,12 @@
     "needs": "verdict-entry-point"
   },
   {
+    "name": "ENVIRONMENT-THROUGH-DEP",
+    "pattern": "(?:\\S*python[\\w.]*\\s+-m\\s+dev_lab\\.dev\\.netverb\\b[^;&|\\n]*?\\s--\\s+)?(?:\\S*[/\\\\])?uv(?:\\.[eE][xX][eE])?(?:\\s+-\\S+(?:\\s+[^-\\s]\\S*)?)*?\\s+sync\\b",
+    "matches": "command",
+    "reason": "ENVIRONMENT-THROUGH-DEP: a bare uv sync builds a checkout environment with no declared extras and no published prefix.\nBuild the environment through its door: {python} -m dev_lab.dev.dep --bootstrap <checkout> (a new tree), or {python} -m dev_lab.dev.dep --root <checkout> --sync [--extra X].\ndetails: docs-src/dev/refusals.md#environment-through-dep (dev-lab)"
+  },
+  {
     "name": "WORKTREE-BASE-IS-EXPLICIT",
     "pattern": "git(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s;&|()]+))*\\s+worktree\\s+add\\b",
     "matches": "command",
@@ -202,9 +209,9 @@
   },
   {
     "name": "RECURSIVE-DELETE",
-    "pattern": "(?:(?:[cC][mM][dD](?:\\.[eE][xX][eE])?\\s+/[cCkK]\\s+[\"']?|xargs(?:\\s+-\\S+)*\\s+|find\\b[^\\n;&|]*?\\s-exec(?:dir)?\\s+)?(?:[rR][eE][mM][oO][vV][eE]-[iI][tT][eE][mM]|[rR][mM][dD][iI][rR]|[eE][rR][aA][sS][eE]|[rR][mM]|[rR][iI]|[rR][dD]|[dD][eE][lL])(?:\\.exe)?(?=(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*?\\s+(?:-[fvidI]*[rR][fvidI]*|--recursive|-[rR](?:[eE](?:[cC](?:[uU](?:[rR](?:[sS][eE]?)?)?)?)?)?|/[sS])(?=\\s|$|:))(?!(?=(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*?\\s+(?![^\\s;&|()]*\\.\\.)[\"']?(?:/tmp/|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?[\\\\/]|%(?:TEMP|TMP)%[\\\\/]|\\$env:(?:TEMP|TMP)[\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP][\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?output[\\\\/])[^\\s\"'\\\\/;&|()][^\\s\"';&|()]*[\"']?(?=\\s|$))(?:\\s+(?:(?:-[^\\s\"';&|()]*|/[a-zA-Z])(?=\\s|$)|(?![^\\s;&|()]*\\.\\.)[\"']?(?:/tmp/|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?[\\\\/]|%(?:TEMP|TMP)%[\\\\/]|\\$env:(?:TEMP|TMP)[\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP][\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?output[\\\\/])[^\\s\"'\\\\/;&|()][^\\s\"';&|()]*[\"']?(?=\\s|$)))+\\s*[\"']?\\s*$)|git(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*\\s+worktree\\s+remove\\b|git(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*\\s+clean\\b(?=[^\\n;&|]*\\s(?:-[a-zA-Z]*[xXd][a-zA-Z]*|--directory)(?=\\s|$|[;&|]))(?![^\\n;&|]*\\s(?:-[a-zA-Z]*n[a-zA-Z]*|--dry-run)(?=\\s|$|[;&|]))|\\S*python[\\w.]*(?:\\.exe)?\\s+-c\\s+[^\\n]*?\\bshutil\\.rmtree\\b|(?:[^;\\n'\"]*;\\s*)*(?:shutil\\.)?rmtree\\s*\\()",
+    "pattern": "(?:(?:[cC][mM][dD](?:\\.[eE][xX][eE])?\\s+/[cCkK]\\s+[\"']?|xargs(?:\\s+-\\S+)*\\s+|find\\b[^\\n;&|]*?\\s-exec(?:dir)?\\s+)?(?:[rR][eE][mM][oO][vV][eE]-[iI][tT][eE][mM]|[rR][mM][dD][iI][rR]|[eE][rR][aA][sS][eE]|[rR][mM]|[rR][iI]|[rR][dD]|[dD][eE][lL])(?:\\.exe)?(?=(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*?\\s+(?:-[fvidI]*[rR][fvidI]*|--recursive|-[rR](?:[eE](?:[cC](?:[uU](?:[rR](?:[sS][eE]?)?)?)?)?)?|/[sS])(?=\\s|$|:))(?!(?=(?:\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*?\\s+(?:(?![^\\s;&|()]*\\.\\.)[\"']?(?:/tmp/|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?[\\\\/]|%(?:TEMP|TMP)%[\\\\/]|\\$env:(?:TEMP|TMP)[\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP][\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?output[\\\\/])[^\\s\"'\\\\/;&|()][^\\s\"';&|()]*[\"']?(?=\\s|$)|(?![^\\s;&|()]*\\.\\.)[\"']?[^\\s\"';&|()]*\\.egg-info[\\\\/]?[\"']?(?=\\s|$)))(?:\\s+(?:(?:-[^\\s\"';&|()]*|/[a-zA-Z])(?=\\s|$)|(?:(?![^\\s;&|()]*\\.\\.)[\"']?(?:/tmp/|\\$\\{?(?:TEMP|TMP|TMPDIR)\\}?[\\\\/]|%(?:TEMP|TMP)%[\\\\/]|\\$env:(?:TEMP|TMP)[\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?[aA][pP][pP][dD][aA][tT][aA][\\\\/][lL][oO][cC][aA][lL][\\\\/][tT][eE][mM][pP][\\\\/]|(?:[^\\s\"';&|()]*[\\\\/])?output[\\\\/])[^\\s\"'\\\\/;&|()][^\\s\"';&|()]*[\"']?(?=\\s|$)|(?![^\\s;&|()]*\\.\\.)[\"']?[^\\s\"';&|()]*\\.egg-info[\\\\/]?[\"']?(?=\\s|$))))+\\s*[\"']?\\s*$)|git(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*\\s+worktree\\s+remove\\b|git(?:\\.exe)?(?:\\s+-[Cc]\\s+(?:\"[^\"\\n]*\"|'[^'\\n]*'|[^\\s\"';&|()]+))*\\s+clean\\b(?=[^\\n;&|]*\\s(?:-[a-zA-Z]*[xXd][a-zA-Z]*|--directory)(?=\\s|$|[;&|]))(?![^\\n;&|]*\\s(?:-[a-zA-Z]*n[a-zA-Z]*|--dry-run)(?=\\s|$|[;&|]))|\\S*python[\\w.]*(?:\\.exe)?\\s+-c\\s+[^\\n]*?\\bshutil\\.rmtree\\b|(?:[^;\\n'\"]*;\\s*)*(?:shutil\\.)?rmtree\\s*\\()",
     "matches": "command",
-    "reason": "RECURSIVE-DELETE: a raw recursive delete judges deletability by hand; on 2026-10-27 one took a MAIN checkout.\n{door} -m dev_lab.dev.scratch clear <NAME> --yes|{door} -m dev_lab.dev.branchset --apply|--discard <branch> --approved <why>|{door} -m dev_lab.dev.worktrees --remove <name>|{door} -m dev_lab.dev.venvprune --apply|{door} -m dev_lab.dev.cloneremove <path> --approved <why>; else ask\ndetails: docs-src/dev/refusals.md#recursive-delete (dev-lab)"
+    "reason": "RECURSIVE-DELETE: a raw recursive delete judges deletability by hand; on 2026-10-27 one took a MAIN checkout.\n{door} -m dev_lab.dev.scratch clear <NAME> --yes|dev_lab.dev.branchset --apply|dev_lab.dev.branchset --discard <branch> --approved <why>|detached: dev_lab.dev.worktrees --remove <name>|dev_lab.dev.cloneremove <path> --approved <why>; never a worktree, else ask the user\ndetails: docs-src/dev/refusals.md#recursive-delete (dev-lab)"
   },
   {
     "name": "REPORTS-LIVE-IN-MEMORY",
